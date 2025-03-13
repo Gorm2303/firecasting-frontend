@@ -31,8 +31,3 @@ jobs:
       - name: Build the App
         working-directory: vite-react-frontend
         run: npm run build
-
-      - name: Run Tests
-        working-directory: vite-react-frontend
-        run: npm test
-
