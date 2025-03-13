@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: '18.x'
           cache: 'npm'
+          cache-dependency-path: vite-react-frontend/package-lock.json
 
       - name: Install Dependencies
         working-directory: vite-react-frontend
