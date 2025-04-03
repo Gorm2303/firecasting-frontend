@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface PhaseRequest {
-  phaseType: string; // "DEPOSIT", "PASSIVE", "WITHDRAW"
+  phaseType: string;
   durationInMonths: number;
   initialDeposit?: number;
   monthlyDeposit?: number;
@@ -15,50 +15,31 @@ interface SimulationRequest {
   phases: PhaseRequest[];
 }
 
-// This interface should match your YearlySummary DTO from the backend.
-interface YearlySummary {
-  year: number;
-  averageCapital: number;
-  medianCapital: number;
-  minCapital: number;
-  maxCapital: number;
-  stdDevCapital: number;
-  cumulativeGrowthRate: number;
-  quantile5: number;
-  quantile25: number;
-  quantile75: number;
-  quantile95: number;
-  var: number;
-  cvar: number;
-  capitalWentNegative: boolean;
-}
-
 function App() {
   // Global simulation inputs
   const [startDate, setStartDate] = useState("2025-01-01");
   const [taxPercentage, setTaxPercentage] = useState(42);
   const [returnPercentage, setReturnPercentage] = useState(0.07);
 
-  // For the phase form
+  // For phase form
   const [phaseType, setPhaseType] = useState("DEPOSIT");
   const [durationInMonths, setDurationInMonths] = useState(240);
   const [initialDeposit, setInitialDeposit] = useState(10000);
   const [monthlyDeposit, setMonthlyDeposit] = useState(10000);
   const [withdrawRate, setWithdrawRate] = useState(0.04);
 
-  // Array to hold the phases
+  // Array to hold phases
   const [phases, setPhases] = useState<PhaseRequest[]>([]);
 
-  // Simulation aggregated statistics state (YearlySummary array)
-  const [stats, setStats] = useState<YearlySummary[] | null>(null);
+  // Simulation result state
+  const [results, setResults] = useState<any>(null);
 
-  // Handler to add a phase
+  // Handler for adding a phase
   const addPhase = () => {
     const newPhase: PhaseRequest = {
       phaseType,
       durationInMonths,
     };
-
     if (phaseType === "DEPOSIT") {
       newPhase.initialDeposit = initialDeposit;
       newPhase.monthlyDeposit = monthlyDeposit;
@@ -68,9 +49,10 @@ function App() {
     setPhases([...phases, newPhase]);
   };
 
-  // Handler for simulation submission
+  // Handler for the simulation submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     const requestBody: SimulationRequest = {
       startDate: { date: startDate },
       taxPercentage,
@@ -90,31 +72,31 @@ function App() {
         alert(`Simulation failed: ${response.status}\n${text}`);
         return;
       }
-
       const data = await response.json();
-      // data now should be the aggregated yearly statistics
-      setStats(data);
+      setResults(data);
     } catch (error) {
       console.error("Error:", error);
       alert("An error occurred while running the simulation.");
     }
   };
 
-  // Handler for CSV export
+  // Handler for exporting CSV
   const handleExport = () => {
+    // Open the export endpoint in a new tab
     window.open("http://localhost:8080/api/simulation/export", "_blank");
   };
 
   return (
     <div style={{ margin: "2rem" }}>
       <h1>Firecasting Simulation</h1>
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "400px" }}
-      >
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "400px" }}>
         <label>
           Start Date:
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
         </label>
         <label>
           Tax Percentage:
@@ -183,7 +165,9 @@ function App() {
             />
           </label>
         )}
-        <button type="button" onClick={addPhase}>Add Phase</button>
+        <button type="button" onClick={addPhase}>
+          Add Phase
+        </button>
         <div>
           <h3>Phases Added</h3>
           {phases.length === 0 && <p>No phases added yet.</p>}
@@ -204,38 +188,11 @@ function App() {
         <button type="submit">Run Simulation</button>
       </form>
 
-      {stats && (
+      {results && (
         <div style={{ marginTop: "2rem" }}>
-          <h2>Yearly Statistics</h2>
+          <h2>Simulation Results</h2>
+          <pre>{JSON.stringify(results, null, 2)}</pre>
           <button onClick={handleExport}>Export CSV</button>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem" }}>
-            <thead>
-              <tr>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Year</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Avg Capital</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Median</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Min</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Max</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Std Dev</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Growth Rate (%)</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Capital Negative?</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.map((stat, index) => (
-                <tr key={index}>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{stat.year}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{Math.round(stat.averageCapital)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{Math.round(stat.medianCapital)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{Math.round(stat.minCapital)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{Math.round(stat.maxCapital)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{Math.round(stat.stdDevCapital)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{stat.cumulativeGrowthRate.toFixed(2)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{stat.capitalWentNegative ? "Yes" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>
