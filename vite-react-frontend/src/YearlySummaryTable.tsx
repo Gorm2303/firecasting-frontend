@@ -1,23 +1,6 @@
 // YearlySummaryTable.tsx
 import React from 'react';
-
-// This interface should match your YearlySummary DTO from the backend.
-export interface YearlySummary {
-  year: number;
-  averageCapital: number;
-  medianCapital: number;
-  minCapital: number;
-  maxCapital: number;
-  stdDevCapital: number;
-  cumulativeGrowthRate: number;
-  quantile5: number;
-  quantile25: number;
-  quantile75: number;
-  quantile95: number;
-  var: number;
-  cvar: number;
-  negativeCapitalPercentage: number;
-}
+import { YearlySummary } from './models/YearlySummary';
 
 interface YearlySummaryTableProps {
   stats: YearlySummary[];
@@ -29,7 +12,7 @@ const YearlySummaryTable: React.FC<YearlySummaryTableProps> = ({ stats }) => {
     num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
   return (
-    <div style={{ margin: "2rem" }}>
+    <div>
       <h2>Yearly Simulation Statistics</h2>
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem" }}>
         <thead>

@@ -89,7 +89,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   };
 
   return (
-    <div style={{ margin: "2rem" }}>
+    <div>
       <h1>Firecasting Simulation</h1>
       <form
         onSubmit={handleSubmit}
@@ -185,7 +185,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
           ))}
         </div>
         <button type="submit">Run Simulation</button>
-        <button type="button" onClick={handleExport}>Export CSV</button>
+        <button type="button" onClick={handleExport}>Export Simulation CSV</button>
       </form>
     </div>
   );
