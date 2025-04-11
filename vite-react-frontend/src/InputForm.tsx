@@ -1,6 +1,7 @@
 // InputForm.tsx
 import React, { useState } from 'react';
-
+import { YearlySummary } from './models/YearlySummary';
+import ExportStatisticsButton from './components/ExportStatisticsButton';
 export interface PhaseRequest {
   phaseType: string; // "DEPOSIT", "PASSIVE", "WITHDRAW"
   durationInMonths: number;
@@ -35,6 +36,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
 
   // Array to hold the phases
   const [phases, setPhases] = useState<PhaseRequest[]>([]);
+  const [stats, setStats] = useState<YearlySummary[] | null>(null);
 
   // Handler to add a phase to the phases array
   const addPhase = () => {
@@ -75,6 +77,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
         return;
       }
       const data = await response.json();
+      setStats(data);
       // Pass the aggregated stats back to the parent component.
       onSimulationComplete(data);
     } catch (error) {
@@ -87,6 +90,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   const handleExport = () => {
     window.open("http://localhost:8080/api/simulation/export", "_blank");
   };
+
 
   return (
     <div>
@@ -186,6 +190,8 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
         </div>
         <button type="submit">Run Simulation</button>
         <button type="button" onClick={handleExport}>Export Simulation CSV</button>
+        {stats &&         
+        <ExportStatisticsButton data={stats} />}
       </form>
     </div>
   );

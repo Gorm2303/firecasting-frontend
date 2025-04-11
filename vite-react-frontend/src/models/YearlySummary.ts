@@ -1,4 +1,5 @@
 export interface YearlySummary {
+    phaseName: string;
     year: number;
     averageCapital: number;
     medianCapital: number;

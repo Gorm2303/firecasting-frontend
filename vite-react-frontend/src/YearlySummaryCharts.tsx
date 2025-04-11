@@ -1,50 +1,13 @@
 import React from 'react';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { YearlySummary } from './models/YearlySummary';
-
-interface StatChartProps {
-  data: YearlySummary[];
-  dataKey: keyof YearlySummary; // Use the keys from YearlySummary for type safety
-  label: string;
-}
-
-const formatNumber = (value: number): string =>
-  new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
-
-const StatChart: React.FC<StatChartProps> = ({ data, dataKey, label }) => {
-  return (
-    <div style={{ marginBottom: '50px' }}>
-      <h3>{label}</h3>
-      <LineChart
-        width={1000}
-        height={600}
-        data={data}
-        margin={{ top: 20, right: 20, bottom: 20, left: 50 }}
-        >
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="year"
-          label={{ value: 'Year', position: 'insideBottomRight', offset: -6 }}
-          tickFormatter={formatNumber}
-        />
-        <YAxis
-          label={{ value: label, angle: -90, position: 'insideLeft' }}
-          tickFormatter={formatNumber}
-          tickMargin={20}
-        />
-        <Tooltip formatter={(value: any) => formatNumber(Number(value))} />
-        <Legend />
-        <Line type="monotone" dataKey={dataKey as string} stroke="#8884d8" activeDot={{ r: 8 }} />
-      </LineChart>
-    </div>
-  );
-};
+import StatChart from './components/StatChart';
 
 interface YearlySummaryChartsProps {
   data: YearlySummary[];
 }
 
 const YearlySummaryCharts: React.FC<YearlySummaryChartsProps> = ({ data }) => {
+  // Define the list of statistics to chart.
   const statsList = [
     { key: 'averageCapital', label: 'Average Capital' },
     { key: 'medianCapital', label: 'Median Capital' },
@@ -64,7 +27,12 @@ const YearlySummaryCharts: React.FC<YearlySummaryChartsProps> = ({ data }) => {
   return (
     <div>
       {statsList.map((stat) => (
-        <StatChart key={stat.key} data={data} dataKey={stat.key as keyof YearlySummary} label={stat.label} />
+        <StatChart
+          key={stat.key}
+          data={data}
+          dataKey={stat.key as keyof YearlySummary}
+          label={stat.label}
+        />
       ))}
     </div>
   );
