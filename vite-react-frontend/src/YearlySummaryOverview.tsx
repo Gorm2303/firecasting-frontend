@@ -85,7 +85,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
   const stackedData = useMemo(() => transformDataForBands(data), [data]);
 
   return (
-    <div style={{ marginTop: '2rem', width: '95vw' }}>
+    <div style={{ marginTop: '2rem', width: '93vw' }}>
       <ResponsiveContainer width="100%" aspect={1.6}>
         <ComposedChart
           data={stackedData}
