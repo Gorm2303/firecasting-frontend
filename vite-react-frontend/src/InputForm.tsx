@@ -1,7 +1,8 @@
-// InputForm.tsx
 import React, { useState } from 'react';
 import { YearlySummary } from './models/YearlySummary';
 import ExportStatisticsButton from './components/ExportStatisticsButton';
+import SimulationProgress from './SimulationProgress';
+
 export interface PhaseRequest {
   phaseType: string; // "DEPOSIT", "PASSIVE", "WITHDRAW"
   durationInMonths: number;
@@ -37,6 +38,8 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   // Array to hold the phases
   const [phases, setPhases] = useState<PhaseRequest[]>([]);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
+  const [simulateInProgress, setSimulateInProgress] = useState(false);
+  const [simulationId, setSimulationId] = useState<string | null>(null);
 
   // Handler to add a phase to the phases array
   const addPhase = () => {
@@ -44,7 +47,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
       phaseType,
       durationInMonths,
     };
-
     if (phaseType === "DEPOSIT") {
       newPhase.initialDeposit = initialDeposit;
       newPhase.monthlyDeposit = monthlyDeposit;
@@ -54,44 +56,47 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
     setPhases([...phases, newPhase]);
   };
 
-  // Handler for simulation submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSimulateInProgress(true);
+  
     const requestBody: SimulationRequest = {
       startDate: { date: startDate },
       taxPercentage,
       returnPercentage,
       phases,
     };
-
+  
     try {
-      const response = await fetch("http://localhost:8080/api/simulation", {
+      // Use the new endpoint to start the simulation.
+      const response = await fetch("http://localhost:8080/api/simulation/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-
+  
       if (!response.ok) {
         const text = await response.text();
         alert(`Simulation failed: ${response.status}\n${text}`);
+        setSimulateInProgress(false);
         return;
       }
-      const data = await response.json();
-      setStats(data);
-      // Pass the aggregated stats back to the parent component.
-      onSimulationComplete(data);
+  
+      // Get simulationId as plain text
+      const simulationIdText = await response.text();
+      setSimulationId(simulationIdText);
     } catch (error) {
       console.error("Error:", error);
       alert("An error occurred while running the simulation.");
+      setSimulateInProgress(false);
     }
   };
-
-  // Handler for CSV export
+  
+  // Handler for CSV export (kept as is)
   const handleExport = () => {
     window.open("http://localhost:8080/api/simulation/export", "_blank");
   };
-
-
+  
   return (
     <div>
       <h1>Firecasting Simulation</h1>
@@ -189,9 +194,20 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
           ))}
         </div>
         <button type="submit">Run Simulation</button>
+        {simulateInProgress && simulationId && (
+          <SimulationProgress
+            simulationId={simulationId}
+            onComplete={(result) => {
+              setStats(result);
+              onSimulationComplete(result);
+              setSimulateInProgress(false);
+              setSimulationId(null);
+            }}
+          />
+        )}
+
         <button type="button" onClick={handleExport}>Export Simulation CSV</button>
-        {stats &&         
-        <ExportStatisticsButton data={stats} />}
+        {stats && <ExportStatisticsButton data={stats} />}
       </form>
     </div>
   );
