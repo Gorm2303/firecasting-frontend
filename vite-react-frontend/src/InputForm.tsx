@@ -94,7 +94,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   
   // Handler for CSV export (kept as is)
   const handleExport = () => {
-    window.open("http://localhost:8080/api/simulation/export", "_blank");
+    window.open("http://localhost:8080/api/simulation/export");
   };
   
   return (
@@ -206,8 +206,12 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
           />
         )}
 
-        <button type="button" onClick={handleExport}>Export Simulation CSV</button>
-        {stats && <ExportStatisticsButton data={stats} />}
+        
+        {stats &&  
+        <div>
+          <button type="button" onClick={handleExport}>Export Simulation CSV</button>
+          <ExportStatisticsButton data={stats} />
+        </div>}
       </form>
     </div>
   );
