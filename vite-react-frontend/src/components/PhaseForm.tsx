@@ -16,7 +16,8 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
   const [withdrawMode, setWithdrawMode] = useState<'RATE' | 'AMOUNT'>('RATE');
   const [withdrawRate, setWithdrawRate] = useState(4);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
-  const [withdrawVariationPercentage, setWithdrawVariationPercentage] = useState(0);
+  const [lowerVariationPercentage, setLowerVariationPercentage] = useState(0);
+  const [upperVariationPercentage, setUpperVariationPercentage] = useState(0);
 
   const handleAdd = () => {
     const phase: PhaseRequest = { phaseType, durationInMonths };
@@ -26,7 +27,8 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
       phase.yearlyIncreaseInPercentage = yearlyIncreaseInPercentage;
     } else if (phaseType === 'WITHDRAW') {
       // Always include variation percentage
-      phase.withdrawVariationPercentage = withdrawVariationPercentage;
+      phase.lowerVariationPercentage = lowerVariationPercentage;
+      phase.upperVariationPercentage = upperVariationPercentage;
       if (withdrawMode === 'RATE') {
         phase.withdrawRate = withdrawRate;
         phase.withdrawAmount = 0;
@@ -121,12 +123,21 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
             </label>
           )}
             <label>
-                Monthly Max Variation %:
+                Monthly Lower Variation %:
                 <input
                 type="number"
                 step="0.01"
-                value={withdrawVariationPercentage}
-                onChange={e => setWithdrawVariationPercentage(+e.target.value)}
+                value={lowerVariationPercentage}
+                onChange={e => setLowerVariationPercentage(+e.target.value)}
+                />
+            </label>
+            <label>
+                Monthly Upper Variation %:
+                <input
+                type="number"
+                step="0.01"
+                value={upperVariationPercentage}
+                onChange={e => setUpperVariationPercentage(+e.target.value)}
                 />
             </label>
         </>

@@ -19,19 +19,32 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases }) => (
           <strong>{p.phaseType} Phase</strong> - Duration: {p.durationInMonths} months
           {p.phaseType === 'DEPOSIT' && (
             <div>
-              Initial: {p.initialDeposit}, Monthly: {p.monthlyDeposit}, Yearly Increase: {p.yearlyIncreaseInPercentage} %
+            <div>
+              Initial: {p.initialDeposit}
+            </div>
+              <div>
+              Monthly: {p.monthlyDeposit}
+              </div>
+            <div>
+            Yearly Increase: {p.yearlyIncreaseInPercentage} %
+            </div>
             </div>
           )}
           {p.phaseType === 'WITHDRAW' && (
             <div>
 
-              {p.withdrawAmount! > 0
+              {p.withdrawAmount! >= 0
                 ? `Withdraw Amount: ${p.withdrawAmount}`
                 : `Withdraw Rate: ${p.withdrawRate} %`}
-                              {p.withdrawVariationPercentage! > 0 && (
-                <span>
-                 , Variation: {p.withdrawVariationPercentage} %
-                </span>
+                              {p.lowerVariationPercentage! >= 0 && (
+                <div>
+                 Lower variation threshold: {p.lowerVariationPercentage} %
+                </div>
+              )}
+                                {p.upperVariationPercentage! >= 0 && (
+                <div>
+                 Upper variation threshold: {p.upperVariationPercentage} %
+                </div>
               )}
             </div>
           )}
