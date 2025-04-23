@@ -1,6 +1,6 @@
 // App.tsx
 import React, { useState } from 'react';
-import InputForm from './InputForm';
+import InputForm from './components/InputForm';
 import { YearlySummary } from './models/YearlySummary';
 import YearlySummaryTable from './YearlySummaryTable';
 import YearlySummaryCharts from './YearlySummaryCharts';
