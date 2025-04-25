@@ -33,7 +33,7 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases }) => (
           {p.phaseType === 'WITHDRAW' && (
             <div>
 
-              {p.withdrawAmount! >= 0
+              {p.withdrawAmount! > 0
                 ? `Withdraw Amount: ${p.withdrawAmount}`
                 : `Withdraw Rate: ${p.withdrawRate} %`}
                               {p.lowerVariationPercentage! >= 0 && (
