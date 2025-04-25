@@ -104,7 +104,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
           </label>
           {withdrawMode === 'RATE' ? (
             <label>
-              Withdraw %:
+              Withdraw % (inflation adjusted):
               <input
                 type="number"
                 step="0.01"
@@ -114,7 +114,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
             </label>
           ) : (
             <label>
-              Withdraw Amount:
+              Withdraw Amount (inflation adjusted):
               <input
                 type="number"
                 value={withdrawAmount}

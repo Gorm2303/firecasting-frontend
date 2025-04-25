@@ -6,7 +6,8 @@ export interface PhaseRequest {
   yearlyIncreaseInPercentage?: number;
   withdrawRate?: number;
   withdrawAmount?: number;
-  withdrawVariationPercentage?: number;
+  lowerVariationPercentage?: number;
+  upperVariationPercentage?: number;
 }
 
 export interface SimulationRequest {

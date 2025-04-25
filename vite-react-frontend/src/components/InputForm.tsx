@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { YearlySummary } from '../models/YearlySummary';
 import { PhaseRequest, SimulationRequest } from '../models/types';
-import PhaseForm from './phaseform';
+import PhaseForm from './PhaseForm';
 import PhaseList from './PhaseList';
 import ExportStatisticsButton from './ExportStatisticsButton';
 import SimulationProgress from './SimulationProgress';
@@ -43,7 +43,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
       <h1>Firecasting Simulation</h1>
       <form
         onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '400px' }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '450px' }}
       >
         <label>
           Start Date:
