@@ -29,7 +29,7 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
 
   return (
     <div>
-      <h3>Phases Added</h3>
+      <h2>Phases Added</h2>
       {phases.length === 0 ? (
         <p>No phases added yet.</p>
       ) : (
