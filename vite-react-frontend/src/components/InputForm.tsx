@@ -24,6 +24,22 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
     setPhases(prev => [...prev, phase]);
   };
 
+  const handlePhaseChange = (
+    index: number,
+    field: keyof PhaseRequest,
+    value: number | string
+  ) => {
+    setPhases(phases =>
+      phases.map((p, i) =>
+        i === index ? { ...p, [field]: value } : p
+      )
+    );
+  };
+  
+  const handlePhaseRemove = (index: number) => {
+    setPhases(phases => phases.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSimulateInProgress(true);
@@ -60,7 +76,11 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
         </label>
 
         <PhaseForm onAddPhase={handleAddPhase} />
-        <PhaseList phases={phases} />
+        <PhaseList 
+        phases={phases} 
+        onPhaseChange={handlePhaseChange}
+        onPhaseRemove={handlePhaseRemove}
+        />
 
         <button type="submit">Run Simulation</button>
 
