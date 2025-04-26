@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { PhaseRequest } from '../models/types';
 
+type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
+
 interface PhaseFormProps {
   onAddPhase: (phase: PhaseRequest) => void;
 }
@@ -13,20 +15,28 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
   const [yearlyIncreaseInPercentage, setYearlyIncreaseInPercentage] = useState(2);
 
   // Withdrawal-specific states
-  const [withdrawMode, setWithdrawMode] = useState<'RATE' | 'AMOUNT'>('RATE');
+  const [withdrawMode, setWithdrawMode] = useState<'RATE' | 'AMOUNT'>('AMOUNT');
   const [withdrawRate, setWithdrawRate] = useState(4);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
   const [lowerVariationPercentage, setLowerVariationPercentage] = useState(0);
   const [upperVariationPercentage, setUpperVariationPercentage] = useState(0);
 
+  // Tax exemptions
+  const [taxRules, setTaxRules] = useState<ExemptionRule[]>([]);
+
+  const toggleRule = (rule: ExemptionRule) => {
+    setTaxRules(prev =>
+      prev.includes(rule) ? prev.filter(r => r !== rule) : [...prev, rule]
+    );
+  };
+
   const handleAdd = () => {
-    const phase: PhaseRequest = { phaseType, durationInMonths };
+    const phase: PhaseRequest = { phaseType, durationInMonths, taxRules: [...taxRules] };
     if (phaseType === 'DEPOSIT') {
       phase.initialDeposit = initialDeposit;
       phase.monthlyDeposit = monthlyDeposit;
       phase.yearlyIncreaseInPercentage = yearlyIncreaseInPercentage;
     } else if (phaseType === 'WITHDRAW') {
-      // Always include variation percentage
       phase.lowerVariationPercentage = lowerVariationPercentage;
       phase.upperVariationPercentage = upperVariationPercentage;
       if (withdrawMode === 'RATE') {
@@ -38,6 +48,8 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
       }
     }
     onAddPhase(phase);
+    // reset exemptions
+    setTaxRules([]);
   };
 
   return (
@@ -45,7 +57,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
       <h2>Add Phase</h2>
       <label>
         Type:
-        <select value={phaseType} onChange={e => setPhaseType(e.target.value as any)}>
+        <select value={phaseType} onChange={e => setPhaseType(e.target.value as PhaseRequest['phaseType'])}>
           <option value="DEPOSIT">DEPOSIT</option>
           <option value="PASSIVE">PASSIVE</option>
           <option value="WITHDRAW">WITHDRAW</option>
@@ -122,26 +134,47 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
               />
             </label>
           )}
-            <label>
-                Monthly Lower Variation %:
-                <input
-                type="number"
-                step="0.01"
-                value={lowerVariationPercentage}
-                onChange={e => setLowerVariationPercentage(+e.target.value)}
-                />
-            </label>
-            <label>
-                Monthly Upper Variation %:
-                <input
-                type="number"
-                step="0.01"
-                value={upperVariationPercentage}
-                onChange={e => setUpperVariationPercentage(+e.target.value)}
-                />
-            </label>
+          <label>
+            Monthly Lower Variation %:
+            <input
+              type="number"
+              step="0.01"
+              value={lowerVariationPercentage}
+              onChange={e => setLowerVariationPercentage(+e.target.value)}
+            />
+          </label>
+          <label>
+            Monthly Upper Variation %:
+            <input
+              type="number"
+              step="0.01"
+              value={upperVariationPercentage}
+              onChange={e => setUpperVariationPercentage(+e.target.value)}
+            />
+          </label>
         </>
       )}
+
+      {/* Exemption checkboxes for any phase */}
+      <fieldset style={{ border: '1px solid #ddd', padding: '0.5rem' }}>
+        <legend>Tax Exemptions</legend>
+        <label>
+          <input
+            type="checkbox"
+            checked={taxRules.includes('EXEMPTIONCARD')}
+            onChange={() => toggleRule('EXEMPTIONCARD')}
+          />
+          Exemption Card
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={taxRules.includes('STOCKEXEMPTION')}
+            onChange={() => toggleRule('STOCKEXEMPTION')}
+          />
+          Stock Exemption
+        </label>
+      </fieldset>
 
       <button type="button" onClick={handleAdd}>
         Add Phase

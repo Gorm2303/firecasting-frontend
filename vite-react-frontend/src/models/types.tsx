@@ -1,5 +1,6 @@
 export interface PhaseRequest {
   phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
+  taxRules?: ('CAPITAL' | 'NOTIONAL' | 'EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
   durationInMonths: number;
   initialDeposit?: number;
   monthlyDeposit?: number;

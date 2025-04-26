@@ -1,23 +1,16 @@
 import React from 'react';
 import { PhaseRequest } from '../models/types';
 
+type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
+
 interface PhaseListProps {
   phases: PhaseRequest[];
-  /**
-   * Called when a field on a phase is changed.
-   * @param index index of the phase in the array
-   * @param field the key of PhaseRequest being updated
-   * @param value the new value for that field
-   */
   onPhaseChange: (index: number, field: keyof PhaseRequest, value: number | string) => void;
-  /**
-   * Called when a phase should be removed.
-   * @param index index of the phase in the array
-   */
   onPhaseRemove: (index: number) => void;
+  onToggleTaxRule: (index: number, rule: ExemptionRule) => void;
 }
 
-const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRemove }) => {
+const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRemove, onToggleTaxRule }) => {
   const handleChange = (
     idx: number,
     field: keyof PhaseRequest,
@@ -38,7 +31,6 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
             key={idx}
             style={{ border: '1px solid #ccc', padding: '0.5rem', marginBottom: '0.5rem', position: 'relative' }}
           >
-            {/* Remove Button */}
             <button
               type="button"
               onClick={() => onPhaseRemove(idx)}
@@ -47,9 +39,7 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
               X
             </button>
 
-            <div>
-              <strong>{p.phaseType} Phase</strong>
-            </div>
+            <strong>{p.phaseType} Phase</strong>
 
             <div>
               <label>
@@ -63,7 +53,7 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
             </div>
 
             {p.phaseType === 'DEPOSIT' && (
-              <>  
+              <>
                 <div>
                   <label>
                     Initial Deposit:
@@ -99,7 +89,7 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
 
             {p.phaseType === 'WITHDRAW' && (
               <>
-                {p.withdrawAmount != null ? (
+                {p.withdrawAmount != null && p.withdrawAmount > 0 ? (
                   <div>
                     <label>
                       Withdraw Amount:
@@ -148,6 +138,24 @@ const PhaseList: React.FC<PhaseListProps> = ({ phases, onPhaseChange, onPhaseRem
                 )}
               </>
             )}
+
+            <fieldset style={{ border: '1px dashed #aaa', padding: '0.5rem', marginTop: '0.5rem' }}>
+              <legend>Tax Exemptions</legend>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
+                  onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
+                /> Exemption Card
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
+                  onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
+                /> Stock Exemption
+              </label>
+            </fieldset>
           </div>
         ))
       )}
