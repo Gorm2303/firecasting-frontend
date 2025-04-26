@@ -17,7 +17,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
   // Withdrawal-specific states
   const [withdrawMode, setWithdrawMode] = useState<'RATE' | 'AMOUNT'>('AMOUNT');
   const [withdrawRate, setWithdrawRate] = useState(4);
-  const [withdrawAmount, setWithdrawAmount] = useState(0);
+  const [withdrawAmount, setWithdrawAmount] = useState(10000);
   const [lowerVariationPercentage, setLowerVariationPercentage] = useState(0);
   const [upperVariationPercentage, setUpperVariationPercentage] = useState(0);
 

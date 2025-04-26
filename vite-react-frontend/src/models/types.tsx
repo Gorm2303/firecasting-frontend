@@ -1,6 +1,6 @@
 export interface PhaseRequest {
   phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
-  taxRules?: ('CAPITAL' | 'NOTIONAL' | 'EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
   durationInMonths: number;
   initialDeposit?: number;
   monthlyDeposit?: number;
@@ -13,6 +13,7 @@ export interface PhaseRequest {
 
 export interface SimulationRequest {
   startDate: { date: string };
+  overallTaxRule: 'CAPITAL' | 'NOTIONAL';
   taxPercentage: number;
   returnPercentage: number;
   phases: PhaseRequest[];
