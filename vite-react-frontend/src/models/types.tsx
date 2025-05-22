@@ -15,6 +15,5 @@ export interface SimulationRequest {
   startDate: { date: string };
   overallTaxRule: 'CAPITAL' | 'NOTIONAL';
   taxPercentage: number;
-  returnPercentage: number;
   phases: PhaseRequest[];
 }

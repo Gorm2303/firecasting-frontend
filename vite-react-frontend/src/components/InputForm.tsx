@@ -17,7 +17,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   const [startDate, setStartDate] = useState('2025-01-01');
   const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
   const [taxPercentage, setTaxPercentage] = useState(42);
-  const [returnPercentage, setReturnPercentage] = useState(7);
   const [phases, setPhases] = useState<PhaseRequest[]>([]);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
@@ -69,7 +68,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
       startDate: { date: startDate },
       overallTaxRule,
       taxPercentage,
-      returnPercentage,
       phases,
     };
 
