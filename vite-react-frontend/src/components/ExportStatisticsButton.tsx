@@ -31,7 +31,13 @@ const ExportCSVButton: React.FC<ExportCSVButtonProps> = ({ data }) => {
   };
 
   return (
-    <button type='button' onClick={handleExportCSV} style={{ marginBottom: '20px' }}>
+    <button type='button' onClick={handleExportCSV}                 
+      style={{
+      flex: 1,
+      padding: '0.75rem',
+      fontSize: '1rem',
+      width: '100%',
+    }}>
       Export Statistics CSV
     </button>
   );

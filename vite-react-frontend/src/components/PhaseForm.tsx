@@ -52,135 +52,240 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
     setTaxRules([]);
   };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-      <h2>Add Phase</h2>
-      <label>
-        Type:
-        <select value={phaseType} onChange={e => setPhaseType(e.target.value as PhaseRequest['phaseType'])}>
+return (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0 0 0' }}>
+    <div
+      style={{
+        width: '400px',
+        display: 'flex',
+        flexDirection: 'column',
+        fontSize: '0.95rem',
+        gap: '0.5rem',
+      }}
+    >
+      <h2 style={{ textAlign: 'center', fontSize: '1.5rem', margin: 0 }}>
+        Add Phase
+      </h2>
+
+      {/* grid for labels + inputs */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '160px auto',
+          rowGap: '0.3rem',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ fontSize: '1.1rem' }}>Type:</span>
+        <select
+          value={phaseType}
+          onChange={e =>
+            setPhaseType(e.target.value as PhaseRequest['phaseType'])
+          }
+          style={{
+            width: '100%',
+            padding: '0.3rem',
+            boxSizing: 'border-box',
+            fontSize: '0.95rem',
+          }}
+        >
           <option value="DEPOSIT">DEPOSIT</option>
           <option value="PASSIVE">PASSIVE</option>
           <option value="WITHDRAW">WITHDRAW</option>
         </select>
-      </label>
-      <label>
-        Duration (months):
+
+        <span style={{ fontSize: '1.1rem' }}>Duration (months):</span>
         <input
           type="number"
           value={durationInMonths}
           onChange={e => setDurationInMonths(+e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.3rem',
+            boxSizing: 'border-box',
+            fontSize: '0.95rem',
+          }}
         />
-      </label>
 
-      {phaseType === 'DEPOSIT' && (
-        <>
-          <label>
-            Initial Deposit:
+        {phaseType === 'DEPOSIT' && (
+          <>
+            <span style={{ fontSize: '1.1rem' }}>Initial Deposit:</span>
             <input
               type="number"
               value={initialDeposit}
               onChange={e => setInitialDeposit(+e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             />
-          </label>
-          <label>
-            Monthly Deposit:
+
+            <span style={{ fontSize: '1.1rem' }}>Monthly Deposit:</span>
             <input
               type="number"
               value={monthlyDeposit}
               onChange={e => setMonthlyDeposit(+e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             />
-          </label>
-          <label>
-            Yearly Increase %:
+
+            <span style={{ fontSize: '1.1rem' }}>Yearly Increase %:</span>
             <input
               type="number"
               step="0.01"
               value={yearlyIncreaseInPercentage}
-              onChange={e => setYearlyIncreaseInPercentage(+e.target.value)}
+              onChange={e =>
+                setYearlyIncreaseInPercentage(+e.target.value)
+              }
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             />
-          </label>
-        </>
-      )}
+          </>
+        )}
 
-      {phaseType === 'WITHDRAW' && (
-        <>
-          <label>
-            Withdraw Type:
+        {phaseType === 'WITHDRAW' && (
+          <>
+            <span style={{ fontSize: '1.1rem' }}>Withdraw Type:</span>
             <select
               value={withdrawMode}
-              onChange={e => setWithdrawMode(e.target.value as 'RATE' | 'AMOUNT')}
+              onChange={e =>
+                setWithdrawMode(e.target.value as 'RATE' | 'AMOUNT')
+              }
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             >
               <option value="RATE">Withdraw Rate</option>
               <option value="AMOUNT">Withdraw Amount</option>
             </select>
-          </label>
-          {withdrawMode === 'RATE' ? (
-            <label>
-              Withdraw % (inflation adjusted):
-              <input
-                type="number"
-                step="0.01"
-                value={withdrawRate}
-                onChange={e => setWithdrawRate(+e.target.value)}
-              />
-            </label>
-          ) : (
-            <label>
-              Withdraw Amount (inflation adjusted):
-              <input
-                type="number"
-                value={withdrawAmount}
-                onChange={e => setWithdrawAmount(+e.target.value)}
-              />
-            </label>
-          )}
-          <label>
-            Monthly Lower Variation %:
+
+            {withdrawMode === 'RATE' ? (
+              <>
+                <span style={{ fontSize: '1.1rem' }}>
+                  Withdraw %:
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={withdrawRate}
+                  onChange={e => setWithdrawRate(+e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.3rem',
+                    boxSizing: 'border-box',
+                    fontSize: '0.95rem',
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: '1.1rem' }}>
+                  Withdraw Amount:
+                </span>
+                <input
+                  type="number"
+                  value={withdrawAmount}
+                  onChange={e => setWithdrawAmount(+e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.3rem',
+                    boxSizing: 'border-box',
+                    fontSize: '0.95rem',
+                  }}
+                />
+              </>
+            )}
+
+            <span style={{ fontSize: '1.1rem' }}>
+              Lower Variation %:
+            </span>
             <input
               type="number"
               step="0.01"
               value={lowerVariationPercentage}
-              onChange={e => setLowerVariationPercentage(+e.target.value)}
+              onChange={e =>
+                setLowerVariationPercentage(+e.target.value)
+              }
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             />
-          </label>
-          <label>
-            Monthly Upper Variation %:
+
+            <span style={{ fontSize: '1.1rem' }}>
+              Upper Variation %:
+            </span>
             <input
               type="number"
               step="0.01"
               value={upperVariationPercentage}
-              onChange={e => setUpperVariationPercentage(+e.target.value)}
+              onChange={e =>
+                setUpperVariationPercentage(+e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.3rem',
+                boxSizing: 'border-box',
+                fontSize: '0.95rem',
+              }}
             />
-          </label>
-        </>
-      )}
+          </>
+        )}
+      </div>
 
-      {/* Exemption checkboxes for any phase */}
-      <fieldset style={{ border: '1px solid #ddd', padding: '0.5rem' }}>
-        <legend>Tax Exemptions</legend>
-        <label>
+      {/* Exemptions stay stacked */}
+      <fieldset style={{ border: '1px solid #ddd'}}>
+        <legend style={{ fontSize: '1.1rem' }}>
+          Tax Exemptions
+        </legend>
+        <label style={{ display: 'block', fontSize: '0.95rem', marginBottom: '0.3rem' }}>
           <input
             type="checkbox"
             checked={taxRules.includes('EXEMPTIONCARD')}
             onChange={() => toggleRule('EXEMPTIONCARD')}
+            style={{ marginRight: '0.3rem' }}
           />
           Exemption Card
         </label>
-        <label>
+        <label style={{ display: 'block', fontSize: '0.95rem' }}>
           <input
             type="checkbox"
             checked={taxRules.includes('STOCKEXEMPTION')}
             onChange={() => toggleRule('STOCKEXEMPTION')}
+            style={{ marginRight: '0.3rem' }}
           />
           Stock Exemption
         </label>
       </fieldset>
 
-      <button type="button" onClick={handleAdd}>
+      <button
+        type="button"
+        onClick={handleAdd}
+        style={{
+          padding: '0.75rem',
+          fontSize: '1.1rem',
+        }}
+      >
         Add Phase
       </button>
     </div>
-  );
+  </div>
+);
+
 };
 
 export default PhaseForm;
