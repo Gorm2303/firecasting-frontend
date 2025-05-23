@@ -85,8 +85,17 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
   const stackedData = useMemo(() => transformDataForBands(data), [data]);
 
   return (
-    <div style={{ marginTop: '2rem', width: '93vw' }}>
-      <ResponsiveContainer width="100%" aspect={1.6}>
+    <div
+      style={{
+        marginTop: '2rem',
+        width: '93vw',
+        maxHeight: '80vh',
+        aspectRatio: '1.6',
+        margin: '0 auto',
+
+      }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={stackedData}
           margin={{ top: 0, right: 20, bottom: 0, left: 50 }}
@@ -103,36 +112,24 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
           <Tooltip content={<CustomTooltip />} />
           <Legend />
 
-          {/*
-            Outer band: from 5th to 95th quantile.
-            Render an invisible baseline then a stacked area that fills with blue.
-          */}
           <Area dataKey="lower5" stackId="outerBand" stroke="none" fill="none" name=" " />
           <Area dataKey="lower25" stackId="innerBand" stroke="none" fill="none" name=" " />
           <Area
             dataKey="band5_95"
             stackId="outerBand"
             stroke="none"
-            fill="#FFFF00"
-            fillOpacity={0.1}
+            fill="#00FFFF"
+            fillOpacity={0.3}
             name="Quantiles (5th-95th)"
           />
-
-          {/*
-            Inner band: from 25th to 75th quantile.
-          */}
           <Area
             dataKey="band25_75"
             stackId="innerBand"
             stroke="none"
             fill="#0088FF"
-            fillOpacity={0.3}
+            fillOpacity={0.7}
             name="Quantiles (25th-75th)"
           />
-
-          {/*
-            Overlay the median capital line.
-          */}
           <Line
             type="monotone"
             dataKey="medianCapital"
@@ -143,7 +140,6 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
           />
         </ComposedChart>
       </ResponsiveContainer>
-
       <FailedCasesSummary data={data} />
     </div>
   );

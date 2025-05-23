@@ -15,7 +15,15 @@ const App: React.FC = () => {
   };
 
   return (
-    <div style={{ marginLeft: '2rem' }}>
+    <div
+      style={{
+        minWidth: '98vw',
+        minHeight: '100vh',        
+        display: 'flex',
+        flexDirection: 'column',   
+        justifyContent: 'flex-start', 
+      }}
+    >
       <InputForm onSimulationComplete={handleSimulationComplete} />
       {stats && (
         <div style={{ marginTop: '1rem' }}>

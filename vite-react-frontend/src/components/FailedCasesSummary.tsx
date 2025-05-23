@@ -15,15 +15,24 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
   }
 
   return (
-    <div style={{ marginTop: '2rem' }}>
-      <h3>Failed Cases Summary</h3>
-      <table style={{ width: '30%', borderCollapse: 'collapse' }}>
+    <div
+      style={{
+        width: '100%',
+        height: '100%',           
+        display: 'flex',
+        flexDirection: 'column',  
+        alignItems: 'center',     
+      }}
+    >      
+      <h3 style={{ fontSize: '1.4rem', marginBottom: '0' }}>Failed Cases Summary</h3>
+      <table style={{ width: '50%', borderCollapse: 'collapse'}}>
       <colgroup>
           {/* First two columns take only as much width as their content */}
           <col style={{ width: '1%', whiteSpace: 'nowrap' }} />
           <col style={{ width: '1%', whiteSpace: 'nowrap' }} />
           {/* Third column takes remaining space */}
           <col style={{ width: 'auto' }} />
+          <col style={{ width: '1%', whiteSpace: 'nowrap' }} />
         </colgroup>
         <thead>
           <tr>
@@ -36,16 +45,19 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
             <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
               Visualization
             </th>
+            <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
+              Success Rate (%)
+            </th>
           </tr>
         </thead>
         <tbody>
           {failedCases.map((fc) => (
             <tr key={fc.year} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '8px' , textAlign: 'center'}}>{fc.year}</td>
-              <td style={{ padding: '8px' , textAlign: 'center'}}>
+              <td style={{ padding: '8px', textAlign: 'center' }}>{fc.year}</td>
+              <td style={{ padding: '8px', textAlign: 'center', color: '#cc6666' }}>
                 {fc.negativeCapitalPercentage.toFixed(2)}%
               </td>
-              <td style={{ padding: '0px' , textAlign: 'center'}}>
+              <td style={{ padding: '0px', textAlign: 'center' }}>
                 <div
                   style={{
                     background: '#eee',
@@ -65,6 +77,9 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
                     }}
                   />
                 </div>
+              </td>
+              <td style={{ padding: '8px', textAlign: 'center', color: '#66cc66' }}>
+                {(100 - fc.negativeCapitalPercentage).toFixed(2)}%
               </td>
             </tr>
           ))}

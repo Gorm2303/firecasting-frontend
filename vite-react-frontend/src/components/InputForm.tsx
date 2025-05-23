@@ -81,69 +81,133 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   };
 
   return (
-    <div>
-      <h1>Firecasting Simulation</h1>
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '450px' }}
-      >
-        <label>
-          Start Date:
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-        </label>
-
-        <label>
-          Tax Rule:
-          <select
-            value={overallTaxRule}
-            onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
-          >
-            <option value="CAPITAL">Capital Gains</option>
-            <option value="NOTIONAL">Notional Gains</option>
-          </select>
-        </label>
-
-        <label>
-          Tax %:
-          <input
-            type="number"
-            step="0.01"
-            value={taxPercentage}
-            onChange={e => setTaxPercentage(+e.target.value)}
-          />
-        </label>
-
-        <PhaseForm onAddPhase={handleAddPhase} />
-        <PhaseList
-          phases={phases}
-          onPhaseChange={handlePhaseChange}
-          onPhaseRemove={handlePhaseRemove}
-          onToggleTaxRule={handlePhaseToggleRule}
-        />
-
-        <button type="submit">Run Simulation</button>
-
-        {simulateInProgress && simulationId && (
-          <SimulationProgress
-            simulationId={simulationId}
-            onComplete={result => {
-              setStats(result);
-              onSimulationComplete(result);
-              setSimulateInProgress(false);
-              setSimulationId(null);
+    <div style={{ display: 'flex', justifyContent: 'center'}}>
+      <div style={{ maxWidth: '450px'}}>
+        <h1 style={{ display: 'flex', justifyContent: 'center'}}>Firecasting</h1>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: 'flex', flexDirection: 'column', maxWidth: '450px' }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
             }}
-          />
-        )}
+          >
+            <div
+              style={{
+                width: '250px',            
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem',
+                alignItems: 'stretch',
+              }}
+            >
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    fontSize: '0.95rem',    
+                    padding: '0.3rem',      
+                  }}
+                />
+              </label>
 
-        {stats && (
-          <div>
-            <button type="button" onClick={exportSimulationCsv}>
-              Export Simulation CSV
-            </button>
-            <ExportStatisticsButton data={stats} />
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
+                <select
+                  value={overallTaxRule}
+                  onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    fontSize: '0.95rem',   
+                    padding: '0.3rem',
+                  }}
+                >
+                  <option value="CAPITAL">Capital Gains</option>
+                  <option value="NOTIONAL">Notional Gains</option>
+                </select>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={taxPercentage}
+                  onChange={e => setTaxPercentage(+e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    fontSize: '0.95rem',    
+                    padding: '0.3rem',
+                  }}
+                />
+              </label>
+            </div>
           </div>
-        )}
-      </form>
+
+          <PhaseForm onAddPhase={handleAddPhase} />
+          <PhaseList
+            phases={phases}
+            onPhaseChange={handlePhaseChange}
+            onPhaseRemove={handlePhaseRemove}
+            onToggleTaxRule={handlePhaseToggleRule}
+          />
+
+          <button 
+          type="submit" 
+          style={{
+          padding: '0.75rem',
+          fontSize: '1.1rem',
+        }}
+        >Run Simulation</button>
+
+          {simulateInProgress && simulationId && (
+            <SimulationProgress
+              simulationId={simulationId}
+              onComplete={result => {
+                setStats(result);
+                onSimulationComplete(result);
+                setSimulateInProgress(false);
+                setSimulationId(null);
+              }}
+            />
+          )}
+
+          {stats && (
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+              <button
+                type="button"
+                onClick={exportSimulationCsv}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  fontSize: '1rem',
+                  width: '100%',
+                }}
+              >
+                Export Simulation CSV
+              </button>
+
+              {/* wrap in a div so it also gets flex: 1 */}
+              <div style={{ flex: 1 }}>
+                <ExportStatisticsButton
+                  data={stats}
+                  // if this component accepts a style prop, you can also do:
+                  // style={{ flex: 1, width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
+        </form>
+      </div>
     </div>
   );
 };

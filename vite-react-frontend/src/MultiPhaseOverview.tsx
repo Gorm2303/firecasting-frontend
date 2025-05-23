@@ -33,10 +33,12 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data }) => {
   });
 
   return (
-    <div style={{ marginTop: '2rem' }}>
+    <div>
       {grouped.map((group, index) => (
-        <div key={index} style={{ marginBottom: '3rem' }}>
-          <h2>{group.name.charAt(0) + group.name.slice(1).toLowerCase()} - Phase #{index + 1}</h2>
+        <div key={index}>
+          <h2 style={{ textAlign: 'center' }}>
+            {group.name.charAt(0) + group.name.slice(1).toLowerCase()} – Phase #{index + 1}
+          </h2>
           <YearlySummaryOverview data={group.data} />
         </div>
       ))}
