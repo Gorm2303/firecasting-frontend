@@ -5,7 +5,6 @@ import { YearlySummary } from './models/YearlySummary';
 import YearlySummaryTable from './YearlySummaryTable';
 import YearlySummaryCharts from './YearlySummaryCharts';
 import MultiPhaseOverview from './MultiPhaseOverview';
-
 const App: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'summary'>('summary');
