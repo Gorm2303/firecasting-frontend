@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate', // Automatically update the service worker when new content is available
       includeAssets: ['favicon.svg', 'favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
       manifest: {
-        name: 'My Vite PWA App',
-        short_name: 'VitePWA',
-        description: 'My awesome Vite-powered PWA!',
+        name: 'Firecasting',
+        short_name: 'Firecasting',
+        description: 'Firecasting - FIRE Simulation and Forecasting Tool',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
