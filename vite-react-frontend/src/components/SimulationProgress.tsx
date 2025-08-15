@@ -1,6 +1,5 @@
 // src/components/SimulationProgress.tsx
 import React, { useEffect, useRef, useState } from "react";
-
 interface SimulationProgressProps {
   simulationId: string;
   onComplete: (result: any) => void;
