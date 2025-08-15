@@ -1,38 +1,48 @@
-import React, { useState, useEffect } from 'react';
+// src/components/SimulationProgress.tsx
+import React, { useEffect, useRef, useState } from "react";
 
 interface SimulationProgressProps {
   simulationId: string;
   onComplete: (result: any) => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. https://api.local.test/api/simulation
+
 const SimulationProgress: React.FC<SimulationProgressProps> = ({ simulationId, onComplete }) => {
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
+  const clearCounter = useRef(0);
 
   useEffect(() => {
-    const eventSource = new EventSource(`http://localhost:8080/api/simulation/progress/${simulationId}`);
+    // Build SSE URL from the same base as your POST
+    const url = `${API_BASE}/progress/${simulationId}`;
 
-    var counter = 0;
+    // If you don’t use cookies/Authorization headers, keep withCredentials=false
+    const eventSource = new EventSource(url, { withCredentials: false });
+
     eventSource.onmessage = (event) => {
-      const trimmed = event.data.trim();
-      // When the backend sends the final result, we assume it begins with "[{"
-      if (trimmed.startsWith('[{')) {
+      const trimmed = (event.data ?? "").trim();
+
+      // Backend ends by sending the final array (JSON) once
+      if (trimmed.startsWith("[{")) {
         try {
           const data = JSON.parse(trimmed);
           onComplete(data);
-          eventSource.close();
-        } catch (error) {
-          console.error("Error parsing final result:", error);
+        } catch (e) {
+          console.error("Error parsing final result:", e);
           setProgressMessages((prev) => [...prev, "Error parsing final result"]);
+        } finally {
+          eventSource.close();
         }
-      } else {
-        if (counter == 1){
-            setProgressMessages([])
-            counter = 0;
-        }
-        // Otherwise, it's a progress update message.
-        setProgressMessages((prev) => [...prev, event.data]);
-        counter++;
+        return;
       }
+
+      // Otherwise treat as progress text lines
+      if (clearCounter.current === 1) {
+        setProgressMessages([]);
+        clearCounter.current = 0;
+      }
+      setProgressMessages((prev) => [...prev, trimmed]);
+      clearCounter.current += 1;
     };
 
     eventSource.onerror = (err) => {
@@ -46,7 +56,7 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({ simulationId, o
   }, [simulationId, onComplete]);
 
   return (
-    <div style={{ marginTop: '1rem', padding: '0.5rem', border: '1px solid #ccc', maxHeight: '150px', overflowY: 'auto' }}>
+    <div style={{ marginTop: "1rem", padding: "0.5rem", border: "1px solid #ccc", maxHeight: 150, overflowY: "auto" }}>
       {progressMessages.map((msg, idx) => (
         <div key={idx}>{msg}</div>
       ))}

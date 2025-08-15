@@ -1,6 +1,7 @@
+// src/api/simulation.ts
 import { SimulationRequest } from '../models/types';
 
-const BASE_URL = 'http://localhost:8080/api/simulation';
+const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}`;
 
 export const startSimulation = async (req: SimulationRequest): Promise<string> => {
   const res = await fetch(`${BASE_URL}/start`, {
