@@ -1,26 +1,44 @@
 {
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    // Output target + libs (gives Promise, Iterable, Symbol, etc.)
     "target": "ES2020",
-    "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
 
-    /* Bundler mode */
+    // Module/bundler behavior for Vite
+    "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
     "moduleDetection": "force",
+    "isolatedModules": true,
     "noEmit": true,
+
+    // React/JSX
     "jsx": "react-jsx",
 
-    /* Linting */
+    // Import ergonomics needed by @types/react + recharts
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    // Nice to have in your app build
     "strict": true,
+    "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    // Path aliases (adjust if you use these)
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+
+    // If you keep importing with `.tsx` extensions, also add:
+    // "allowImportingTsExtensions": true
   },
-  "include": ["src"]
+  "include": ["src", "vite-env.d.ts"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/setupTests.ts"
+  ]
 }
