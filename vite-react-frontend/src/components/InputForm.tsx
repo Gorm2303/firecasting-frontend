@@ -18,12 +18,16 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
   const [taxPercentage, setTaxPercentage] = useState(42);
   const [phases, setPhases] = useState<PhaseRequest[]>([]);
+
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
 
+  const MAX_MONTHS = 1200;
+  const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
+  const overLimit = totalMonths > MAX_MONTHS;
+
   const handleAddPhase = (phase: PhaseRequest) => {
-    // initialize taxRules on new phase
     setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
   };
 
@@ -32,25 +36,16 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
     field: keyof PhaseRequest,
     value: number | string | (('CAPITAL' | 'NOTIONAL' | 'EXEMPTIONCARD' | 'STOCKEXEMPTION')[])
   ) => {
-    setPhases(phs =>
-      phs.map((p, i) =>
-        i === index ? { ...p, [field]: value } : p
-      )
-    );
+    setPhases(phs => phs.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
   };
 
-  const handlePhaseToggleRule = (
-    index: number,
-    rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION'
-  ) => {
+  const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') => {
     setPhases(phs =>
       phs.map((p, i) => {
         if (i !== index) return p;
         const current = p.taxRules ?? [];
         const has = current.includes(rule);
-        const updated = has
-          ? current.filter(r => r !== rule)
-          : [...current, rule];
+        const updated = has ? current.filter(r => r !== rule) : [...current, rule];
         return { ...p, taxRules: updated };
       })
     );
@@ -62,59 +57,56 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSimulateInProgress(true);
 
-    const request: SimulationRequest & { overallTaxRule: OverallTaxRule } = {
-      startDate: { date: startDate },
-      overallTaxRule,
+    if (totalMonths > MAX_MONTHS) {
+      alert(`Total duration must be ≤ ${MAX_MONTHS} months (you have ${totalMonths}).`);
+      return;
+    }
+
+    // 1) Generate ID and subscribe FIRST by mounting SimulationProgress
+    const simId =
+      (window.crypto as any)?.randomUUID?.() ??
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    setSimulationId(simId);
+    setSimulateInProgress(true);
+    setStats(null);
+
+    // ⬇️ Build the request payload you send to the backend
+    const request: SimulationRequest = {
+      startDate: { date: startDate },      // keep your existing shape
+      overallTaxRule,                      // 'CAPITAL' | 'NOTIONAL'
       taxPercentage,
       phases,
     };
 
     try {
-      const simId = await startSimulation(request as SimulationRequest);
-      setSimulationId(simId);
+      const returnedId = await startSimulation(request, simId);
+      if (returnedId && returnedId !== simId) {
+        // switch the SSE subscription to the server's ID (e.g., dedup re-use)
+        setSimulationId(returnedId);
+      }
     } catch (err) {
       alert((err as Error).message);
       setSimulateInProgress(false);
+      setSimulationId(null);
     }
   };
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center'}}>
-      <div style={{ maxWidth: '450px'}}>
+      <div style={{ maxWidth: 450 }}>
         <h1 style={{ display: 'flex', justifyContent: 'center'}}>Firecasting</h1>
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: 'flex', flexDirection: 'column', maxWidth: '450px' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: '250px',            
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.25rem',
-                alignItems: 'stretch',
-              }}
-            >
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450 }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' }}>
               <label style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
                 <input
                   type="date"
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    fontSize: '0.95rem',    
-                    padding: '0.3rem',      
-                  }}
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
                 />
               </label>
 
@@ -123,12 +115,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
                 <select
                   value={overallTaxRule}
                   onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    fontSize: '0.95rem',   
-                    padding: '0.3rem',
-                  }}
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
                 >
                   <option value="CAPITAL">Capital Gains</option>
                   <option value="NOTIONAL">Notional Gains</option>
@@ -142,12 +129,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
                   step="0.01"
                   value={taxPercentage}
                   onChange={e => setTaxPercentage(+e.target.value)}
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    fontSize: '0.95rem',    
-                    padding: '0.3rem',
-                  }}
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
                 />
               </label>
             </div>
@@ -160,19 +142,25 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
             onPhaseRemove={handlePhaseRemove}
             onToggleTaxRule={handlePhaseToggleRule}
           />
+          <div style={{ margin: '0.5rem 0', fontWeight: 600 }}>
+            Total duration: {totalMonths}/{MAX_MONTHS} months
+            {overLimit && <span style={{ color: 'crimson' }}> — exceeds limit</span>}
+          </div>
 
-          <button 
-          type="submit" 
-          style={{
-          padding: '0.75rem',
-          fontSize: '1.1rem',
-        }}
-        >Run Simulation</button>
 
+          <button
+            type="submit"
+            disabled={simulateInProgress}
+            style={{ padding: '0.75rem', fontSize: '1.1rem', opacity: simulateInProgress ? 0.65 : 1 }}
+          >
+            {simulateInProgress ? 'Running…' : 'Run Simulation'}
+          </button>
+
+          {/* Live progress (subscribed before server starts) */}
           {simulateInProgress && simulationId && (
             <SimulationProgress
               simulationId={simulationId}
-              onComplete={result => {
+              onComplete={(result) => {
                 setStats(result);
                 onSimulationComplete(result);
                 setSimulateInProgress(false);
@@ -181,28 +169,18 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
             />
           )}
 
+          {/* Results actions */}
           {stats && (
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
               <button
                 type="button"
                 onClick={exportSimulationCsv}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  width: '100%',
-                }}
+                style={{ flex: 1, padding: '0.75rem', fontSize: '1rem', width: '100%' }}
               >
                 Export Simulation CSV
               </button>
-
-              {/* wrap in a div so it also gets flex: 1 */}
               <div style={{ flex: 1 }}>
-                <ExportStatisticsButton
-                  data={stats}
-                  // if this component accepts a style prop, you can also do:
-                  // style={{ flex: 1, width: '100%' }}
-                />
+                <ExportStatisticsButton data={stats} />
               </div>
             </div>
           )}

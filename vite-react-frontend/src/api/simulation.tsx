@@ -3,18 +3,24 @@ import { SimulationRequest } from '../models/types';
 
 const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}`;
 
-export const startSimulation = async (req: SimulationRequest): Promise<string> => {
-  const res = await fetch(`${BASE_URL}/start`, {
+export async function startSimulation(req: SimulationRequest, simulationId?: string): Promise<string> {
+  const url = simulationId
+    ? `${BASE_URL}/start?simulationId=${encodeURIComponent(simulationId)}`
+    : `${BASE_URL}/start`;
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Simulation failed: ${res.status} ${text}`);
+    throw new Error(await res.text());
   }
-  return res.text();
-};
+  return res.text(); // server echoes simulationId
+}
+
+
 
 export const exportSimulationCsv = async (): Promise<void> => {
   const url = new URL('export', BASE_URL.replace(/\/+$/, '/') + '/').toString();
