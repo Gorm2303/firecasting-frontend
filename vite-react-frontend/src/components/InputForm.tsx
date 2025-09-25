@@ -57,39 +57,28 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (totalMonths > MAX_MONTHS) {
       alert(`Total duration must be ≤ ${MAX_MONTHS} months (you have ${totalMonths}).`);
       return;
     }
 
-    // 1) Generate ID and subscribe FIRST by mounting SimulationProgress
-    const simId =
-      (window.crypto as any)?.randomUUID?.() ??
-      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-    setSimulationId(simId);
     setSimulateInProgress(true);
     setStats(null);
+    setSimulationId(null);
 
-    // ⬇️ Build the request payload you send to the backend
     const request: SimulationRequest = {
-      startDate: { date: startDate },      // keep your existing shape
-      overallTaxRule,                      // 'CAPITAL' | 'NOTIONAL'
+      startDate: { date: startDate },
+      overallTaxRule,
       taxPercentage,
       phases,
     };
 
     try {
-      const returnedId = await startSimulation(request, simId);
-      if (returnedId && returnedId !== simId) {
-        // switch the SSE subscription to the server's ID (e.g., dedup re-use)
-        setSimulationId(returnedId);
-      }
+      const id = await startSimulation(request);   // <-- server owns the id
+      setSimulationId(id);                         // mount <SimulationProgress/> after we have id
     } catch (err) {
       alert((err as Error).message);
       setSimulateInProgress(false);
-      setSimulationId(null);
     }
   };
 

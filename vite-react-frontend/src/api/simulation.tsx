@@ -3,21 +3,18 @@ import { SimulationRequest } from '../models/types';
 
 const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}`;
 
-export async function startSimulation(req: SimulationRequest, simulationId?: string): Promise<string> {
-  const url = simulationId
-    ? `${BASE_URL}/start?simulationId=${encodeURIComponent(simulationId)}`
-    : `${BASE_URL}/start`;
+type StartResponse = { id: string };
 
-  const res = await fetch(url, {
+export async function startSimulation(req: SimulationRequest): Promise<string> {
+  const res = await fetch(`${BASE_URL}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-  return res.text(); // server echoes simulationId
+  if (!res.ok) throw new Error(await res.text());
+  const data: StartResponse = await res.json();
+  if (!data?.id) throw new Error('No simulation id returned');
+  return data.id;
 }
 
 
