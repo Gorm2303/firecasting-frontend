@@ -1,77 +1,77 @@
-// App.tsx
 import React, { useState } from 'react';
-import InputForm from './components/InputForm';
-import { YearlySummary } from './models/YearlySummary';
-import YearlySummaryTable from './YearlySummaryTable';
-import YearlySummaryCharts from './YearlySummaryCharts';
-import MultiPhaseOverview from './MultiPhaseOverview';
-const App: React.FC = () => {
-  const [stats, setStats] = useState<YearlySummary[] | null>(null);
-  const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'summary'>('summary');
+import InfoPage from './pages/InfoPage';
+import ExplorePage from './pages/ExplorePage';
+import SimulationPage from './pages/SimulationPage';
 
-  const handleSimulationComplete = (results: YearlySummary[]) => {
-    setStats(results);
-  };
+type Page = 'simulation' | 'explore' | 'info';
+
+interface Props {
+  page: Page;
+  setPage: (p: Page) => void;
+}
+
+const BottomPageTabs: React.FC<Props> = ({ page, setPage }) => (
+  <nav className="bottom-page-tabs" role="tablist" aria-label="Page navigation">
+    <button
+      role="tab"
+      aria-selected={page === 'simulation'}
+      aria-current={page === 'simulation' ? 'page' : undefined}
+      onClick={() => setPage('simulation')}
+      className={`bottom-page-tabs__btn ${page === 'simulation' ? 'is-active' : ''}`}
+    >
+      <div style={{ fontSize: 'medium' }}>Simulation 🤖</div>
+    </button>
+
+    <button
+      role="tab"
+      aria-selected={page === 'explore'}
+      aria-current={page === 'explore' ? 'page' : undefined}
+      onClick={() => setPage('explore')}
+      className={`bottom-page-tabs__btn ${page === 'explore' ? 'is-active' : ''}`}
+    >
+      <div style={{ fontSize: 'medium' }}>Explore 📚</div>
+    </button>
+
+    <button
+      role="tab"
+      aria-selected={page === 'info'}
+      aria-current={page === 'info' ? 'page' : undefined}
+      onClick={() => setPage('info')}
+      className={`bottom-page-tabs__btn ${page === 'info' ? 'is-active' : ''}`}
+    >
+      <div style={{ fontSize: 'medium' }}>Information ℹ️</div>
+    </button>
+  </nav>
+);
+
+const TAB_BAR_RESERVED_HEIGHT = 80;
+
+const App: React.FC = () => {
+  const [page, setPage] = useState<Page>('simulation');
 
   return (
     <div
       style={{
         minWidth: '98vw',
-        minHeight: '100vh',        
+        minHeight: '100vh',
         display: 'flex',
-        flexDirection: 'column',   
-        justifyContent: 'flex-start', 
+        flexDirection: 'column',
+        paddingBottom: `calc(${TAB_BAR_RESERVED_HEIGHT}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
-      <InputForm onSimulationComplete={handleSimulationComplete} />
-      {stats && (
-        <div style={{ marginTop: '1rem' }}>
-          <div style={{ display: 'flex', marginBottom: '1rem' }}>
-            <button
-              onClick={() => setActiveTab('summary')}
-              style={{
-                padding: '0.5rem 1rem',
-                marginRight: '1rem',
-                backgroundColor: activeTab === 'summary' ? '#8884d8' : '#f0f0f0',
-                color: activeTab === 'summary' ? 'white' : 'black',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              Summary
-            </button>
-            <button
-              onClick={() => setActiveTab('table')}
-              style={{
-                padding: '0.5rem 1rem',
-                marginRight: '1rem',
-                backgroundColor: activeTab === 'table' ? '#8884d8' : '#f0f0f0',
-                color: activeTab === 'table' ? 'white' : 'black',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              Table
-            </button>
-            <button
-              onClick={() => setActiveTab('charts')}
-              style={{
-                padding: '0.5rem 1rem',
-                marginRight: '1rem',
-                backgroundColor: activeTab === 'charts' ? '#8884d8' : '#f0f0f0',
-                color: activeTab === 'charts' ? 'white' : 'black',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              Charts
-            </button>
-          </div>
-          {activeTab === 'summary' && <MultiPhaseOverview data={stats} />}
-          {activeTab === 'table' && <YearlySummaryTable stats={stats} />}
-          {activeTab === 'charts' && <YearlySummaryCharts data={stats} />}
-        </div>
-      )}
+      <div style={{ display: page === 'simulation' ? 'block' : 'none' }}>
+        <SimulationPage />
+      </div>
+
+      <div style={{ display: page === 'explore' ? 'block' : 'none' }}>
+        <ExplorePage />
+      </div>
+
+      <div style={{ display: page === 'info' ? 'block' : 'none' }}>
+        <InfoPage />
+      </div>
+
+      <BottomPageTabs page={page} setPage={setPage} />
     </div>
   );
 };
