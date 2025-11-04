@@ -88,7 +88,6 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
     <div
       style={{
         marginTop: '2rem',
-        width: '93vw',
         maxHeight: '80vh',
         aspectRatio: '1.6',
         margin: '0 auto',
