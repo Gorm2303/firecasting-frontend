@@ -83,8 +83,8 @@ const InputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center'}}>
-      <div style={{ maxWidth: 450 }}>
+    <div>
+      <div style={{ maxWidth: 450, margin: '0 auto' }}>
         <h1 style={{ display: 'flex', justifyContent: 'center'}}>Firecasting</h1>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450 }}>
           <div style={{ display: 'flex', justifyContent: 'center' }}>

@@ -56,7 +56,6 @@ return (
   <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0 0 0' }}>
     <div
       style={{
-        width: '400px',
         display: 'flex',
         flexDirection: 'column',
         fontSize: '0.95rem',

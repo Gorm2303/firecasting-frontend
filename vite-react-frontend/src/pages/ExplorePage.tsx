@@ -336,7 +336,7 @@ const ExplorePage: React.FC = () => {
   }, [query]);
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1300, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
       {/* Under development disclaimer */}
       {!ack && (
         <div

@@ -124,6 +124,7 @@ const InfoPage: React.FC = () => {
         }
       `}</style>
 
+      <div id="info-root" style={{ minHeight: '100vh', padding: 16, maxWidth: 980, margin: '0 auto' }}>
       {/* Burger button */}
       {hasMenu && (
         <button
@@ -162,7 +163,6 @@ const InfoPage: React.FC = () => {
       )}
 
       {/* Content */}
-      <div id="info-root" style={{ minHeight: '100vh', padding: 16, maxWidth: 980, margin: '0 auto' }}>
         <section>
           <h2 tabIndex={-1}>About Firecasting</h2>
           <p>Short overview of the project, goals, and how simulations are computed.</p>
