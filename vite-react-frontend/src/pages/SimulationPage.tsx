@@ -15,7 +15,7 @@ const SimulationPage: React.FC = () => {
   const handleSimulationComplete = (results: YearlySummary[]) => setStats(results);
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1300, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
       {/* Simulation (beta) disclaimer */}
       {!ackSim && (
         <div
