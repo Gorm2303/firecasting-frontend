@@ -76,7 +76,7 @@ const InfoPage: React.FC = () => {
       {/* Page-scoped styles for the burger + drawer (light/dark via media queries) */}
       <style>{`
         .info-burger-btn {
-          position: fixed; right: 16px; top: 16px; z-index: 1100;
+          position: fixed; right: max(16px, calc((100vw - 1500px) / 2 + 16px));
           display: inline-flex; align-items: center; gap: 8px;
           padding: 10px 12px; border-radius: 10px; cursor: pointer;
           border: 1px solid #444; background: #2e2e2e; color: #eee;
@@ -87,7 +87,9 @@ const InfoPage: React.FC = () => {
           position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1090;
         }
         .info-drawer {
-          position: fixed; top: 0; right: 0; height: 100%; width: min(84vw, 340px);
+          position: fixed; top: 0;
+          right: max(0px, calc((100vw - 1500px) / 2));
+          height: 100%; width: min(84vw, 340px);
           z-index: 1100; padding: 16px; display: flex; flex-direction: column; gap: 12px;
           border-left: 1px solid #3a3a3a; background: #1f1f1f; color: #eee;
           transform: translateX(0); transition: transform 180ms ease-out;

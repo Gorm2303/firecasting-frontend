@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PhaseRequest } from '../models/types';
+import { PhaseRequest } from '../../models/types';
 
 type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
 
