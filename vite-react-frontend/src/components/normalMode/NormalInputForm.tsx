@@ -1,0 +1,290 @@
+// src/features/simulation/SimulationForm.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { YearlySummary } from '../../models/YearlySummary';
+import { PhaseRequest, SimulationRequest } from '../../models/types';
+import NormalPhaseForm from '../../components/normalMode/NormalPhaseForm';
+import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
+import ExportStatisticsButton from '../../components/ExportStatisticsButton';
+import SimulationProgress from '../../components/SimulationProgress';
+import { startSimulation, exportSimulationCsv } from '../../api/simulation';
+
+type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
+
+export type TutorialStep = {
+  id: string;
+  title: string;
+  body: string;
+  selector?: string;
+  placement?: 'top' | 'right' | 'bottom' | 'left';
+  waitFor?: number;
+};
+
+const btn = (variant: 'primary' | 'ghost' | 'disabled'): React.CSSProperties => {
+  const base: React.CSSProperties = {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: '1px solid #444',
+    cursor: 'pointer',
+    fontSize: 14,
+  };
+  if (variant === 'primary') return { ...base, background: '#2e2e2e', color: '#fff' };
+  if (variant === 'disabled') return { ...base, opacity: 0.5, background: '#222', color: '#bbb', cursor: 'not-allowed' };
+  return { ...base, background: 'transparent', color: '#ddd' };
+};
+
+// Tiny in-file coachmark (same as you had)
+const Coachmark: React.FC<{
+  step: TutorialStep;
+  onNext: () => void;
+  onBack: () => void;
+  onExit: () => void;
+  isFirst: boolean;
+  isLast: boolean;
+}> = ({ step, onNext, onBack, onExit, isFirst, isLast }) => {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  const measure = useCallback(() => {
+    if (!step.selector) { setRect(null); return; }
+    const el = document.querySelector(step.selector) as HTMLElement | null;
+    if (!el) { setRect(null); return; }
+    setRect(el.getBoundingClientRect());
+  }, [step]);
+
+  useEffect(() => {
+    let t: number | undefined;
+    const doMeasure = () => measure();
+    if (step.waitFor && step.waitFor > 0) t = window.setTimeout(doMeasure, step.waitFor);
+    else doMeasure();
+    window.addEventListener('resize', doMeasure);
+    window.addEventListener('scroll', doMeasure, true);
+    return () => {
+      if (t) window.clearTimeout(t);
+      window.removeEventListener('resize', doMeasure);
+      window.removeEventListener('scroll', doMeasure, true);
+    };
+  }, [step, measure]);
+
+  const tooltipBase: React.CSSProperties = {
+    position: 'fixed', zIndex: 999999, maxWidth: 320,
+    background: '#111', color: '#fff', border: '1px solid #333',
+    borderRadius: 12, padding: '12px 14px', boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+  };
+
+  const tooltipStyle: React.CSSProperties = (() => {
+    if (!rect) return { ...tooltipBase, top: '20%', left: '50%', transform: 'translateX(-50%)' };
+    const gap = 10;
+    switch (step.placement) {
+      case 'bottom': return { ...tooltipBase, top: rect.bottom + gap, left: rect.left };
+      case 'left':   return { ...tooltipBase, top: rect.top, left: rect.left - 340 };
+      case 'right':  return { ...tooltipBase, top: rect.top, left: rect.right + gap };
+      case 'top':
+      default:       return { ...tooltipBase, top: rect.top - 140, left: rect.left };
+    }
+  })();
+
+  const spotlightStyle: React.CSSProperties = rect
+    ? { position: 'fixed', top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 8, border: '2px solid #6ea8fe', boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 999998 }
+    : { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 999998, pointerEvents: 'none' };
+
+  return (
+    <>
+      <div style={spotlightStyle} />
+      <div style={tooltipStyle} role="dialog" aria-live="polite">
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>{step.title}</div>
+        <div style={{ fontSize: 14, opacity: 0.95, lineHeight: 1.35 }}>{step.body}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={onExit} style={btn('ghost')}>Exit</button>
+          <button type="button" onClick={onBack} disabled={isFirst} style={btn(isFirst ? 'disabled' : 'ghost')}>Back</button>
+          <button type="button" onClick={onNext} style={btn('primary')}>{isLast ? 'Finish' : 'Next'}</button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default function SimulationForm({
+  onSimulationComplete,
+  tutorialSteps,
+  onExitTutorial, // optional
+}: {
+  onSimulationComplete?: (stats: YearlySummary[]) => void;
+  tutorialSteps?: TutorialStep[];
+  onExitTutorial?: () => void;
+}) {
+  // same state as NormalInputForm
+  const [startDate, setStartDate] = useState('2025-01-01');
+  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
+  const [taxPercentage, setTaxPercentage] = useState(42);
+  const [phases, setPhases] = useState<PhaseRequest[]>([]);
+
+  const [simulateInProgress, setSimulateInProgress] = useState(false);
+  const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [stats, setStats] = useState<YearlySummary[] | null>(null);
+
+  const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
+  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string) =>
+    setPhases(phs => phs.map((p, i) => (i === index ? { ...p, [field]: value as any } : p)));
+  const handlePhaseRemove = (index: number) => setPhases(phs => phs.filter((_, i) => i !== index));
+  const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') =>
+    setPhases(phs =>
+      phs.map((p, i) => {
+        if (i !== index) return p;
+        const current = p.taxRules ?? [];
+        const has = current.includes(rule);
+        const updated = has ? current.filter(r => r !== rule) : [...current, rule];
+        return { ...p, taxRules: updated };
+      })
+    );
+
+  const MAX_MONTHS = 1200;
+  const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
+  const overLimit = totalMonths > MAX_MONTHS;
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (overLimit) {
+      alert(`Total duration must be ≤ ${MAX_MONTHS} months (you have ${totalMonths}).`);
+      return;
+    }
+    setSimulateInProgress(true);
+    setStats(null);
+    setSimulationId(null);
+    try {
+      const id = await startSimulation({
+        startDate: { date: startDate },
+        overallTaxRule,
+        taxPercentage,
+        phases,
+      } as SimulationRequest);
+      setSimulationId(id);
+    } catch (err) {
+      alert((err as Error).message);
+      setSimulateInProgress(false);
+    }
+  };
+
+  // --- tutorial stepper (only if steps provided) ---
+  const [idx, setIdx] = useState(0);
+  const steps = tutorialSteps ?? [];
+  const current = steps[idx];
+  const isFirst = idx === 0;
+  const isLast = idx === steps.length - 1;
+  const next = () => setIdx(i => {
+    if (!steps.length) return i;
+    if (i + 1 >= steps.length) { onExitTutorial?.(); return i; } // Finish -> back to /simulation
+    return i + 1;
+  });  
+  const back = () => setIdx(i => Math.max(i - 1, 0));
+  const exit = () => onExitTutorial?.(); // Exit -> back to /simulation
+
+  // Optional: give stable anchors for selectors
+  // Add data attributes to key controls to avoid fragile text-based selectors
+  const inputWrapperStyle = { width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' } as const;
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div style={inputWrapperStyle}>
+          <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
+            />
+          </label>
+
+          <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
+            <select
+              value={overallTaxRule}
+              onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
+            >
+              <option value="CAPITAL">Capital Gains</option>
+              <option value="NOTIONAL">Notional Gains</option>
+            </select>
+          </label>
+
+          <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
+            <input
+              type="number"
+              step="0.01"
+              value={taxPercentage}
+              onChange={e => setTaxPercentage(+e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Reuse your existing components */}
+      <div data-tour="phase-form">
+        <NormalPhaseForm onAddPhase={handleAddPhase} />
+      </div>
+      <div data-tour="phase-list">
+        <NormalPhaseList
+          phases={phases}
+          onPhaseChange={handlePhaseChange}
+          onPhaseRemove={handlePhaseRemove}
+          onToggleTaxRule={handlePhaseToggleRule}
+        />
+      </div>
+
+      <div style={{ margin: '0.5rem 0', fontWeight: 600 }}>
+        Total duration: {totalMonths}/{MAX_MONTHS} months
+        {overLimit && <span style={{ color: 'crimson' }}> — exceeds limit</span>}
+      </div>
+
+      <button
+        data-tour="run"
+        type="submit"
+        disabled={simulateInProgress}
+        style={{ padding: '0.75rem', fontSize: '1.1rem', opacity: simulateInProgress ? 0.65 : 1 }}
+      >
+        {simulateInProgress ? 'Running…' : 'Run Simulation'}
+      </button>
+
+      {simulateInProgress && simulationId && (
+        <SimulationProgress
+          simulationId={simulationId}
+          onComplete={(result) => {
+            setStats(result);
+            setSimulateInProgress(false);
+            setSimulationId(null);
+            onSimulationComplete?.(result);
+          }}
+        />
+      )}
+
+      {stats && (
+        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+          <button
+            type="button"
+            onClick={exportSimulationCsv}
+            style={{ flex: 1, padding: '0.75rem', fontSize: '1rem', width: '100%' }}
+          >
+            Export Simulation CSV
+          </button>
+          <div style={{ flex: 1 }}>
+            <ExportStatisticsButton data={stats} />
+          </div>
+        </div>
+      )}
+
+      {/* Coachmarks only when steps are provided */}
+      {current && (
+        <Coachmark
+          step={current}
+          onNext={next}
+          onBack={back}
+          onExit={exit}
+          isFirst={isFirst}
+          isLast={isLast}
+        />
+      )}
+    </form>
+  );
+}

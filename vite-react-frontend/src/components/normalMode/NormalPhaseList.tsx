@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhaseRequest } from '../models/types';
+import { PhaseRequest } from '../../models/types';
 
 type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
 
