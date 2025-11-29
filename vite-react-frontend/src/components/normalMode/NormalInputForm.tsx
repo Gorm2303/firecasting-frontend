@@ -102,6 +102,21 @@ const Coachmark: React.FC<{
   );
 };
 
+// --- helpers for duration display ---
+const MAX_YEARS = 100;
+const MAX_MONTHS = MAX_YEARS * 12;
+
+const formatYearsMonths = (months: number) => {
+  const safe = Math.max(0, Number(months) || 0);
+  const years = Math.floor(safe / 12);
+  const leftoverMonths = safe % 12;
+
+  if (years === 0 && leftoverMonths === 0) return '0 years';
+  if (leftoverMonths === 0) return `${years} year${years === 1 ? '' : 's'}`;
+  if (years === 0) return `${leftoverMonths} month${leftoverMonths === 1 ? '' : 's'}`;
+  return `${years} year${years === 1 ? '' : 's'} ${leftoverMonths} month${leftoverMonths === 1 ? '' : 's'}`;
+};
+
 export default function SimulationForm({
   onSimulationComplete,
   tutorialSteps,
@@ -136,14 +151,13 @@ export default function SimulationForm({
       })
     );
 
-  const MAX_MONTHS = 1200;
   const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
   const overLimit = totalMonths > MAX_MONTHS;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (overLimit) {
-      alert(`Total duration must be ≤ ${MAX_MONTHS} months (you have ${totalMonths}).`);
+      alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(totalMonths)}).`);
       return;
     }
     setSimulateInProgress(true);
@@ -234,7 +248,7 @@ export default function SimulationForm({
       </div>
 
       <div style={{ margin: '0.5rem 0', fontWeight: 600 }}>
-        Total duration: {totalMonths}/{MAX_MONTHS} months
+        Total duration: {formatYearsMonths(totalMonths)} (max {MAX_YEARS} years)
         {overLimit && <span style={{ color: 'crimson' }}> — exceeds limit</span>}
       </div>
 
