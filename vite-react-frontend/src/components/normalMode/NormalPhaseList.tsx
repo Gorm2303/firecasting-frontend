@@ -93,7 +93,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
     <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
       <div
         style={{
-          width: '400px',
+          width: '360px',
           display: 'flex',
           flexDirection: 'column',
           fontSize: '0.95rem',
