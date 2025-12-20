@@ -40,6 +40,13 @@ const errorStyle: React.CSSProperties = {
   fontSize: '0.9rem',
 };
 
+const inlineErrorStyle: React.CSSProperties = {
+  marginTop: '0.25rem',
+  fontSize: '0.8rem',
+  color: 'crimson',
+  whiteSpace: 'pre-wrap',
+};
+
 const fieldWrapperStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
@@ -283,6 +290,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitErrorDetails, setSubmitErrorDetails] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
 
@@ -316,12 +325,87 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
     fetchConfig();
   }, [fetchConfig]);
 
+  type ApiError = { message?: string; details?: string[] };
+
+  const parseApiError = async (res: Response): Promise<ApiError> => {
+    const text = await res.text();
+    if (!text) return { message: `Request failed (${res.status})`, details: [] };
+    try {
+      const json = JSON.parse(text);
+      if (json && typeof json === 'object') return json as ApiError;
+    } catch {
+      // ignore
+    }
+    return { message: text, details: [] };
+  };
+
+  const extractPathAndMessage = (detailLine: string): { path?: string; message: string } => {
+    const s = String(detailLine ?? '').trim();
+    const idx = s.indexOf(':');
+    if (idx < 0) return { message: s };
+    const left = s.slice(0, idx).trim();
+    const right = s.slice(idx + 1).trim();
+    return { path: left || undefined, message: right || s };
+  };
+
+  const stripToKnownRoot = (p: string): string => {
+    const known = [
+      'startDate',
+      'phases',
+      'overallTaxRule',
+      'taxPercentage',
+      'returnType',
+      'returnerConfig',
+      'taxExemptionConfig',
+      'inflationFactor',
+    ];
+    for (const k of known) {
+      const i = p.indexOf(k);
+      if (i >= 0) return p.slice(i);
+    }
+    return p;
+  };
+
+  // Best-effort mapping from backend DTO paths to form-state paths.
+  const mapRequestPathToFormPath = (rawPath: string): string => {
+    let p = stripToKnownRoot(String(rawPath ?? '').trim());
+
+    // Convert `startDate.date` to the single date field
+    if (p === 'startDate.date') return 'startDate';
+
+    // overallTaxRule is driven by `taxRule` in the form
+    if (p === 'overallTaxRule') return 'taxRule';
+
+    // taxPercentage comes from `tax.percentage`
+    if (p === 'taxPercentage') return 'tax.percentage';
+
+    // returnerConfig.* originates from returner group
+    if (p.startsWith('returnerConfig.seed')) return p.replace('returnerConfig.seed', 'returner.random.seed');
+    if (p.startsWith('returnerConfig.simpleAveragePercentage')) {
+      return p.replace('returnerConfig.simpleAveragePercentage', 'returner.simpleReturn.averagePercentage');
+    }
+    if (p.startsWith('returnerConfig.distribution.')) {
+      return p.replace('returnerConfig.distribution.', 'returner.distribution.');
+    }
+    if (p.startsWith('returnerConfig.')) {
+      return p.replace('returnerConfig.', 'returner.');
+    }
+
+    // taxExemptionConfig.* originates from tax group
+    if (p.startsWith('taxExemptionConfig.')) {
+      return p.replace('taxExemptionConfig.', 'tax.');
+    }
+
+    return p;
+  };
+
   const renderField = (
     field: FieldConfig,
     value: any,
     onChange: (v: any) => void,
     ctxCurrent: any,
-    root: any
+    root: any,
+    path: string
   ): React.ReactNode => {
     const visible = evaluateVisibleWhen(field.visibleWhen, {
       root,
@@ -331,6 +415,11 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
     const valueForInput = value === undefined || value === null ? '' : value;
     const maybeHelp = field.helpText ? <div style={helpTextStyle}>{field.helpText}</div> : null;
+
+    const errs = fieldErrors[path];
+    const maybeError = errs && errs.length > 0 ? (
+      <div style={inlineErrorStyle}>{errs.join('\n')}</div>
+    ) : null;
 
     switch (field.type) {
       case 'text':
@@ -346,6 +435,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               />
             </label>
             {maybeHelp}
+            {maybeError}
           </div>
         );
 
@@ -362,6 +452,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               />
             </label>
             {maybeHelp}
+            {maybeError}
           </div>
         );
 
@@ -384,6 +475,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               />
             </label>
             {maybeHelp}
+            {maybeError}
           </div>
         );
 
@@ -400,6 +492,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               {field.label}
             </label>
             {maybeHelp}
+            {maybeError}
           </div>
         );
 
@@ -421,6 +514,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               </select>
             </label>
             {maybeHelp}
+            {maybeError}
           </div>
         );
 
@@ -438,9 +532,12 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                   (v) => onChange({ ...groupValue, [child.id]: v }),
                   groupValue,
                   root
+                  ,
+                  path ? `${path}.${child.id}` : child.id
                 )
               )}
             </div>
+            {maybeError}
           </div>
         );
       }
@@ -507,7 +604,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                           onChange(nextArr);
                         },
                         itemValue,
-                        root
+                        root,
+                        `${path}[${idx}].${child.id}`
                       )
                     )}
                   </div>
@@ -538,6 +636,9 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
     try {
       setSubmitting(true);
+      setError(null);
+      setSubmitErrorDetails([]);
+      setFieldErrors({});
 
       const req = buildAdvancedRequest(formData);
       const totalMonths = req.phases.reduce(
@@ -551,7 +652,23 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const apiErr = await parseApiError(res);
+        const details = Array.isArray(apiErr.details) ? apiErr.details : [];
+        setError(apiErr.message ?? `Validation failed (${res.status})`);
+        setSubmitErrorDetails(details);
+
+        const nextFieldErrors: Record<string, string[]> = {};
+        for (const line of details) {
+          const { path: rawPath, message } = extractPathAndMessage(line);
+          if (!rawPath) continue;
+          const mapped = mapRequestPathToFormPath(rawPath);
+          nextFieldErrors[mapped] = [...(nextFieldErrors[mapped] ?? []), message];
+        }
+        setFieldErrors(nextFieldErrors);
+        setSubmitting(false);
+        return;
+      }
 
       const data = (await res.json()) as { id?: string };
       if (!data?.id) throw new Error('No simulation id returned');
@@ -559,7 +676,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       setSimulationId(data.id);
     } catch (e: any) {
       console.error(e);
-      alert(e.message ?? 'Simulation failed');
+      setError(e.message ?? 'Simulation failed');
       setSubmitting(false);
     }
   };
@@ -603,7 +720,18 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         Configure advanced options. These inputs map directly to the simulation engine.
       </p>
 
-      {error && <div style={errorStyle}>Warning: {error}</div>}
+      {error && (
+        <div style={errorStyle}>
+          <div>{error}</div>
+          {submitErrorDetails.length > 0 && (
+            <div style={{ marginTop: '0.5rem' }}>
+              {submitErrorDetails.map((d, i) => (
+                <div key={i}>{d}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         {formConfig.fields.map((field) => (
@@ -613,7 +741,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               formData[field.id],
               (newValue) => setFormData((prev) => ({ ...(prev ?? {}), [field.id]: newValue })),
               formData,
-              formData
+              formData,
+              field.id
             )}
           </div>
         ))}
