@@ -377,7 +377,7 @@ const AdvancedPhaseForm: React.FC<AdvancedPhaseFormProps> = ({
       </div>
 
       <div style={{ marginTop: '0.75rem' }}>
-        <button type="button">Add phase</button>
+        <button type="submit">Add phase</button>
       </div>
     </form>
   );

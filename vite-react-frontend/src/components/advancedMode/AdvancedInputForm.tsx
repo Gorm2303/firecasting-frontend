@@ -13,6 +13,7 @@ import {
 } from './formTypes';
 import AdvancedPhaseForm from './AdvancedPhaseForm';
 import AdvancedPhaseList from './AdvancedPhaseList';
+import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
   onSimulationComplete: (stats: YearlySummary[]) => void;
@@ -270,16 +271,18 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [simulationId, setSimulationId] = useState<string | null>(null);
+
+  const SIM_API_BASE = `${import.meta.env.VITE_API_BASE_URL}`.replace(/\/+$/, '');
+  const formsUrl = new URL('../forms/advanced-simulation', SIM_API_BASE + '/').toString();
+  const startAdvancedUrl = new URL('start-advanced', SIM_API_BASE + '/').toString();
 
   const fetchConfig = useCallback(async () => {
     try {
       setLoadingConfig(true);
       setError(null);
 
-      // Local JSON in public/ for now
-      const res = await fetch('/forms/advanced-simulation.json');
-      // Real backend:
-      // const res = await fetch('/api/forms/advanced-simulation');
+      const res = await fetch(formsUrl);
 
       if (!res.ok) {
         throw new Error(`Failed to fetch form config: ${res.status}`);
@@ -296,11 +299,85 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
     } finally {
       setLoadingConfig(false);
     }
-  }, []);
+  }, [formsUrl]);
 
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  type AdvancedPhaseRequest = {
+    phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
+    durationInMonths: number;
+    initialDeposit?: number;
+    monthlyDeposit?: number;
+    yearlyIncreaseInPercentage?: number;
+    withdrawRate?: number;
+    withdrawAmount?: number;
+    lowerVariationPercentage?: number;
+    upperVariationPercentage?: number;
+    taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  };
+
+  type AdvancedSimulationRequest = {
+    startDate: { date: string };
+    phases: AdvancedPhaseRequest[];
+    overallTaxRule: string;
+    taxPercentage: number;
+    returnType: string;
+    inflationFactor: number;
+  };
+
+  const toNumberOrUndefined = (v: any): number | undefined => {
+    if (v === '' || v === null || v === undefined) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const mapOverallTaxRule = (v: any): string => {
+    const s = String(v ?? '').trim();
+    const l = s.toLowerCase();
+    if (l.includes('capital')) return 'CAPITAL';
+    if (l.includes('notional')) return 'NOTIONAL';
+    return s;
+  };
+
+  const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[] => {
+    const s = String(v ?? '').toUpperCase();
+    if (s === 'EXEMPTIONCARD') return ['EXEMPTIONCARD'];
+    if (s === 'STOCKEXEMPTION') return ['STOCKEXEMPTION'];
+    if (s === 'BOTH') return ['EXEMPTIONCARD', 'STOCKEXEMPTION'];
+    return [];
+  };
+
+  const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequest => {
+    const phasesInput: any[] = Array.isArray(data.phases) ? data.phases : [];
+    const phases: AdvancedPhaseRequest[] = phasesInput.map((p) => ({
+      phaseType: (String(p?.phaseType ?? 'DEPOSIT').toUpperCase() as any) ?? 'DEPOSIT',
+      durationInMonths: Number(p?.durationInMonths ?? p?.durationMonths ?? 0),
+      initialDeposit: toNumberOrUndefined(p?.initialDeposit),
+      monthlyDeposit: toNumberOrUndefined(p?.monthlyDeposit),
+      yearlyIncreaseInPercentage: toNumberOrUndefined(
+        p?.yearlyIncreaseInPercentage ?? p?.yearlyIncreasePercentage
+      ),
+      withdrawRate: toNumberOrUndefined(p?.withdrawRate),
+      withdrawAmount: toNumberOrUndefined(p?.withdrawAmount),
+      lowerVariationPercentage: toNumberOrUndefined(p?.lowerVariationPercentage),
+      upperVariationPercentage: toNumberOrUndefined(p?.upperVariationPercentage),
+      taxRules: mapTaxExemptionsToRules(p?.taxExemptions),
+    }));
+
+    const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? 2;
+    const inflationFactor = 1 + avgInflationPct / 100;
+
+    return {
+      startDate: { date: String(data.startDate ?? '') },
+      phases,
+      overallTaxRule: mapOverallTaxRule(data.taxRule),
+      taxPercentage: Number(data?.tax?.percentage ?? 0),
+      returnType: String(data?.returner?.type ?? 'dataDrivenReturn'),
+      inflationFactor,
+    };
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -308,23 +385,35 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
     try {
       setSubmitting(true);
-      const res = await fetch('/api/simulations/run', {
+
+      const req = buildAdvancedRequest(formData);
+      const totalMonths = req.phases.reduce(
+        (sum, p) => sum + (Number(p.durationInMonths) || 0),
+        0
+      );
+      if (totalMonths > 1200) {
+        throw new Error('Total duration across phases must be ≤ 1200 months');
+      }
+
+      const res = await fetch(startAdvancedUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(req),
       });
 
       if (!res.ok) {
-        throw new Error(`Simulation failed: ${res.status}`);
+        throw new Error(await res.text());
       }
 
-      const data = (await res.json()) as YearlySummary[];
-      onSimulationComplete(data);
+      const data = (await res.json()) as { id?: string };
+      if (!data?.id) throw new Error('No simulation id returned');
+      setSimulationId(data.id);
     } catch (e: any) {
       console.error(e);
       alert(e.message ?? 'Simulation failed');
-    } finally {
       setSubmitting(false);
+    } finally {
+      // submitting stays true while waiting for SSE completion
     }
   };
 
@@ -1182,6 +1271,17 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
             {submitting ? 'Running simulation…' : 'Run simulation'}
           </button>
         </div>
+
+        {simulationId && (
+          <SimulationProgress
+            simulationId={simulationId}
+            onComplete={(result) => {
+              setSubmitting(false);
+              setSimulationId(null);
+              onSimulationComplete(result);
+            }}
+          />
+        )}
       </form>
     </div>
   );
