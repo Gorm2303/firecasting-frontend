@@ -1,10 +1,15 @@
 // src/App.test.tsx
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 
 describe('App', () => {
   it('should render the input form and not show tabs initially', () => {
-    render(<App />);
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
 
     // The tab buttons should not be present on the initial render
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();

@@ -14,6 +14,35 @@ interface PhaseListProps {
   onToggleTaxRule: (index: number, rule: ExemptionRule) => void;
 }
 
+const MAX_YEARS = 100;
+const MAX_TOTAL_MONTHS = MAX_YEARS * 12;
+
+const splitMonths = (totalMonths: number | undefined | null) => {
+  const safe = Math.max(0, Number(totalMonths) || 0);
+  const years = Math.floor(safe / 12);
+  const months = safe % 12;
+  return { years, months };
+};
+
+const normaliseDuration = (years: number, months: number) => {
+  let y = Math.max(0, years);
+  let m = Math.max(0, months);
+
+  if (m >= 12) {
+    y += Math.floor(m / 12);
+    m = m % 12;
+  }
+
+  let total = y * 12 + m;
+  if (total > MAX_TOTAL_MONTHS) {
+    y = MAX_YEARS;
+    m = 0;
+    total = MAX_TOTAL_MONTHS;
+  }
+
+  return { years: y, months: m, totalMonths: total };
+};
+
 const PhaseList: React.FC<PhaseListProps> = ({
   phases,
   onPhaseChange,
@@ -28,11 +57,35 @@ const PhaseList: React.FC<PhaseListProps> = ({
       onPhaseChange(idx, field, val);
     };
 
+  const handleDurationYearsChange =
+    (idx: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      const val = Number(raw);
+      const { months } = splitMonths(phases[idx]?.durationInMonths);
+      const { totalMonths } = normaliseDuration(
+        Number.isNaN(val) ? 0 : val,
+        months
+      );
+      onPhaseChange(idx, 'durationInMonths', totalMonths);
+    };
+
+  const handleDurationMonthsChange =
+    (idx: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      const val = Number(raw);
+      const { years } = splitMonths(phases[idx]?.durationInMonths);
+      const { totalMonths } = normaliseDuration(
+        years,
+        Number.isNaN(val) ? 0 : val
+      );
+      onPhaseChange(idx, 'durationInMonths', totalMonths);
+    };
+
   return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
       <div
         style={{
-          width: '400px',
+          width: '360px',
           display: 'flex',
           flexDirection: 'column',
           fontSize: '0.95rem',
@@ -48,217 +101,291 @@ const PhaseList: React.FC<PhaseListProps> = ({
             No phases added yet.
           </p>
         ) : (
-          phases.map((p, idx) => (
-            <div
-              key={idx}
-              style={{
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                padding: '0.5rem 1rem',
-                position: 'relative',
-              }}
-            >
-            
+          phases.map((p, idx) => {
+            const { years, months } = splitMonths(p.durationInMonths);
 
-              <strong
+            return (
+              <div
+                key={idx}
                 style={{
-                  display: 'block',
-                  textAlign: 'center',
-                  marginBottom: '0.7rem',
-                  fontSize: '1.1rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  padding: '0.5rem 1rem',
+                  position: 'relative',
                 }}
               >
-                {p.phaseType} Phase
-                <button
-                  type="button"
-                  onClick={() => onPhaseRemove(idx)}
-                    style={{
-                    position: 'absolute',
-                    right: '0.3rem',
-                    top: '0.3rem',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '0.4rem 0.8rem',
-                    fontSize: '1rem',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.backgroundColor = '';
+                <strong
+                  style={{
+                    display: 'block',
+                    textAlign: 'center',
+                    marginBottom: '0.7rem',
+                    fontSize: '1.1rem',
                   }}
                 >
-                  ✖
-                </button>
-              </strong>
+                  {p.phaseType} Phase
+                  <button
+                    type="button"
+                    onClick={() => onPhaseRemove(idx)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.3rem',
+                      top: '0.3rem',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '1rem',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor =
+                        'rgba(255, 0, 0, 0.2)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '';
+                    }}
+                  >
+                    ✖
+                  </button>
+                </strong>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '140px auto',
-                  columnGap: '0.5rem',
-                  rowGap: '0.3rem',
-                  alignItems: 'center',
-                }}
-              >
-                <span style={{ fontSize: '0.95rem' }}>Duration (months):</span>
-                <input
-                  type="number"
-                  value={p.durationInMonths}
-                  onChange={handleChange(idx, 'durationInMonths')}
+                <div
                   style={{
-                    width: '100%',
-                    padding: '0.15rem 0.3rem',
-                    boxSizing: 'border-box',
-                    fontSize: '0.95rem',
+                    display: 'grid',
+                    gridTemplateColumns: '140px auto',
+                    columnGap: '0.5rem',
+                    rowGap: '0.3rem',
+                    alignItems: 'center',
                   }}
-                />
-
-                {p.phaseType === 'DEPOSIT' && (
-                  <>
-                    <span style={{ fontSize: '0.95rem' }}>Initial Deposit:</span>
-                    <input
-                      type="number"
-                      value={p.initialDeposit}
-                      onChange={handleChange(idx, 'initialDeposit')}
+                >
+                  <span style={{ fontSize: '0.95rem' }}>Duration:</span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.25rem',
+                    }}
+                  >
+                    <div
                       style={{
-                        width: '100%',
-                        padding: '0.15rem 0.3rem',
-                        boxSizing: 'border-box',
-                        fontSize: '0.95rem',
+                        display: 'flex',
+                        gap: '0.4rem',
+                        alignItems: 'center',
                       }}
-                    />
+                    >
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={MAX_YEARS}
+                          value={years}
+                          onChange={handleDurationYearsChange(idx)}
+                          style={{
+                            width: '100%',
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: '0.8rem',
+                            opacity: 0.8,
+                          }}
+                        >
+                          Years (0–100)
+                        </span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={12}
+                          value={months}
+                          onChange={handleDurationMonthsChange(idx)}
+                          style={{
+                            width: '100%',
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: '0.8rem',
+                            opacity: 0.8,
+                          }}
+                        >
+                          Months (0–12)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                    <span style={{ fontSize: '0.95rem' }}>Monthly Deposit:</span>
+                  {p.phaseType === 'DEPOSIT' && (
+                    <>
+                      <span style={{ fontSize: '0.95rem' }}>Initial Deposit:</span>
+                      <input
+                        type="number"
+                        value={p.initialDeposit}
+                        onChange={handleChange(idx, 'initialDeposit')}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      />
+
+                      <span style={{ fontSize: '0.95rem' }}>Monthly Deposit:</span>
+                      <input
+                        type="number"
+                        value={p.monthlyDeposit}
+                        onChange={handleChange(idx, 'monthlyDeposit')}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      />
+
+                      <span style={{ fontSize: '0.95rem' }}>Yearly Increase %:</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={p.yearlyIncreaseInPercentage}
+                        onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      />
+                    </>
+                  )}
+
+                  {p.phaseType === 'WITHDRAW' && (
+                    <>
+                      {p.withdrawAmount != null && p.withdrawAmount > 0 ? (
+                        <>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Withdraw Amount:
+                          </span>
+                          <input
+                            type="number"
+                            value={p.withdrawAmount}
+                            onChange={handleChange(idx, 'withdrawAmount')}
+                            style={{
+                              width: '100%',
+                              padding: '0.15rem 0.3rem',
+                              boxSizing: 'border-box',
+                              fontSize: '0.95rem',
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Withdraw Rate %:
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={p.withdrawRate ?? ''}
+                            onChange={handleChange(idx, 'withdrawRate')}
+                            style={{
+                              width: '100%',
+                              padding: '0.15rem 0.3rem',
+                              boxSizing: 'border-box',
+                              fontSize: '0.95rem',
+                            }}
+                          />
+                        </>
+                      )}
+
+                      {p.lowerVariationPercentage != null && (
+                        <>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Lower Variation %:
+                          </span>
+                          <input
+                            type="number"
+                            value={p.lowerVariationPercentage}
+                            onChange={handleChange(
+                              idx,
+                              'lowerVariationPercentage'
+                            )}
+                            style={{
+                              width: '100%',
+                              padding: '0.15rem 0.3rem',
+                              boxSizing: 'border-box',
+                              fontSize: '0.95rem',
+                            }}
+                          />
+                        </>
+                      )}
+
+                      {p.upperVariationPercentage != null && (
+                        <>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Upper Variation %:
+                          </span>
+                          <input
+                            type="number"
+                            value={p.upperVariationPercentage}
+                            onChange={handleChange(
+                              idx,
+                              'upperVariationPercentage'
+                            )}
+                            style={{
+                              width: '100%',
+                              padding: '0.15rem 0.3rem',
+                              boxSizing: 'border-box',
+                              fontSize: '0.95rem',
+                            }}
+                          />
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <fieldset
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '0.2rem',
+                    marginTop: '0.3rem',
+                  }}
+                >
+                  <legend style={{ fontSize: '0.95rem' }}>Tax Exemptions</legend>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.95rem',
+                      marginBottom: '0.3rem',
+                    }}
+                  >
                     <input
-                      type="number"
-                      value={p.monthlyDeposit}
-                      onChange={handleChange(idx, 'monthlyDeposit')}
-                      style={{
-                        width: '100%',
-                        padding: '0.15rem 0.3rem',
-                        boxSizing: 'border-box',
-                        fontSize: '0.95rem',
-                      }}
+                      type="checkbox"
+                      checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
+                      onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
+                      style={{ marginRight: '0.3rem' }}
                     />
-
-                    <span style={{ fontSize: '0.95rem' }}>Yearly Increase %:</span>
+                    Exemption Card
+                  </label>
+                  <label style={{ display: 'block', fontSize: '0.95rem' }}>
                     <input
-                      type="number"
-                      step="0.01"
-                      value={p.yearlyIncreaseInPercentage}
-                      onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
-                      style={{
-                        width: '100%',
-                        padding: '0.15rem 0.3rem',
-                        boxSizing: 'border-box',
-                        fontSize: '0.95rem',
-                      }}
+                      type="checkbox"
+                      checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
+                      onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
+                      style={{ marginRight: '0.3rem' }}
                     />
-                  </>
-                )}
-
-                {p.phaseType === 'WITHDRAW' && (
-                  <>
-                    {p.withdrawAmount != null && p.withdrawAmount > 0 ? (
-                      <>
-                        <span style={{ fontSize: '0.95rem' }}>Withdraw Amount:</span>
-                        <input
-                          type="number"
-                          value={p.withdrawAmount}
-                          onChange={handleChange(idx, 'withdrawAmount')}
-                          style={{
-                            width: '100%',
-                            padding: '0.15rem 0.3rem',
-                            boxSizing: 'border-box',
-                            fontSize: '0.95rem',
-                          }}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontSize: '0.95rem' }}>Withdraw Rate %:</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.withdrawRate ?? ''}
-                          onChange={handleChange(idx, 'withdrawRate')}
-                          style={{
-                            width: '100%',
-                            padding: '0.15rem 0.3rem',
-                            boxSizing: 'border-box',
-                            fontSize: '0.95rem',
-                          }}
-                        />
-                      </>
-                    )}
-
-                    {p.lowerVariationPercentage != null && (
-                      <>
-                        <span style={{ fontSize: '0.95rem' }}>Lower Variation %:</span>
-                        <input
-                          type="number"
-                          value={p.lowerVariationPercentage}
-                          onChange={handleChange(idx, 'lowerVariationPercentage')}
-                          style={{
-                            width: '100%',
-                            padding: '0.15rem 0.3rem',
-                            boxSizing: 'border-box',
-                            fontSize: '0.95rem',
-                          }}
-                        />
-                      </>
-                    )}
-
-                    {p.upperVariationPercentage != null && (
-                      <>
-                        <span style={{ fontSize: '0.95rem' }}>Upper Variation %:</span>
-                        <input
-                          type="number"
-                          value={p.upperVariationPercentage}
-                          onChange={handleChange(idx, 'upperVariationPercentage')}
-                          style={{
-                            width: '100%',
-                            padding: '0.15rem 0.3rem',
-                            boxSizing: 'border-box',
-                            fontSize: '0.95rem',
-                          }}
-                        />
-                      </>
-                    )}
-                  </>
-                )}
+                    Stock Exemption
+                  </label>
+                </fieldset>
               </div>
-
-              <fieldset
-                style={{
-                  border: '1px solid #ddd',
-                  padding: '0.2rem',
-                  marginTop: '0.3rem',
-                }}
-              >
-                <legend style={{ fontSize: '0.95rem' }}>Tax Exemptions</legend>
-                <label style={{ display: 'block', fontSize: '0.95rem', marginBottom: '0.3rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
-                    onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
-                    style={{ marginRight: '0.3rem' }}
-                  />
-                  Exemption Card
-                </label>
-                <label style={{ display: 'block', fontSize: '0.95rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
-                    onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
-                    style={{ marginRight: '0.3rem' }}
-                  />
-                  Stock Exemption
-                </label>
-              </fieldset>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
