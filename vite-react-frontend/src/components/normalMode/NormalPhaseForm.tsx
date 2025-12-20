@@ -80,15 +80,6 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
 
   const getTotalMonths = () => durationYears * 12 + durationMonths;
 
-  const durationLabel = () => {
-    const y = durationYears;
-    const m = durationMonths;
-    if (y === 0 && m === 0) return '0 years';
-    if (m === 0) return `${y} year${y === 1 ? '' : 's'}`;
-    if (y === 0) return `${m} month${m === 1 ? '' : 's'}`;
-    return `${y} year${y === 1 ? '' : 's'} ${m} month${m === 1 ? '' : 's'}`;
-  };
-
   const handleAdd = () => {
     const totalMonths = getTotalMonths();
 

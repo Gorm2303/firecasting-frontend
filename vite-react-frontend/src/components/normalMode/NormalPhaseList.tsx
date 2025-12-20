@@ -43,14 +43,6 @@ const normaliseDuration = (years: number, months: number) => {
   return { years: y, months: m, totalMonths: total };
 };
 
-const formatDurationLabel = (totalMonths: number | undefined | null) => {
-  const { years, months } = splitMonths(totalMonths);
-  if (years === 0 && months === 0) return '0 years';
-  if (months === 0) return `${years} year${years === 1 ? '' : 's'}`;
-  if (years === 0) return `${months} month${months === 1 ? '' : 's'}`;
-  return `${years} year${years === 1 ? '' : 's'} ${months} month${months === 1 ? '' : 's'}`;
-};
-
 const PhaseList: React.FC<PhaseListProps> = ({
   phases,
   onPhaseChange,

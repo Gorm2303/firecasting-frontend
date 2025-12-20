@@ -88,57 +88,63 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
     <div
       style={{
         marginTop: '2rem',
-        maxHeight: '80vh',
-        aspectRatio: '1.6',
         margin: '0 auto',
-
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart
-          data={stackedData}
-          margin={{ top: 0, right: 20, bottom: 0, left: 50 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-            dataKey="year"
-            label={{ value: 'Year', position: 'insideBottomRight', offset: -6 }}
-          />
-          <YAxis
-            label={{ value: 'Capital', angle: -90, position: 'insideBottomLeft' }}
-            tickFormatter={formatNumber}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
+      <div
+        style={{
+          maxHeight: '80vh',
+          aspectRatio: '1.6',
+        }}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={stackedData}
+            margin={{ top: 0, right: 20, bottom: 0, left: 50 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="year"
+              label={{ value: 'Year', position: 'insideBottomRight', offset: -6 }}
+            />
+            <YAxis
+              label={{ value: 'Capital', angle: -90, position: 'insideBottomLeft' }}
+              tickFormatter={formatNumber}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
 
-          <Area dataKey="lower5" stackId="outerBand" stroke="none" fill="none" name=" " />
-          <Area dataKey="lower25" stackId="innerBand" stroke="none" fill="none" name=" " />
-          <Area
-            dataKey="band5_95"
-            stackId="outerBand"
-            stroke="none"
-            fill="#00FFFF"
-            fillOpacity={0.3}
-            name="Quantiles (5th-95th)"
-          />
-          <Area
-            dataKey="band25_75"
-            stackId="innerBand"
-            stroke="none"
-            fill="#0088FF"
-            fillOpacity={0.7}
-            name="Quantiles (25th-75th)"
-          />
-          <Line
-            type="monotone"
-            dataKey="medianCapital"
-            stroke="#0033FF"
-            strokeWidth={2}
-            dot={false}
-            name="Median Capital"
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+            <Area dataKey="lower5" stackId="outerBand" stroke="none" fill="none" name=" " />
+            <Area dataKey="lower25" stackId="innerBand" stroke="none" fill="none" name=" " />
+            <Area
+              dataKey="band5_95"
+              stackId="outerBand"
+              stroke="none"
+              fill="#00FFFF"
+              fillOpacity={0.3}
+              name="Quantiles (5th-95th)"
+            />
+            <Area
+              dataKey="band25_75"
+              stackId="innerBand"
+              stroke="none"
+              fill="#0088FF"
+              fillOpacity={0.7}
+              name="Quantiles (25th-75th)"
+            />
+            <Line
+              type="monotone"
+              dataKey="medianCapital"
+              stroke="#0033FF"
+              strokeWidth={2}
+              dot={false}
+              name="Median Capital"
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
       <FailedCasesSummary data={data} />
     </div>
   );

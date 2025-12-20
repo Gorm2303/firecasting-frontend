@@ -500,7 +500,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   };
 
   const renderRegimeSection = (
-    distField: GroupFieldConfig,
     distValue: Record<string, any>,
     onChangeDist: (newVal: Record<string, any>) => void,
     normalGroup?: GroupFieldConfig,
@@ -585,7 +584,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
     const handleRegimeParamChange = (
       index: number,
       type: RegimeEntry['type'],
-      groupId: string,
       fieldId: string,
       newVal: any
     ) => {
@@ -644,7 +642,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                     handleRegimeParamChange(
                       index,
                       'normal',
-                      normalGroup.id,
                       child.id,
                       newVal
                     )
@@ -667,7 +664,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                     handleRegimeParamChange(
                       index,
                       'brownian',
-                      brownianGroup.id,
                       child.id,
                       newVal
                     )
@@ -690,7 +686,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                     handleRegimeParamChange(
                       index,
                       'studentt',
-                      studentGroup.id,
                       child.id,
                       newVal
                     )
@@ -898,7 +893,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               renderChildGroupInline(regimeGroupFromConfig)}
             {/* Then our custom regime-distribution & matrix editor */}
             {renderRegimeSection(
-              distField,
               distValue,
               (newDistVal) => {
                 onChangeGroup({
