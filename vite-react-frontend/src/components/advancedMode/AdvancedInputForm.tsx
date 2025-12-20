@@ -133,6 +133,10 @@ type AdvancedSimulationRequest = {
       studentT?: { mu?: number; sigma?: number; nu?: number };
     };
   };
+  taxExemptionConfig?: {
+    exemptionCard?: { limit?: number; yearlyIncrease?: number };
+    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
+  };
   inflationFactor: number;
 };
 
@@ -177,6 +181,25 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
   const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? 2;
   const inflationFactor = 1 + avgInflationPct / 100;
 
+  const taxExemptionConfig = {
+    exemptionCard: {
+      limit: toNumberOrUndefined(data?.tax?.exemptionCard?.limit),
+      yearlyIncrease: toNumberOrUndefined(data?.tax?.exemptionCard?.increase),
+    },
+    stockExemption: {
+      taxRate: toNumberOrUndefined(data?.tax?.stockExemption?.taxRate),
+      limit: toNumberOrUndefined(data?.tax?.stockExemption?.limit),
+      yearlyIncrease: toNumberOrUndefined(data?.tax?.stockExemption?.increase),
+    },
+  };
+
+  const hasTaxExemptionConfig =
+    taxExemptionConfig.exemptionCard.limit !== undefined ||
+    taxExemptionConfig.exemptionCard.yearlyIncrease !== undefined ||
+    taxExemptionConfig.stockExemption.taxRate !== undefined ||
+    taxExemptionConfig.stockExemption.limit !== undefined ||
+    taxExemptionConfig.stockExemption.yearlyIncrease !== undefined;
+
   const returnerConfig = {
     seed: toNumberOrUndefined(data?.returner?.random?.seed),
     simpleAveragePercentage: toNumberOrUndefined(data?.returner?.simpleReturn?.averagePercentage),
@@ -214,6 +237,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
     taxPercentage: Number(data?.tax?.percentage ?? 0),
     returnType: String(data?.returner?.type ?? 'dataDrivenReturn'),
     returnerConfig: hasReturnerConfig ? returnerConfig : undefined,
+    taxExemptionConfig: hasTaxExemptionConfig ? taxExemptionConfig : undefined,
     inflationFactor,
   };
 };
