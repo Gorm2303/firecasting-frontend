@@ -24,6 +24,87 @@ export type JsonDefault =
   | JsonDefault[]
   | { [key: string]: JsonDefault };
 
+// ---------------------------------------------------------------------------
+// visibility rules (dependency-free)
+// ---------------------------------------------------------------------------
+
+export type VisibleWhen =
+  | { all: VisibleWhen[] }
+  | { any: VisibleWhen[] }
+  | { not: VisibleWhen }
+  | { path: string; equals: JsonDefault }
+  | { path: string; notEquals: JsonDefault }
+  | { path: string; in: JsonDefault[] }
+  | { path: string; notIn: JsonDefault[] }
+  | { path: string; truthy: true }
+  | { path: string; falsy: true }
+  | { path: string; gt: number }
+  | { path: string; gte: number }
+  | { path: string; lt: number }
+  | { path: string; lte: number };
+
+export type VisibilityContext = {
+  /** Root form state (for absolute paths starting with `$.`). */
+  root: any;
+  /** Current object scope (group object / array item). */
+  current: any;
+};
+
+const getByPath = (obj: any, path: string): any => {
+  if (!path) return undefined;
+  const parts = path.split('.').filter(Boolean);
+  let cur: any = obj;
+  for (const part of parts) {
+    if (cur == null) return undefined;
+    cur = cur[part];
+  }
+  return cur;
+};
+
+const resolvePathValue = (ctx: VisibilityContext, path: string): any => {
+  const p = String(path ?? '').trim();
+  if (!p) return undefined;
+
+  // `$.foo.bar` means absolute path from root
+  if (p.startsWith('$.')) {
+    return getByPath(ctx.root, p.slice(2));
+  }
+
+  // default: from current scope (group / item)
+  return getByPath(ctx.current, p);
+};
+
+export function evaluateVisibleWhen(rule: VisibleWhen | undefined, ctx: VisibilityContext): boolean {
+  if (!rule) return true;
+
+  if ('all' in rule) {
+    return (rule.all ?? []).every((r) => evaluateVisibleWhen(r, ctx));
+  }
+  if ('any' in rule) {
+    return (rule.any ?? []).some((r) => evaluateVisibleWhen(r, ctx));
+  }
+  if ('not' in rule) {
+    return !evaluateVisibleWhen(rule.not, ctx);
+  }
+
+  const actual = resolvePathValue(ctx, (rule as any).path);
+
+  if ('equals' in rule) return actual === rule.equals;
+  if ('notEquals' in rule) return actual !== rule.notEquals;
+  if ('in' in rule) return Array.isArray(rule.in) ? rule.in.includes(actual as any) : false;
+  if ('notIn' in rule) return Array.isArray(rule.notIn) ? !rule.notIn.includes(actual as any) : true;
+  if ('truthy' in rule) return Boolean(actual);
+  if ('falsy' in rule) return !Boolean(actual);
+
+  const n = Number(actual);
+  if ('gt' in rule) return Number.isFinite(n) && n > rule.gt;
+  if ('gte' in rule) return Number.isFinite(n) && n >= rule.gte;
+  if ('lt' in rule) return Number.isFinite(n) && n < rule.lt;
+  if ('lte' in rule) return Number.isFinite(n) && n <= rule.lte;
+
+  return true;
+}
+
 /**
  * Shared properties for all fields.
  */
@@ -40,6 +121,8 @@ export interface BaseFieldConfig {
   defaultValue?: JsonDefault;
   /** Whether this field should be considered required (for validation layer). */
   required?: boolean;
+  /** Optional rule that determines if the field is visible. */
+  visibleWhen?: VisibleWhen;
 }
 
 /**
@@ -164,21 +247,29 @@ export function buildInitialValueForField(field: FieldConfig): any {
     }
 
     case 'group': {
-      // If backend provides an explicit default object, trust it.
-      if (field.defaultValue && typeof field.defaultValue === 'object') {
-        return field.defaultValue;
-      }
       const obj: Record<string, any> = {};
       field.children.forEach((child) => {
         obj[child.id] = buildInitialValueForField(child);
       });
+
+      // If backend provides an explicit default object, merge it on top so missing
+      // keys still get proper defaults.
+      if (field.defaultValue && typeof field.defaultValue === 'object' && !Array.isArray(field.defaultValue)) {
+        return { ...obj, ...(field.defaultValue as any) };
+      }
       return obj;
     }
 
     case 'array': {
       // If backend provides a default array, use that directly.
       if (Array.isArray(field.defaultValue)) {
-        return field.defaultValue;
+        return field.defaultValue.map((item) => {
+          const base = buildInitialValueForField(field.item);
+          if (item && typeof item === 'object' && !Array.isArray(item)) {
+            return { ...base, ...(item as any) };
+          }
+          return item;
+        });
       }
 
       const minItems = field.minItems ?? 0;
