@@ -131,6 +131,16 @@ type AdvancedSimulationRequest = {
       normal?: { mean?: number; standardDeviation?: number };
       brownianMotion?: { drift?: number; volatility?: number };
       studentT?: { mu?: number; sigma?: number; nu?: number };
+      regimeBased?: {
+        tickMonths?: number;
+        regimes?: Array<{
+          distributionType?: string;
+          expectedDurationMonths?: number;
+          switchWeights?: { toRegime0?: number; toRegime1?: number; toRegime2?: number };
+          normal?: { mean?: number; standardDeviation?: number };
+          studentT?: { mu?: number; sigma?: number; nu?: number };
+        }>;
+      };
     };
   };
   taxExemptionConfig?: {
@@ -200,6 +210,27 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
     taxExemptionConfig.stockExemption.limit !== undefined ||
     taxExemptionConfig.stockExemption.yearlyIncrease !== undefined;
 
+  const regimeBasedInput = data?.returner?.distribution?.regimeBased;
+  const regimesInput: any[] = Array.isArray(regimeBasedInput?.regimes) ? regimeBasedInput.regimes : [];
+  const mappedRegimes = regimesInput.map((r) => ({
+    distributionType: r?.distributionType,
+    expectedDurationMonths: toNumberOrUndefined(r?.expectedDurationMonths),
+    switchWeights: {
+      toRegime0: toNumberOrUndefined(r?.switchWeights?.toRegime0),
+      toRegime1: toNumberOrUndefined(r?.switchWeights?.toRegime1),
+      toRegime2: toNumberOrUndefined(r?.switchWeights?.toRegime2),
+    },
+    normal: {
+      mean: toNumberOrUndefined(r?.normal?.mean),
+      standardDeviation: toNumberOrUndefined(r?.normal?.standardDeviation),
+    },
+    studentT: {
+      mu: toNumberOrUndefined(r?.studentT?.mu),
+      sigma: toNumberOrUndefined(r?.studentT?.sigma),
+      nu: toNumberOrUndefined(r?.studentT?.nu),
+    },
+  }));
+
   const returnerConfig = {
     seed: toNumberOrUndefined(data?.returner?.random?.seed),
     simpleAveragePercentage: toNumberOrUndefined(data?.returner?.simpleReturn?.averagePercentage),
@@ -221,6 +252,10 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
         mu: toNumberOrUndefined(data?.returner?.distribution?.studentT?.mu),
         sigma: toNumberOrUndefined(data?.returner?.distribution?.studentT?.sigma),
         nu: toNumberOrUndefined(data?.returner?.distribution?.studentT?.nu),
+      },
+      regimeBased: {
+        tickMonths: toNumberOrUndefined(regimeBasedInput?.tickMonths),
+        regimes: mappedRegimes,
       },
     },
   };
