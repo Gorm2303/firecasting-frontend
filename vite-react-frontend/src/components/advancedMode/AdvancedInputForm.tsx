@@ -111,6 +111,39 @@ const btnStyle: React.CSSProperties = {
   background: 'transparent',
 };
 
+const MAX_DURATION_YEARS = 100;
+
+const splitMonths = (totalMonths: number): { years: number; months: number } => {
+  const safe = Math.max(0, Math.floor(Number(totalMonths) || 0));
+  return { years: Math.floor(safe / 12), months: safe % 12 };
+};
+
+const normaliseDuration = (years: number, months: number) => {
+  let y = Math.max(0, Math.floor(Number(years) || 0));
+  let m = Math.max(0, Math.floor(Number(months) || 0));
+
+  if (m >= 12) {
+    y += Math.floor(m / 12);
+    m = m % 12;
+  }
+
+  if (y > MAX_DURATION_YEARS) {
+    y = MAX_DURATION_YEARS;
+    m = 0;
+  }
+
+  return { years: y, months: m, totalMonths: y * 12 + m };
+};
+
+const normaliseDurationWithMinTotal = (years: number, months: number, minTotalMonths: number) => {
+  const base = normaliseDuration(years, months);
+  if (base.totalMonths >= minTotalMonths) return base;
+  const total = Math.max(minTotalMonths, 0);
+  const y = Math.min(MAX_DURATION_YEARS, Math.floor(total / 12));
+  const m = total % 12;
+  return { years: y, months: m, totalMonths: y * 12 + m };
+};
+
 type AdvancedPhaseRequest = {
   phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
   durationInMonths: number;
@@ -457,6 +490,99 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         );
 
       case 'number':
+        // Special-case: split durationInMonths into years + months like normal mode UI.
+        if (field.id === 'durationInMonths') {
+          const { years, months } = splitMonths(Number(valueForInput) || 0);
+          return (
+            <div style={fieldWrapperStyle} key={field.id}>
+              <div style={{ marginBottom: '0.25rem' }}>{field.label}</div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_DURATION_YEARS}
+                    value={years}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const nextYears = raw === '' ? 0 : Number(raw);
+                      const next = normaliseDuration(nextYears, months);
+                      onChange(next.totalMonths);
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                    Years (0–{MAX_DURATION_YEARS})
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={months}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const nextMonths = raw === '' ? 0 : Number(raw);
+                      const next = normaliseDuration(years, nextMonths);
+                      onChange(next.totalMonths);
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Months (0–11)</span>
+                </div>
+              </div>
+              {maybeHelp}
+              {maybeError}
+            </div>
+          );
+        }
+
+        // Special-case: split expectedDurationMonths into years + months.
+        // This field has a backend min of 1 month.
+        if (field.id === 'expectedDurationMonths') {
+          const { years, months } = splitMonths(Number(valueForInput) || 0);
+          return (
+            <div style={fieldWrapperStyle} key={field.id}>
+              <div style={{ marginBottom: '0.25rem' }}>{field.label}</div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_DURATION_YEARS}
+                    value={years}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const nextYears = raw === '' ? 0 : Number(raw);
+                      const next = normaliseDurationWithMinTotal(nextYears, months, 1);
+                      onChange(next.totalMonths);
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                    Years (0–{MAX_DURATION_YEARS})
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={months}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const nextMonths = raw === '' ? 0 : Number(raw);
+                      const next = normaliseDurationWithMinTotal(years, nextMonths, 1);
+                      onChange(next.totalMonths);
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Months (0–11)</span>
+                </div>
+              </div>
+              {maybeHelp}
+              {maybeError}
+            </div>
+          );
+        }
+
         return (
           <div style={fieldWrapperStyle} key={field.id}>
             <label>
