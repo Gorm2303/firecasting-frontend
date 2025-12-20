@@ -1,4 +1,4 @@
-// src/components/advanced/AdvancedInputForm.tsx
+// src/components/advancedMode/AdvancedInputForm.tsx
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
@@ -10,16 +10,14 @@ import {
   NumberFieldConfig,
   SelectFieldConfig,
   buildInitialFormState,
+  buildInitialValueForField,
+  evaluateVisibleWhen,
 } from './formTypes';
-import AdvancedPhaseForm from './AdvancedPhaseForm';
-import AdvancedPhaseList from './AdvancedPhaseList';
 import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
   onSimulationComplete: (stats: YearlySummary[]) => void;
 }
-
-// --- shared styles (kept simple, theme-friendly) ---
 
 const containerStyle: React.CSSProperties = {
   maxWidth: '960px',
@@ -97,177 +95,133 @@ const actionsRowStyle: React.CSSProperties = {
   flexWrap: 'wrap',
 };
 
-// Extra styles for returner/distribution/regime UI
-
-const sectionSubTitleStyle: React.CSSProperties = {
-  margin: '0.25rem 0 0.5rem',
-  fontSize: '0.85rem',
-  opacity: 0.8,
+const btnStyle: React.CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 8,
+  border: '1px solid #444',
+  cursor: 'pointer',
+  fontSize: 14,
+  background: 'transparent',
 };
 
-const smallHeadingStyle: React.CSSProperties = {
-  margin: '0.5rem 0 0.25rem',
-  fontSize: '0.9rem',
-  fontWeight: 600,
+type AdvancedPhaseRequest = {
+  phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
+  durationInMonths: number;
+  initialDeposit?: number;
+  monthlyDeposit?: number;
+  yearlyIncreaseInPercentage?: number;
+  withdrawRate?: number;
+  withdrawAmount?: number;
+  lowerVariationPercentage?: number;
+  upperVariationPercentage?: number;
+  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
 };
 
-const regimeListStyle: React.CSSProperties = {
-  marginTop: '0.25rem',
-  marginBottom: '0.5rem',
+type AdvancedSimulationRequest = {
+  startDate: { date: string };
+  phases: AdvancedPhaseRequest[];
+  overallTaxRule: string;
+  taxPercentage: number;
+  returnType: string;
+  returnerConfig?: {
+    seed?: number;
+    simpleAveragePercentage?: number;
+    distribution?: {
+      type?: string;
+      normal?: { mean?: number; standardDeviation?: number };
+      brownianMotion?: { drift?: number; volatility?: number };
+      studentT?: { mu?: number; sigma?: number; nu?: number };
+    };
+  };
+  inflationFactor: number;
 };
 
-const regimeRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.5rem',
-  marginBottom: '0.25rem',
+const toNumberOrUndefined = (v: any): number | undefined => {
+  if (v === '' || v === null || v === undefined) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 };
 
-const matrixGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '0.25rem',
-  marginTop: '0.5rem',
+const mapOverallTaxRule = (v: any): string => {
+  const s = String(v ?? '').trim();
+  const l = s.toLowerCase();
+  if (l === 'capital' || l === 'notional') return l;
+  if (l.includes('capital')) return 'capital';
+  if (l.includes('notional')) return 'notional';
+  return s || 'capital';
 };
 
-const matrixRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '0.25rem',
+const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[] => {
+  const s = String(v ?? '').toUpperCase();
+  if (s === 'EXEMPTIONCARD') return ['EXEMPTIONCARD'];
+  if (s === 'STOCKEXEMPTION') return ['STOCKEXEMPTION'];
+  if (s === 'BOTH') return ['EXEMPTIONCARD', 'STOCKEXEMPTION'];
+  return [];
 };
 
-const matrixCellStyle: React.CSSProperties = {
-  width: '3.5rem',
+const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequest => {
+  const phasesInput: any[] = Array.isArray(data.phases) ? data.phases : [];
+  const phases: AdvancedPhaseRequest[] = phasesInput.map((p) => ({
+    phaseType: (String(p?.phaseType ?? 'DEPOSIT').toUpperCase() as any) ?? 'DEPOSIT',
+    durationInMonths: Number(p?.durationInMonths ?? 0),
+    initialDeposit: toNumberOrUndefined(p?.initialDeposit),
+    monthlyDeposit: toNumberOrUndefined(p?.monthlyDeposit),
+    yearlyIncreaseInPercentage: toNumberOrUndefined(p?.yearlyIncreaseInPercentage),
+    withdrawRate: toNumberOrUndefined(p?.withdrawRate),
+    withdrawAmount: toNumberOrUndefined(p?.withdrawAmount),
+    lowerVariationPercentage: toNumberOrUndefined(p?.lowerVariationPercentage),
+    upperVariationPercentage: toNumberOrUndefined(p?.upperVariationPercentage),
+    taxRules: mapTaxExemptionsToRules(p?.taxExemptions),
+  }));
+
+  const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? 2;
+  const inflationFactor = 1 + avgInflationPct / 100;
+
+  const returnerConfig = {
+    seed: toNumberOrUndefined(data?.returner?.random?.seed),
+    simpleAveragePercentage: toNumberOrUndefined(data?.returner?.simpleReturn?.averagePercentage),
+    distribution: {
+      type: data?.returner?.distribution?.type,
+      normal: {
+        mean: toNumberOrUndefined(data?.returner?.distribution?.normal?.mean),
+        standardDeviation: toNumberOrUndefined(
+          data?.returner?.distribution?.normal?.standardDeviation
+        ),
+      },
+      brownianMotion: {
+        drift: toNumberOrUndefined(data?.returner?.distribution?.brownianMotion?.drift),
+        volatility: toNumberOrUndefined(
+          data?.returner?.distribution?.brownianMotion?.volatility
+        ),
+      },
+      studentT: {
+        mu: toNumberOrUndefined(data?.returner?.distribution?.studentT?.mu),
+        sigma: toNumberOrUndefined(data?.returner?.distribution?.studentT?.sigma),
+        nu: toNumberOrUndefined(data?.returner?.distribution?.studentT?.nu),
+      },
+    },
+  };
+
+  const hasReturnerConfig =
+    returnerConfig.seed !== undefined ||
+    returnerConfig.simpleAveragePercentage !== undefined ||
+    returnerConfig.distribution?.type !== undefined;
+
+  return {
+    startDate: { date: String(data.startDate ?? '') },
+    phases,
+    overallTaxRule: mapOverallTaxRule(data.taxRule),
+    taxPercentage: Number(data?.tax?.percentage ?? 0),
+    returnType: String(data?.returner?.type ?? 'dataDrivenReturn'),
+    returnerConfig: hasReturnerConfig ? returnerConfig : undefined,
+    inflationFactor,
+  };
 };
-
-// --- helper functions for returner/distro heuristics ---
-
-const isReturnerGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('return') ||
-    (field.label ?? '').toLowerCase().includes('return'));
-
-const findReturnTypeField = (groupField: GroupFieldConfig): FieldConfig | undefined =>
-  groupField.children.find(
-    (c) =>
-      c.type === 'select' &&
-      (c.id.toLowerCase().includes('return') ||
-        (c.label ?? '').toLowerCase().includes('return'))
-  );
-
-const isDistributionGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('distribution') ||
-    (field.label ?? '').toLowerCase().includes('distribution'));
-
-const isRandomGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('random') ||
-    (field.label ?? '').toLowerCase().includes('random'));
-
-const isSimpleReturnGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('simple') ||
-    (field.label ?? '').toLowerCase().includes('simple'));
-
-const findDistributionTypeField = (distField: GroupFieldConfig): FieldConfig | undefined =>
-  distField.children.find(
-    (c) =>
-      c.type === 'select' &&
-      (c.id.toLowerCase().includes('type') ||
-        (c.label ?? '').toLowerCase().includes('type'))
-  );
-
-const isNormalGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('normal') ||
-    (field.label ?? '').toLowerCase().includes('normal'));
-
-const isBrownianGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('brownian') ||
-    (field.label ?? '').toLowerCase().includes('brownian'));
-
-const isStudentTGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('student') ||
-    (field.label ?? '').toLowerCase().includes('student'));
-
-const isRegimeGroup = (field: FieldConfig): boolean =>
-  field.type === 'group' &&
-  (field.id.toLowerCase().includes('regime') ||
-    (field.label ?? '').toLowerCase().includes('regime'));
-
-const normaliseReturnType = (value: any): string => {
-  const s = String(value ?? '').toLowerCase();
-  if (!s) return '';
-  if (s.includes('distribution')) return 'distribution';
-  if (s.includes('data')) return 'datadriven';
-  if (s.includes('simple')) return 'simple';
-  return s;
-};
-
-const normaliseDistributionType = (value: any): string => {
-  const s = String(value ?? '').toLowerCase();
-  if (!s) return '';
-  if (s.includes('regime')) return 'regime';
-  if (s.includes('brown')) return 'brownian';
-  if (s.includes('student')) return 'studentt';
-  if (s.includes('normal')) return 'normal';
-  return s;
-};
-
-// Build a default n×n transition matrix like the example:
-// all rows point to the "middle" regime: [0, 1, 0] generalized.
-const buildDefaultTransitionMatrix = (n: number): number[][] => {
-  if (n <= 0) return [];
-  const center = Math.floor(n / 2);
-  const rows: number[][] = [];
-  for (let i = 0; i < n; i++) {
-    const row: number[] = [];
-    for (let j = 0; j < n; j++) {
-      row.push(j === center ? 1 : 0);
-    }
-    rows.push(row);
-  }
-  return rows;
-};
-
-// helper to build initial state for a group from its config
-const buildInitialGroupState = (group: GroupFieldConfig): Record<string, any> => {
-  const obj: Record<string, any> = {};
-  group.children.forEach((child) => {
-    // We'll reuse buildInitialFormState helper style via a minimal switch
-    switch (child.type) {
-      case 'text':
-      case 'date':
-      case 'select':
-        obj[child.id] = child.defaultValue ?? '';
-        break;
-      case 'number':
-        obj[child.id] = child.defaultValue ?? 0;
-        break;
-      case 'checkbox':
-        obj[child.id] = child.defaultValue ?? false;
-        break;
-      case 'group':
-        obj[child.id] = buildInitialGroupState(child as GroupFieldConfig);
-        break;
-      case 'array':
-      default:
-        obj[child.id] = child.defaultValue ?? null;
-        break;
-    }
-  });
-  return obj;
-};
-
-// --- component ---
 
 const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
-  const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(
-    null
-  );
+  const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -283,16 +237,14 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       setError(null);
 
       const res = await fetch(formsUrl);
+      if (!res.ok) throw new Error(`Failed to fetch form config: ${res.status}`);
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch form config: ${res.status}`);
-      }
       const json = (await res.json()) as FormConfig;
-
       const initial = buildInitialFormState(json);
+
       setFormConfig(json);
       setInitialFormData(initial);
-      setFormData(JSON.parse(JSON.stringify(initial))); // deep clone
+      setFormData(JSON.parse(JSON.stringify(initial)));
     } catch (e: any) {
       console.error(e);
       setError(e.message ?? 'Error fetching form config');
@@ -305,135 +257,21 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
     fetchConfig();
   }, [fetchConfig]);
 
-  type AdvancedPhaseRequest = {
-    phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
-    durationInMonths: number;
-    initialDeposit?: number;
-    monthlyDeposit?: number;
-    yearlyIncreaseInPercentage?: number;
-    withdrawRate?: number;
-    withdrawAmount?: number;
-    lowerVariationPercentage?: number;
-    upperVariationPercentage?: number;
-    taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
-  };
-
-  type AdvancedSimulationRequest = {
-    startDate: { date: string };
-    phases: AdvancedPhaseRequest[];
-    overallTaxRule: string;
-    taxPercentage: number;
-    returnType: string;
-    inflationFactor: number;
-  };
-
-  const toNumberOrUndefined = (v: any): number | undefined => {
-    if (v === '' || v === null || v === undefined) return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
-
-  const mapOverallTaxRule = (v: any): string => {
-    const s = String(v ?? '').trim();
-    const l = s.toLowerCase();
-    if (l.includes('capital')) return 'CAPITAL';
-    if (l.includes('notional')) return 'NOTIONAL';
-    return s;
-  };
-
-  const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[] => {
-    const s = String(v ?? '').toUpperCase();
-    if (s === 'EXEMPTIONCARD') return ['EXEMPTIONCARD'];
-    if (s === 'STOCKEXEMPTION') return ['STOCKEXEMPTION'];
-    if (s === 'BOTH') return ['EXEMPTIONCARD', 'STOCKEXEMPTION'];
-    return [];
-  };
-
-  const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequest => {
-    const phasesInput: any[] = Array.isArray(data.phases) ? data.phases : [];
-    const phases: AdvancedPhaseRequest[] = phasesInput.map((p) => ({
-      phaseType: (String(p?.phaseType ?? 'DEPOSIT').toUpperCase() as any) ?? 'DEPOSIT',
-      durationInMonths: Number(p?.durationInMonths ?? p?.durationMonths ?? 0),
-      initialDeposit: toNumberOrUndefined(p?.initialDeposit),
-      monthlyDeposit: toNumberOrUndefined(p?.monthlyDeposit),
-      yearlyIncreaseInPercentage: toNumberOrUndefined(
-        p?.yearlyIncreaseInPercentage ?? p?.yearlyIncreasePercentage
-      ),
-      withdrawRate: toNumberOrUndefined(p?.withdrawRate),
-      withdrawAmount: toNumberOrUndefined(p?.withdrawAmount),
-      lowerVariationPercentage: toNumberOrUndefined(p?.lowerVariationPercentage),
-      upperVariationPercentage: toNumberOrUndefined(p?.upperVariationPercentage),
-      taxRules: mapTaxExemptionsToRules(p?.taxExemptions),
-    }));
-
-    const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? 2;
-    const inflationFactor = 1 + avgInflationPct / 100;
-
-    return {
-      startDate: { date: String(data.startDate ?? '') },
-      phases,
-      overallTaxRule: mapOverallTaxRule(data.taxRule),
-      taxPercentage: Number(data?.tax?.percentage ?? 0),
-      returnType: String(data?.returner?.type ?? 'dataDrivenReturn'),
-      inflationFactor,
-    };
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!formData) return;
-
-    try {
-      setSubmitting(true);
-
-      const req = buildAdvancedRequest(formData);
-      const totalMonths = req.phases.reduce(
-        (sum, p) => sum + (Number(p.durationInMonths) || 0),
-        0
-      );
-      if (totalMonths > 1200) {
-        throw new Error('Total duration across phases must be ≤ 1200 months');
-      }
-
-      const res = await fetch(startAdvancedUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
-      });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
-      const data = (await res.json()) as { id?: string };
-      if (!data?.id) throw new Error('No simulation id returned');
-      setSimulationId(data.id);
-    } catch (e: any) {
-      console.error(e);
-      alert(e.message ?? 'Simulation failed');
-      setSubmitting(false);
-    } finally {
-      // submitting stays true while waiting for SSE completion
-    }
-  };
-
-  const handleReset = () => {
-    if (!initialFormData) return;
-    setFormData(JSON.parse(JSON.stringify(initialFormData)));
-  };
-
-  // Generic field renderer (non-special cases)
   const renderField = (
     field: FieldConfig,
     value: any,
-    onChange: (value: any) => void
+    onChange: (v: any) => void,
+    ctxCurrent: any,
+    root: any
   ): React.ReactNode => {
-    const valueForInput =
-      value === undefined || value === null ? '' : value;
+    const visible = evaluateVisibleWhen(field.visibleWhen, {
+      root,
+      current: ctxCurrent,
+    });
+    if (!visible) return null;
 
-    const maybeHelp = field.helpText ? (
-      <div style={helpTextStyle}>{field.helpText}</div>
-    ) : null;
+    const valueForInput = value === undefined || value === null ? '' : value;
+    const maybeHelp = field.helpText ? <div style={helpTextStyle}>{field.helpText}</div> : null;
 
     switch (field.type) {
       case 'text':
@@ -443,6 +281,22 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               {field.label}
               <input
                 type="text"
+                value={String(valueForInput)}
+                onChange={(e) => onChange(e.target.value)}
+                style={{ marginLeft: '0.5rem' }}
+              />
+            </label>
+            {maybeHelp}
+          </div>
+        );
+
+      case 'date':
+        return (
+          <div style={fieldWrapperStyle} key={field.id}>
+            <label>
+              {field.label}
+              <input
+                type="date"
                 value={String(valueForInput)}
                 onChange={(e) => onChange(e.target.value)}
                 style={{ marginLeft: '0.5rem' }}
@@ -474,36 +328,13 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           </div>
         );
 
-      case 'select': {
-        const selectField = field as SelectFieldConfig;
-        return (
-          <div style={fieldWrapperStyle} key={field.id}>
-            <label>
-              {field.label}
-              <select
-                value={String(valueForInput)}
-                onChange={(e) => onChange(e.target.value)}
-                style={{ marginLeft: '0.5rem' }}
-              >
-                {selectField.options.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {maybeHelp}
-          </div>
-        );
-      }
-
       case 'checkbox':
         return (
           <div style={fieldWrapperStyle} key={field.id}>
             <label>
               <input
                 type="checkbox"
-                checked={!!valueForInput}
+                checked={Boolean(value)}
                 onChange={(e) => onChange(e.target.checked)}
                 style={{ marginRight: '0.5rem' }}
               />
@@ -513,17 +344,22 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           </div>
         );
 
-      case 'date':
+      case 'select':
         return (
           <div style={fieldWrapperStyle} key={field.id}>
             <label>
               {field.label}
-              <input
-                type="date"
+              <select
                 value={String(valueForInput)}
                 onChange={(e) => onChange(e.target.value)}
                 style={{ marginLeft: '0.5rem' }}
-              />
+              >
+                {(field as SelectFieldConfig).options.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </label>
             {maybeHelp}
           </div>
@@ -531,580 +367,148 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
       case 'group': {
         const groupField = field as GroupFieldConfig;
-        const groupValue: Record<string, any> = value ?? {};
-        // Generic group rendering: label + grid of children
+        const groupValue = value && typeof value === 'object' ? value : {};
         return (
-          <div key={field.id} style={groupContainerStyle}>
-            <h3 style={groupTitleStyle}>{field.label}</h3>
+          <div style={groupContainerStyle} key={field.id}>
+            <div style={groupTitleStyle}>{field.label}</div>
             <div style={formGridStyle}>
-              {groupField.children.map((child) => {
-                const childValue = groupValue[child.id];
-                return (
-                  <div key={child.id}>
-                    {renderField(child, childValue, (newChildValue) => {
-                      onChange({ ...groupValue, [child.id]: newChildValue });
-                    })}
-                  </div>
-                );
-              })}
+              {groupField.children.map((child) =>
+                renderField(
+                  child,
+                  groupValue[child.id],
+                  (v) => onChange({ ...groupValue, [child.id]: v }),
+                  groupValue,
+                  root
+                )
+              )}
             </div>
           </div>
         );
       }
 
-      case 'array':
+      case 'array': {
+        const arrField = field as ArrayFieldConfig;
+        const arr: any[] = Array.isArray(value) ? value : [];
+        const canAdd = arrField.maxItems == null || arr.length < arrField.maxItems;
+        const canRemove = arrField.minItems == null ? true : arr.length > arrField.minItems;
+
+        return (
+          <div style={phasesContainerStyle} key={field.id}>
+            <div style={phasesTitleRowStyle}>
+              <h3 style={phasesTitleStyle}>{field.label}</h3>
+              <span style={phasesCountStyle}>
+                {arr.length} item{arr.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {arr.map((item, idx) => {
+              const itemValue = item && typeof item === 'object' ? item : {};
+              return (
+                <div
+                  key={`${field.id}-${idx}`}
+                  style={{
+                    border: '1px solid #333',
+                    borderRadius: 8,
+                    padding: '0.75rem',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>
+                      {arrField.item.label} {idx + 1}
+                    </div>
+                    <button
+                      type="button"
+                      style={btnStyle}
+                      disabled={!canRemove}
+                      onClick={() => {
+                        const next = arr.filter((_, i) => i !== idx);
+                        onChange(next);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  <div style={formGridStyle}>
+                    {arrField.item.children.map((child) =>
+                      renderField(
+                        child,
+                        itemValue[child.id],
+                        (v) => {
+                          const nextItem = { ...itemValue, [child.id]: v };
+                          const nextArr = arr.map((x, i) => (i === idx ? nextItem : x));
+                          onChange(nextArr);
+                        },
+                        itemValue,
+                        root
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            <button
+              type="button"
+              style={btnStyle}
+              disabled={!canAdd}
+              onClick={() => onChange([...arr, buildInitialValueForField(arrField.item)])}
+            >
+              Add {arrField.item.label}
+            </button>
+          </div>
+        );
+      }
+
       default:
         return null;
     }
   };
 
-  // ---- specialised rendering for "returner" group ----
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!formData) return;
 
-  const renderRandomGroup = (
-    randomField: GroupFieldConfig,
-    groupValue: Record<string, any>,
-    onChangeGroup: (newGroupValue: Record<string, any>) => void
-  ): React.ReactNode => {
-    const randomValue: Record<string, any> = groupValue[randomField.id] ?? {};
-    return (
-      <div style={groupContainerStyle}>
-        <h4 style={smallHeadingStyle}>{randomField.label}</h4>
-        <div style={formGridStyle}>
-          {randomField.children.map((child) => {
-            const childValue = randomValue[child.id];
-            return (
-              <div key={child.id}>
-                {renderField(child, childValue, (newChildVal) => {
-                  onChangeGroup({
-                    ...groupValue,
-                    [randomField.id]: { ...randomValue, [child.id]: newChildVal },
-                  });
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
+    try {
+      setSubmitting(true);
 
-  const renderRegimeSection = (
-    distValue: Record<string, any>,
-    onChangeDist: (newVal: Record<string, any>) => void,
-    normalGroup?: GroupFieldConfig,
-    brownianGroup?: GroupFieldConfig,
-    studentGroup?: GroupFieldConfig
-  ): React.ReactNode => {
-    type RegimeEntry = {
-      name: string;
-      type: 'normal' | 'brownian' | 'studentt';
-      normal?: Record<string, any>;
-      brownian?: Record<string, any>;
-      studentt?: Record<string, any>;
-    };
-
-    const regimeBased: RegimeEntry[] = Array.isArray(distValue.regimeBased)
-      ? distValue.regimeBased
-      : [];
-    const regime: any = distValue.regime || {};
-    const matrix: number[][] | undefined = Array.isArray(regime.transitionMatrix)
-      ? regime.transitionMatrix
-      : undefined;
-
-    const ensureParams = (
-      entry: RegimeEntry,
-      targetType: RegimeEntry['type']
-    ): RegimeEntry => {
-      const clone: RegimeEntry = { ...entry, type: targetType };
-      if (targetType === 'normal' && normalGroup) {
-        clone.normal = clone.normal ?? buildInitialGroupState(normalGroup);
-      }
-      if (targetType === 'brownian' && brownianGroup) {
-        clone.brownian = clone.brownian ?? buildInitialGroupState(brownianGroup);
-      }
-      if (targetType === 'studentt' && studentGroup) {
-        clone.studentt = clone.studentt ?? buildInitialGroupState(studentGroup);
-      }
-      return clone;
-    };
-
-    const handleAddRegime = () => {
-      const current = regimeBased;
-      const newEntry: RegimeEntry = ensureParams(
-        {
-          name: `Regime ${current.length + 1}`,
-          type: 'normal',
-        },
-        'normal'
+      const req = buildAdvancedRequest(formData);
+      const totalMonths = req.phases.reduce(
+        (sum, p) => sum + (Number(p.durationInMonths) || 0),
+        0
       );
-      const next = [...current, newEntry];
-      const n = next.length;
-      const newMatrix = buildDefaultTransitionMatrix(n);
-      const newRegime = { ...regime, transitionMatrix: newMatrix };
-      onChangeDist({ ...distValue, regimeBased: next, regime: newRegime });
-    };
+      if (totalMonths > 1200) throw new Error('Total duration across phases must be ≤ 1200 months');
 
-    const handleRemoveRegime = (index: number) => {
-      const current = regimeBased;
-      const next = current.filter((_, i) => i !== index);
-      const n = next.length;
-      const newMatrix = n > 0 ? buildDefaultTransitionMatrix(n) : [];
-      const newRegime = { ...regime, transitionMatrix: newMatrix };
-      onChangeDist({ ...distValue, regimeBased: next, regime: newRegime });
-    };
-
-    const handleRegimeNameChange = (index: number, name: string) => {
-      const next = regimeBased.map((item, i) =>
-        i === index ? { ...item, name } : item
-      );
-      onChangeDist({ ...distValue, regimeBased: next });
-    };
-
-    const handleRegimeTypeChange = (index: number, typeStr: string) => {
-      let target: RegimeEntry['type'] = 'normal';
-      const n = typeStr.toLowerCase();
-      if (n.includes('brown')) target = 'brownian';
-      else if (n.includes('student')) target = 'studentt';
-      const updated = ensureParams(regimeBased[index], target);
-      const next = regimeBased.map((item, i) => (i === index ? updated : item));
-      onChangeDist({ ...distValue, regimeBased: next });
-    };
-
-    const handleRegimeParamChange = (
-      index: number,
-      type: RegimeEntry['type'],
-      fieldId: string,
-      newVal: any
-    ) => {
-      const current = regimeBased[index];
-      const clone: RegimeEntry = { ...current };
-      if (type === 'normal') {
-        clone.normal = {
-          ...(clone.normal ?? {}),
-          [fieldId]: newVal,
-        };
-      } else if (type === 'brownian') {
-        clone.brownian = {
-          ...(clone.brownian ?? {}),
-          [fieldId]: newVal,
-        };
-      } else if (type === 'studentt') {
-        clone.studentt = {
-          ...(clone.studentt ?? {}),
-          [fieldId]: newVal,
-        };
-      }
-      const next = regimeBased.map((item, i) => (i === index ? clone : item));
-      onChangeDist({ ...distValue, regimeBased: next });
-    };
-
-    const handleMatrixCellChange = (rowIndex: number, colIndex: number, str: string) => {
-      if (!matrix || regimeBased.length === 0) return;
-      const rawRow = matrix[rowIndex] ?? [];
-      const newRow = [...rawRow];
-      const parsed = parseFloat(str);
-      newRow[colIndex] = Number.isFinite(parsed) ? parsed : 0;
-
-      const sum = newRow.reduce((acc, v) => acc + v, 0);
-      const normalisedRow =
-        sum > 0 ? newRow.map((v) => v / sum) : newRow;
-
-      const newMatrix = matrix.map((row, i) =>
-        i === rowIndex ? normalisedRow : row
-      );
-
-      const newRegime = { ...regime, transitionMatrix: newMatrix };
-      onChangeDist({ ...distValue, regime: newRegime });
-    };
-
-    const renderRegimeParams = (entry: RegimeEntry, index: number) => {
-      const type = entry.type;
-      if (type === 'normal' && normalGroup) {
-        const params = entry.normal ?? buildInitialGroupState(normalGroup);
-        return (
-          <div style={formGridStyle}>
-            {normalGroup.children.map((child) => {
-              const childVal = params[child.id];
-              return (
-                <div key={child.id}>
-                  {renderField(child, childVal, (newVal) =>
-                    handleRegimeParamChange(
-                      index,
-                      'normal',
-                      child.id,
-                      newVal
-                    )
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      if (type === 'brownian' && brownianGroup) {
-        const params = entry.brownian ?? buildInitialGroupState(brownianGroup);
-        return (
-          <div style={formGridStyle}>
-            {brownianGroup.children.map((child) => {
-              const childVal = params[child.id];
-              return (
-                <div key={child.id}>
-                  {renderField(child, childVal, (newVal) =>
-                    handleRegimeParamChange(
-                      index,
-                      'brownian',
-                      child.id,
-                      newVal
-                    )
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      if (type === 'studentt' && studentGroup) {
-        const params = entry.studentt ?? buildInitialGroupState(studentGroup);
-        return (
-          <div style={formGridStyle}>
-            {studentGroup.children.map((child) => {
-              const childVal = params[child.id];
-              return (
-                <div key={child.id}>
-                  {renderField(child, childVal, (newVal) =>
-                    handleRegimeParamChange(
-                      index,
-                      'studentt',
-                      child.id,
-                      newVal
-                    )
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      return null;
-    };
-
-    return (
-      <div>
-        <h4 style={smallHeadingStyle}>Regime-based distributions</h4>
-        <p style={sectionSubTitleStyle}>
-          Each regime has its own distribution (Normal, Brownian motion, Student-t).
-          The transition matrix describes the probability of moving from one regime
-          to another: each row is a regime you&apos;re currently in, and the values
-          across that row are the probabilities of jumping to each regime next step.
-          Each row is normalised so the probabilities sum to 1.
-        </p>
-
-        <div style={regimeListStyle}>
-          {regimeBased.map((item, index) => (
-            <div key={index} style={{ marginBottom: '0.5rem' }}>
-              <div style={regimeRowStyle}>
-                <span>Regime {index + 1}</span>
-                <input
-                  type="text"
-                  value={item?.name ?? ''}
-                  onChange={(e) => handleRegimeNameChange(index, e.target.value)}
-                  placeholder="Name"
-                />
-                <select
-                  value={item.type}
-                  onChange={(e) => handleRegimeTypeChange(index, e.target.value)}
-                >
-                  <option value="normal">Normal</option>
-                  <option value="brownian">Brownian motion</option>
-                  <option value="studentt">Student t</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveRegime(index)}
-                >
-                  Remove
-                </button>
-              </div>
-              {renderRegimeParams(item, index)}
-            </div>
-          ))}
-        </div>
-
-        <button type="button" onClick={handleAddRegime}>
-          Add regime
-        </button>
-
-        {regimeBased.length > 0 &&
-          Array.isArray(matrix) &&
-          matrix.length === regimeBased.length && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <h4 style={smallHeadingStyle}>Transition matrix</h4>
-              <p style={sectionSubTitleStyle}>
-                Row i → probabilities of moving from regime i to each regime j.
-                Editing a row automatically rescales it so it sums to 1.
-              </p>
-              <div style={matrixGridStyle}>
-                {matrix.map((row, rIndex) => (
-                  <div key={rIndex} style={matrixRowStyle}>
-                    {row.map((cell, cIndex) => (
-                      <input
-                        key={cIndex}
-                        type="number"
-                        step={0.01}
-                        style={matrixCellStyle}
-                        value={
-                          Number.isFinite(cell)
-                            ? Number(cell.toFixed(3))
-                            : ''
-                        }
-                        onChange={(e) =>
-                          handleMatrixCellChange(
-                            rIndex,
-                            cIndex,
-                            e.target.value
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-      </div>
-    );
-  };
-
-  const renderDistributionGroup = (
-    distField: GroupFieldConfig,
-    groupValue: Record<string, any>,
-    onChangeGroup: (newGroupValue: Record<string, any>) => void
-  ): React.ReactNode => {
-    const distValue: Record<string, any> = groupValue[distField.id] ?? {};
-    const distTypeField = findDistributionTypeField(distField);
-
-    const distTypeRaw =
-      (distTypeField && distValue[distTypeField.id]) ??
-      distValue['distributionType'] ??
-      '';
-    const distType = normaliseDistributionType(distTypeRaw);
-
-    const children = distField.children;
-    const normalGroup = children.find(isNormalGroup) as GroupFieldConfig | undefined;
-    const brownianGroup = children.find(isBrownianGroup) as
-      | GroupFieldConfig
-      | undefined;
-    const studentGroup = children.find(isStudentTGroup) as
-      | GroupFieldConfig
-      | undefined;
-    const regimeGroupFromConfig = children.find(isRegimeGroup) as
-      | GroupFieldConfig
-      | undefined;
-
-    const primitiveChildren = children.filter(
-      (c) => c !== distTypeField && c.type !== 'group'
-    );
-
-    const renderChildGroupInline = (group: GroupFieldConfig | undefined) => {
-      if (!group) return null;
-      const childGroupValue: Record<string, any> = distValue[group.id] ?? {};
-      return (
-        <div style={groupContainerStyle}>
-          <h4 style={smallHeadingStyle}>{group.label}</h4>
-          <div style={formGridStyle}>
-            {group.children.map((child) => {
-              const childVal = childGroupValue[child.id];
-              return (
-                <div key={child.id}>
-                  {renderField(child, childVal, (newChildVal) => {
-                    const newGroupVal = {
-                      ...distValue,
-                      [group.id]: { ...childGroupValue, [child.id]: newChildVal },
-                    };
-                    onChangeGroup({
-                      ...groupValue,
-                      [distField.id]: newGroupVal,
-                    });
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
-
-    const updateDistributionField = (fieldId: string, newVal: any) => {
-      const newDistVal = { ...distValue, [fieldId]: newVal };
-      onChangeGroup({
-        ...groupValue,
-        [distField.id]: newDistVal,
+      const res = await fetch(startAdvancedUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
       });
-    };
+      if (!res.ok) throw new Error(await res.text());
 
-    return (
-      <div style={groupContainerStyle}>
-        <h3 style={groupTitleStyle}>{distField.label}</h3>
-        <p style={sectionSubTitleStyle}>
-          Choose distribution type and configure its parameters. For regime-based
-          distributions, you can attach a separate distribution to each regime and
-          control how the system switches between them.
-        </p>
+      const data = (await res.json()) as { id?: string };
+      if (!data?.id) throw new Error('No simulation id returned');
 
-        <div style={formGridStyle}>
-          {/* Distribution type select + primitive fields */}
-          {distTypeField && (
-            <div key={distTypeField.id}>
-              {renderField(
-                distTypeField,
-                distValue[distTypeField.id],
-                (newVal) => updateDistributionField(distTypeField.id, newVal)
-              )}
-            </div>
-          )}
-          {primitiveChildren.map((child) => (
-            <div key={child.id}>
-              {renderField(child, distValue[child.id], (newVal) =>
-                updateDistributionField(child.id, newVal)
-              )}
-            </div>
-          ))}
-        </div>
-
-        {distType === 'normal' && renderChildGroupInline(normalGroup)}
-        {distType === 'brownian' && renderChildGroupInline(brownianGroup)}
-        {distType === 'studentt' && renderChildGroupInline(studentGroup)}
-
-        {distType === 'regime' && (
-          <>
-            {/* If backend already provides a regime group, we render it first */}
-            {regimeGroupFromConfig &&
-              renderChildGroupInline(regimeGroupFromConfig)}
-            {/* Then our custom regime-distribution & matrix editor */}
-            {renderRegimeSection(
-              distValue,
-              (newDistVal) => {
-                onChangeGroup({
-                  ...groupValue,
-                  [distField.id]: newDistVal,
-                });
-              },
-              normalGroup,
-              brownianGroup,
-              studentGroup
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
-
-  const renderReturnerGroup = (
-    groupField: GroupFieldConfig,
-    groupValue: Record<string, any>,
-    onChangeGroup: (newGroupValue: Record<string, any>) => void
-  ): React.ReactNode => {
-    const returnTypeField = findReturnTypeField(groupField);
-    const children = groupField.children;
-
-    if (!returnTypeField) {
-      // Fallback: if we can't detect a return model selector, just render generically
-      return renderField(groupField, groupValue, onChangeGroup);
+      setSimulationId(data.id);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message ?? 'Simulation failed');
+      setSubmitting(false);
     }
-
-    const returnTypeRaw =
-      groupValue[returnTypeField.id] ?? groupValue['returnType'] ?? '';
-    const normReturnType = normaliseReturnType(returnTypeRaw);
-    const showDistributionSection = normReturnType === 'distribution';
-    const showRandomSection =
-      normReturnType === 'distribution' || normReturnType === 'datadriven';
-    const showSimpleSection = normReturnType === 'simple';
-
-    const distributionGroup = children.find(isDistributionGroup) as
-      | GroupFieldConfig
-      | undefined;
-    const randomGroup = children.find(isRandomGroup) as GroupFieldConfig | undefined;
-    const simpleGroup = children.find(isSimpleReturnGroup) as
-      | GroupFieldConfig
-      | undefined;
-
-    const primitiveChildren = children.filter(
-      (c) => c.type !== 'group' || c === returnTypeField
-    );
-
-    const handleChildChange = (childId: string, newVal: any) => {
-      onChangeGroup({ ...groupValue, [childId]: newVal });
-    };
-
-    return (
-      <div key={groupField.id} style={groupContainerStyle}>
-        <h3 style={groupTitleStyle}>{groupField.label}</h3>
-        <p style={sectionSubTitleStyle}>
-          Return type controls whether you use a fixed simple return, a
-          distribution-based model, or a data-driven model. Depending on this,
-          the distribution and randomness settings below will appear.
-        </p>
-
-        <div style={formGridStyle}>
-          {primitiveChildren.map((child) => {
-            const childVal = groupValue[child.id];
-            return (
-              <div key={child.id}>
-                {renderField(child, childVal, (newVal) =>
-                  handleChildChange(child.id, newVal)
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {simpleGroup && showSimpleSection && (
-          <div>
-            <h4 style={smallHeadingStyle}>{simpleGroup.label}</h4>
-            <div style={formGridStyle}>
-              {simpleGroup.children.map((child) => {
-                const childVal =
-                  (groupValue[simpleGroup.id] ?? {})[child.id];
-                return (
-                  <div key={child.id}>
-                    {renderField(
-                      child,
-                      childVal,
-                      (newVal) => {
-                        const currentSimple: Record<string, any> =
-                          groupValue[simpleGroup.id] ?? {};
-                        onChangeGroup({
-                          ...groupValue,
-                          [simpleGroup.id]: {
-                            ...currentSimple,
-                            [child.id]: newVal,
-                          },
-                        });
-                      }
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {distributionGroup && showDistributionSection &&
-          renderDistributionGroup(
-            distributionGroup,
-            groupValue,
-            (newGroupVal) => onChangeGroup(newGroupVal)
-          )}
-
-        {randomGroup && showRandomSection &&
-          renderRandomGroup(randomGroup, groupValue, (newGroupVal) =>
-            onChangeGroup(newGroupVal)
-          )}
-      </div>
-    );
   };
 
-  // --- states for loading / errors ---
+  const handleReset = () => {
+    if (!initialFormData) return;
+    setFormData(JSON.parse(JSON.stringify(initialFormData)));
+  };
 
   if (loadingConfig && !formConfig) {
     return (
@@ -1133,49 +537,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
     );
   }
 
-  // --- phases plumbing ---
-
-  const phasesField = formConfig.fields.find(
-    (f) => f.id === 'phases' && f.type === 'array'
-  ) as ArrayFieldConfig | undefined;
-
-  const phases: any[] = (phasesField && (formData['phases'] as any[])) || [];
-
-  const handleAddPhase = (phase: any) => {
-    setFormData((prev) => {
-      if (!prev) return prev;
-      const current = (prev['phases'] as any[]) || [];
-      return { ...prev, phases: [...current, { ...phase }] };
-    });
-  };
-
-  const handleRemovePhase = (index: number) => {
-    setFormData((prev) => {
-      if (!prev) return prev;
-      const current = (prev['phases'] as any[]) || [];
-      const copy = [...current];
-      copy.splice(index, 1);
-      return { ...prev, phases: copy };
-    });
-  };
-
-  const handleUpdatePhase = (index: number, updated: any) => {
-    setFormData((prev) => {
-      if (!prev) return prev;
-      const current = (prev['phases'] as any[]) || [];
-      const copy = [...current];
-      copy[index] = updated;
-      return { ...prev, phases: copy };
-    });
-  };
-
-  // Separate non-phase fields into grid vs "group" sections
-  const nonPhaseFields = formConfig.fields.filter(
-    (f) => !(f.id === 'phases' && f.type === 'array')
-  );
-  const gridFields = nonPhaseFields.filter((f) => f.type !== 'group');
-  const groupFields = nonPhaseFields.filter((f) => f.type === 'group');
-
   return (
     <div style={containerStyle}>
       <h2 style={titleStyle}>{formConfig.title}</h2>
@@ -1183,85 +544,20 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         Configure advanced options. These inputs map directly to the simulation engine.
       </p>
 
-      {error && formConfig && (
-        <div style={errorStyle}>Warning: {error}</div>
-      )}
+      {error && <div style={errorStyle}>Warning: {error}</div>}
 
       <form onSubmit={handleSubmit}>
-        {/* Simple fields in a grid */}
-        {gridFields.length > 0 && (
-          <div style={formGridStyle}>
-            {gridFields.map((field) => (
-              <div key={field.id}>
-                {renderField(field, formData[field.id], (newValue) => {
-                  setFormData((prev) => ({
-                    ...(prev ?? {}),
-                    [field.id]: newValue,
-                  }));
-                })}
-              </div>
-            ))}
+        {formConfig.fields.map((field) => (
+          <div key={field.id}>
+            {renderField(
+              field,
+              formData[field.id],
+              (newValue) => setFormData((prev) => ({ ...(prev ?? {}), [field.id]: newValue })),
+              formData,
+              formData
+            )}
           </div>
-        )}
-
-        {/* Group sections (including special "returner") */}
-        {groupFields.map((field) => {
-          const groupValue = formData[field.id];
-
-          if (isReturnerGroup(field)) {
-            return (
-              <div key={field.id}>
-                {renderReturnerGroup(
-                  field as GroupFieldConfig,
-                  groupValue ?? {},
-                  (newGroupValue) => {
-                    setFormData((prev) => ({
-                      ...(prev ?? {}),
-                      [field.id]: newGroupValue,
-                    }));
-                  }
-                )}
-              </div>
-            );
-          }
-
-          return (
-            <div key={field.id}>
-              {renderField(field, groupValue, (newGroupValue) => {
-                setFormData((prev) => ({
-                  ...(prev ?? {}),
-                  [field.id]: newGroupValue,
-                }));
-              })}
-            </div>
-          );
-        })}
-
-        {/* Phases */}
-        {phasesField && (
-          <div style={phasesContainerStyle}>
-            <div style={phasesTitleRowStyle}>
-              <h3 style={phasesTitleStyle}>{phasesField.label}</h3>
-              {phases.length > 0 && (
-                <span style={phasesCountStyle}>
-                  {phases.length} phase{phases.length === 1 ? '' : 's'}
-                </span>
-              )}
-            </div>
-
-            <AdvancedPhaseForm
-              phaseConfig={phasesField.item as GroupFieldConfig}
-              onAddPhase={handleAddPhase}
-            />
-
-            <AdvancedPhaseList
-              phases={phases}
-              phaseConfig={phasesField.item as GroupFieldConfig}
-              onRemovePhase={handleRemovePhase}
-              onUpdatePhase={handleUpdatePhase}
-            />
-          </div>
-        )}
+        ))}
 
         <div style={actionsRowStyle}>
           <button type="button" onClick={handleReset}>
