@@ -21,9 +21,11 @@ interface InputFormProps {
 }
 
 const containerStyle: React.CSSProperties = {
+  width: '100%',
   maxWidth: '960px',
   margin: '0 auto',
   padding: '1rem',
+  boxSizing: 'border-box',
 };
 
 const titleStyle: React.CSSProperties = {
