@@ -689,6 +689,16 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       case 'group': {
         const groupField = field as GroupFieldConfig;
         const groupValue = value && typeof value === 'object' ? value : {};
+        
+        // Check if this is the distribution group with regime-based type selected
+        const isDistributionGroup = field.id === 'distribution';
+        const isRegimeBasedSelected = isDistributionGroup && groupValue?.type === 'regimeBased';
+        
+        // If regime-based distribution is selected, use full-width layout for better readability
+        const childrenGridStyle: React.CSSProperties = isRegimeBasedSelected 
+          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }
+          : formGridStyle;
+        
         return (
           <div
             style={{
@@ -697,13 +707,14 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               borderRadius: 8,
               padding: '1rem',
               background: 'rgba(255,255,255,0.02)',
+              gridColumn: isRegimeBasedSelected ? '1 / -1' : undefined,
             }}
             key={field.id}
           >
             <div style={{ ...groupTitleStyle, borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
               {field.label}
             </div>
-            <div style={formGridStyle}>
+            <div style={childrenGridStyle}>
               {groupField.children.map((child) =>
                 renderField(
                   child,
