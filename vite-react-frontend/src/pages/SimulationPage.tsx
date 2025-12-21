@@ -4,11 +4,9 @@ import NormalInputForm from '../components/normalMode/NormalInputForm';
 import AdvancedInputForm from '../components/advancedMode/AdvancedInputForm';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationTimelineContext } from '../models/types';
-import YearlySummaryTable from '../YearlySummaryTable';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { Link } from 'react-router-dom';
 
-type MainTab = 'table' | 'summary';
 type FormMode = 'normal' | 'advanced';
 
 const FORM_MODE_KEY = 'firecasting:formMode';
@@ -22,14 +20,12 @@ const getInitialFormMode = (): FormMode => {
 const SimulationPage: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
-  const [activeTab, setActiveTab] = useState<MainTab>('summary');
   const [ackSim, setAckSim] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
 
   useEffect(() => {
     setStats(null);
     setTimeline(null);
-    setActiveTab('summary');
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
   }, [formMode]);
 
@@ -100,25 +96,7 @@ const SimulationPage: React.FC = () => {
 
       {stats && (
         <div style={{ marginTop: '1rem' }}>
-          <div style={{ display: 'flex', marginBottom: '1rem' }}>
-            <button onClick={() => setActiveTab('summary')} style={{
-              padding: '0.5rem 1rem', marginRight: '1rem',
-              backgroundColor: activeTab === 'summary' ? '#8884d8' : '#f0f0f0',
-              color: activeTab === 'summary' ? 'white' : 'black', border: 'none', cursor: 'pointer',
-            }}>
-              Summary
-            </button>
-            <button onClick={() => setActiveTab('table')} style={{
-              padding: '0.5rem 1rem', marginRight: '1rem',
-              backgroundColor: activeTab === 'table' ? '#8884d8' : '#f0f0f0',
-              color: activeTab === 'table' ? 'white' : 'black', border: 'none', cursor: 'pointer',
-            }}>
-              Table
-            </button>
-          </div>
-
-          {activeTab === 'summary' && <MultiPhaseOverview data={stats} timeline={timeline} />}
-          {activeTab === 'table' && <YearlySummaryTable stats={stats} />}
+          <MultiPhaseOverview data={stats} timeline={timeline} />
         </div>
       )}
     </div>
