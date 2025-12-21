@@ -22,6 +22,8 @@ export interface SimulationRequest {
 export interface SimulationTimelineContext {
   /** ISO date string (YYYY-MM-DD) */
   startDate: string;
+  /** Phase types in order (DEPOSIT/PASSIVE/WITHDRAW). */
+  phaseTypes: PhaseRequest['phaseType'][];
   /** Phase durations in months, in the order entered */
   phaseDurationsInMonths: number[];
   /** Used as the start anchor for Phase #1 interpolation when no previous year exists. */

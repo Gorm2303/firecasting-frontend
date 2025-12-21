@@ -270,6 +270,7 @@ export default function SimulationForm({
             setSimulationId(null);
             const timeline: SimulationTimelineContext = {
               startDate,
+              phaseTypes: phases.map((p) => p.phaseType),
               phaseDurationsInMonths: phases.map((p) => Number(p.durationInMonths) || 0),
               firstPhaseInitialDeposit: phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
             };

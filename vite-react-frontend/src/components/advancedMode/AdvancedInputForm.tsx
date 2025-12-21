@@ -919,6 +919,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       const req = buildAdvancedRequest(formData);
       setTimelineForRun({
         startDate: req.startDate?.date,
+        phaseTypes: (req.phases ?? []).map((p) => p.phaseType),
         phaseDurationsInMonths: (req.phases ?? []).map((p) => Number(p.durationInMonths) || 0),
         firstPhaseInitialDeposit:
           req.phases?.[0]?.initialDeposit !== undefined ? Number(req.phases?.[0]?.initialDeposit) : undefined,
