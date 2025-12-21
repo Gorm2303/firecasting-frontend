@@ -71,7 +71,7 @@ const SimulationPage: React.FC = () => {
         </div>
       )}
 
-      <div style={{ maxWidth: 450, margin: '0 auto' }}>
+      <div style={{ maxWidth: formMode === 'advanced' ? 960 : 450, margin: '0 auto' }}>
         <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
 
         <div role="group" aria-label="Form mode" style={{
