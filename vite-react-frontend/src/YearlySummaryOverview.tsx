@@ -99,6 +99,10 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
   phaseEndDateIso,
   startAnchor,
 }) => {
+  const yearlySorted = useMemo(() => {
+    return [...data].sort((a, b) => a.year - b.year);
+  }, [data]);
+
   // Transform yearly → monthly with linear interpolation
   const monthlyData = useMemo(
     () =>
@@ -180,7 +184,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <FailedCasesSummary yearlyData={data} monthlyData={monthlyData} />
+      <FailedCasesSummary yearlyData={yearlySorted} monthlyData={monthlyData} />
     </div>
   );
 };

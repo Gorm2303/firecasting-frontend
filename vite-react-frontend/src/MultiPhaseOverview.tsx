@@ -88,6 +88,8 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                 (s) => s.phaseName === b.type && s.year >= startYear && s.year <= endYear
               );
 
+              groupData.sort((a, b) => a.year - b.year);
+
               // Decide anchor for "year 0" interpolation.
               let startAnchor: YearlySummary | undefined;
               if (blockIndex === 0 && b.type === 'DEPOSIT') {

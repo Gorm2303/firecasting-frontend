@@ -1,5 +1,5 @@
 // YearlySummaryTable.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { YearlySummary } from './models/YearlySummary';
 
 interface YearlySummaryTableProps {
@@ -10,6 +10,13 @@ const YearlySummaryTable: React.FC<YearlySummaryTableProps> = ({ stats }) => {
   // Helper function to format numbers with commas and given decimal places.
   const formatNumber = (num: number, decimals: number = 0): string =>
     num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+  const sortedStats = useMemo(() => {
+    return [...stats].sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return String(a.phaseName ?? '').localeCompare(String(b.phaseName ?? ''));
+    });
+  }, [stats]);
 
   return (
     <div>
@@ -34,8 +41,8 @@ const YearlySummaryTable: React.FC<YearlySummaryTableProps> = ({ stats }) => {
           </tr>
         </thead>
         <tbody>
-          {stats.map((stat) => (
-            <tr key={stat.year}>
+          {sortedStats.map((stat) => (
+            <tr key={`${stat.phaseName}-${stat.year}`}>
               <td style={{ border: "1px solid #ccc", padding: "8px" }}>{stat.year}</td>
               <td style={{ border: "1px solid #ccc", padding: "8px" }}>{formatNumber(stat.averageCapital)}</td>
               <td style={{ border: "1px solid #ccc", padding: "8px" }}>{formatNumber(stat.medianCapital)}</td>
