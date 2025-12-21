@@ -801,7 +801,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                       </button>
                     </div>
 
-                    <div style={formGridStyle}>
+                    <div style={isRegimesArray ? { display: 'flex', flexDirection: 'column', gap: '0.75rem' } : formGridStyle}>
                       {arrField.item.children.map((child) =>
                         renderField(
                           child,
