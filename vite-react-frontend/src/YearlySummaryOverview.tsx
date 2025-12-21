@@ -22,6 +22,12 @@ interface YearlySummaryOverviewProps {
   data: YearlySummary[];
   /** 1..12. If provided, the chart's first year starts at this month instead of January. */
   firstYearStartMonth?: number;
+  /** ISO date of phase start (YYYY-MM-DD). Used to fix interpolation at phase boundary. */
+  phaseStartDateIso?: string;
+  /** ISO date of phase end (YYYY-MM-DD). Months at/after this date are not generated. */
+  phaseEndDateIso?: string;
+  /** Anchor values used for the first partial year interpolation. */
+  startAnchor?: YearlySummary;
 }
 
 /**
@@ -86,14 +92,24 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
   return null;
 };
 
-const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data, firstYearStartMonth }) => {
+const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
+  data,
+  firstYearStartMonth,
+  phaseStartDateIso,
+  phaseEndDateIso,
+  startAnchor,
+}) => {
   // Transform yearly → monthly with linear interpolation
   const monthlyData = useMemo(
     () =>
       transformYearlyToMonthly(data, {
         getFirstYearStartMonth: () => firstYearStartMonth,
+        phaseRange: phaseStartDateIso
+          ? { startDateIso: phaseStartDateIso, endDateIso: phaseEndDateIso }
+          : undefined,
+        startAnchor,
       }),
-    [data, firstYearStartMonth]
+    [data, firstYearStartMonth, phaseStartDateIso, phaseEndDateIso, startAnchor]
   );
   // Transform the monthly data for the stacked areas
   const stackedData = useMemo(() => transformDataForBands(monthlyData), [monthlyData]);

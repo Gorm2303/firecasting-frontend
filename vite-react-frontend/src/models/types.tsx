@@ -24,4 +24,6 @@ export interface SimulationTimelineContext {
   startDate: string;
   /** Phase durations in months, in the order entered */
   phaseDurationsInMonths: number[];
+  /** Used as the start anchor for Phase #1 interpolation when no previous year exists. */
+  firstPhaseInitialDeposit?: number;
 }

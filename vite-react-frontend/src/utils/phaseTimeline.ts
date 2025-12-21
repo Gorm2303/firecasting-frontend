@@ -39,3 +39,38 @@ export function getPhaseStartMonth(
   const phaseStart = addMonthsClamped(start, offsetMonths);
   return phaseStart.getMonth() + 1; // 1..12
 }
+
+export function getPhaseStartDate(
+  startDateIso: string,
+  phaseDurationsInMonths: number[],
+  phaseIndex: number
+): Date | null {
+  const start = parseIsoDateLocal(startDateIso);
+  if (!start) return null;
+  const idx = Math.max(0, Math.trunc(Number(phaseIndex) || 0));
+  const offsetMonths = phaseDurationsInMonths
+    .slice(0, idx)
+    .reduce((sum, m) => sum + (Number(m) || 0), 0);
+  return addMonthsClamped(start, offsetMonths);
+}
+
+export function getPhaseEndDate(
+  startDateIso: string,
+  phaseDurationsInMonths: number[],
+  phaseIndex: number
+): Date | null {
+  const start = parseIsoDateLocal(startDateIso);
+  if (!start) return null;
+  const idx = Math.max(0, Math.trunc(Number(phaseIndex) || 0));
+  const months = phaseDurationsInMonths
+    .slice(0, idx + 1)
+    .reduce((sum, m) => sum + (Number(m) || 0), 0);
+  return addMonthsClamped(start, months);
+}
+
+export function toIsoDateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}

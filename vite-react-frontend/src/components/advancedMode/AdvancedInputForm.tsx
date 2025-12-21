@@ -920,6 +920,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       setTimelineForRun({
         startDate: req.startDate?.date,
         phaseDurationsInMonths: (req.phases ?? []).map((p) => Number(p.durationInMonths) || 0),
+        firstPhaseInitialDeposit:
+          req.phases?.[0]?.initialDeposit !== undefined ? Number(req.phases?.[0]?.initialDeposit) : undefined,
       });
       const totalMonths = req.phases.reduce(
         (sum, p) => sum + (Number(p.durationInMonths) || 0),
