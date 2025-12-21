@@ -758,7 +758,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
               {arr.map((item, idx) => {
                 const itemValue = item && typeof item === 'object' ? item : {};
                 const phaseType = String(itemValue.phaseType || 'DEPOSIT').toUpperCase();
