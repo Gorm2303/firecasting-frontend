@@ -710,6 +710,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               padding: '1rem',
               background: 'rgba(255,255,255,0.02)',
               gridColumn: isRegimeBasedSelected ? '1 / -1' : undefined,
+              width: isRegimeBasedSelected ? '100%' : undefined,
+              boxSizing: 'border-box',
             }}
             key={field.id}
           >
