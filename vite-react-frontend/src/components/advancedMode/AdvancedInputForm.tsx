@@ -698,6 +698,9 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         const isDistributionGroup = field.id === 'distribution';
         const isRegimeBasedSelected = isDistributionGroup && groupValue?.type === 'regimeBased';
         
+        // Check if this group contains a regimes array (regime-based params group)
+        const hasRegimesArray = groupField.children.some(child => child.id === 'regimes');
+        
         // Check if this group contains a regime-based distribution child (for parent groups like 'returner')
         const hasRegimeBasedChild = !isDistributionGroup && 
           groupField.children.some(child => 
@@ -706,28 +709,27 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           );
         
         // If regime-based distribution is selected, use full-width layout for better readability
+        // If group contains a regimes array, also use flex layout to let regimes fill width
         // For parent groups (like 'returner'), use flex column layout to properly accommodate regime-based children
-        const childrenGridStyle: React.CSSProperties | undefined = (isRegimeBasedSelected || hasRegimeBasedChild)
-          ? ({ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' } as React.CSSProperties)
+        const childrenGridStyle: React.CSSProperties = (isRegimeBasedSelected || hasRegimeBasedChild || hasRegimesArray)
+          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' }
           : formGridStyle;
         
-        // For parent groups with regime-based children, must use flex so distribution group can span full width
         // For regime-based distribution itself, must use flex (not grid) so regimes array fills the space
         const shouldUseHybridLayout = hasRegimeBasedChild && groupField.children.some(c => c.id === 'distribution');
-        const childrenRenderStyle: React.CSSProperties = (isRegimeBasedSelected || hasRegimeBasedChild)
+        const childrenRenderStyle: React.CSSProperties = (isRegimeBasedSelected || hasRegimeBasedChild || hasRegimesArray)
           ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' }
           : childrenGridStyle;
         
         // DEBUG: Log layout decisions for regime-based distributions
-        if (isDistributionGroup || hasRegimeBasedChild) {
+        if (isDistributionGroup || hasRegimeBasedChild || hasRegimesArray) {
+          const actualLayoutType = (isRegimeBasedSelected || hasRegimeBasedChild || hasRegimesArray) ? 'FLEX' : 'GRID';
           console.log(`[GROUP LAYOUT DEBUG] field.id="${field.id}"`, {
             isDistributionGroup,
             isRegimeBasedSelected,
             hasRegimeBasedChild,
-            shouldUseHybridLayout,
-            distributionType: groupValue?.type || groupValue?.distribution?.type,
-            childrenGridStyle: isRegimeBasedSelected ? 'FLEX (regime-based)' : (hasRegimeBasedChild ? 'FLEX (parent of regime)' : 'GRID (default)'),
-            childrenRenderStyle: shouldUseHybridLayout ? '2-COL HYBRID GRID' : 'childrenGridStyle',
+            hasRegimesArray,
+            actualLayout: actualLayoutType,
           });
         }
         
