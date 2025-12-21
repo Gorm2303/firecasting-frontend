@@ -697,8 +697,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         const isRegimeBasedSelected = isDistributionGroup && groupValue?.type === 'regimeBased';
         
         // If regime-based distribution is selected, use full-width layout for better readability
-        const childrenGridStyle: React.CSSProperties = isRegimeBasedSelected 
-          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' }
+        const childrenGridStyle: React.CSSProperties | undefined = isRegimeBasedSelected 
+          ? ({ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' } as React.CSSProperties)
           : formGridStyle;
         
         return (
@@ -741,8 +741,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
         // Check if this is the regimes array within distribution group
         const isRegimesArray = field.id === 'regimes';
-        const containerStyle = isRegimesArray
-          ? { ...phasesContainerStyle, display: 'flex', flexDirection: 'column', gap: '1rem' }
+        const containerStyle: React.CSSProperties | undefined = isRegimesArray
+          ? ({ ...phasesContainerStyle, display: 'flex', flexDirection: 'column', gap: '1rem' } as React.CSSProperties)
           : phasesContainerStyle;
 
         return (
