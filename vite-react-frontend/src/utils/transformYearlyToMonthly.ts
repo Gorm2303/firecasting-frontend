@@ -119,7 +119,8 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
         //   toward the *next year* value when available (fallback to current year).
         if (isFirstYearOfPhase && startAnchor) {
           const nextYearSummary = yearlyForPhase.find((s) => s.year === current.year + 1);
-          const target = nextYearSummary ?? current;
+          const nextAvailableAfter = yearlyForPhase.find((s) => s.year > current.year);
+          const target = nextYearSummary ?? nextAvailableAfter ?? current;
           const span = Math.max(0, monthEnd - monthStart);
           const t = span === 0 ? 0 : (month - monthStart) / span;
           result.push(lerpYearly(startAnchor, target, current.phaseName, current.year, month, t));

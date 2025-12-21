@@ -58,37 +58,50 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                 : null;
 
             // Start anchor for the first partial year:
-            // - Phase #1: use initial deposit
-            // - Phase #2+: use previous phase's previous calendar year summary if available
+            // - Prefer the previous calendar year (startYear-1) value.
+            // - If unavailable, use the closest available year <= startYear from previous phase.
+            // - Phase #1 uses initial deposit.
             let startAnchor: YearlySummary | undefined;
             if (timeline && startDate) {
-              if (index === 0) {
+              const startYear = startDate.getFullYear();
+              const makeDepositAnchor = (phaseName: string, anchorYear: number) => {
                 const dep = Number(timeline.firstPhaseInitialDeposit);
-                if (Number.isFinite(dep)) {
-                  startAnchor = {
-                    phaseName: group.name,
-                    year: startDate.getFullYear() - 1,
-                    averageCapital: dep,
-                    medianCapital: dep,
-                    minCapital: dep,
-                    maxCapital: dep,
-                    stdDevCapital: 0,
-                    cumulativeGrowthRate: 0,
-                    quantile5: dep,
-                    quantile25: dep,
-                    quantile75: dep,
-                    quantile95: dep,
-                    var: dep,
-                    cvar: dep,
-                    negativeCapitalPercentage: 0,
-                  };
-                }
+                if (!Number.isFinite(dep)) return undefined;
+                const v = dep;
+                return {
+                  phaseName,
+                  year: anchorYear,
+                  averageCapital: v,
+                  medianCapital: v,
+                  minCapital: v,
+                  maxCapital: v,
+                  stdDevCapital: 0,
+                  cumulativeGrowthRate: 0,
+                  quantile5: v,
+                  quantile25: v,
+                  quantile75: v,
+                  quantile95: v,
+                  var: v,
+                  cvar: v,
+                  negativeCapitalPercentage: 0,
+                } satisfies YearlySummary;
+              };
+
+              if (index === 0) {
+                startAnchor = makeDepositAnchor(group.name, startYear - 1);
               } else {
-                const prev = grouped[index - 1]?.data;
-                const prevYear = startDate.getFullYear() - 1;
-                const match = prev?.find((s) => s.year === prevYear);
-                const fallback = prev && prev.length ? prev[prev.length - 1] : undefined;
-                startAnchor = match ?? fallback;
+                const prev = grouped[index - 1]?.data ?? [];
+                const prevYearWanted = startYear - 1;
+                const exactPrevYear = prev.find((s) => s.year === prevYearWanted);
+                if (exactPrevYear) {
+                  startAnchor = exactPrevYear;
+                } else {
+                  // closest year <= startYear
+                  const closest = prev
+                    .filter((s) => s.year <= startYear)
+                    .sort((a, b) => b.year - a.year)[0];
+                  startAnchor = closest ?? makeDepositAnchor(group.name, prevYearWanted);
+                }
               }
             }
 
