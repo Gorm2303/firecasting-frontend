@@ -58,9 +58,8 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                 : null;
 
             // Start anchor for the first partial year:
-            // - Prefer the previous calendar year (startYear-1) value.
-            // - If unavailable, use the closest available year <= startYear from previous phase.
-            // - Phase #1 uses initial deposit.
+            // - Phase #1: initial deposit.
+            // - Phase #2+: previous phase's last available yearly value.
             let startAnchor: YearlySummary | undefined;
             if (timeline && startDate) {
               const startYear = startDate.getFullYear();
@@ -88,20 +87,12 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
               };
 
               if (index === 0) {
-                startAnchor = makeDepositAnchor(group.name, startYear - 1);
+                // Phase starts at "year 0" (calendar startYear) but only reports after 1 year.
+                startAnchor = makeDepositAnchor(group.name, startYear);
               } else {
                 const prev = grouped[index - 1]?.data ?? [];
-                const prevYearWanted = startYear - 1;
-                const exactPrevYear = prev.find((s) => s.year === prevYearWanted);
-                if (exactPrevYear) {
-                  startAnchor = exactPrevYear;
-                } else {
-                  // closest year <= startYear
-                  const closest = prev
-                    .filter((s) => s.year <= startYear)
-                    .sort((a, b) => b.year - a.year)[0];
-                  startAnchor = closest ?? makeDepositAnchor(group.name, prevYearWanted);
-                }
+                const last = prev.length ? prev.reduce((best, s) => (s.year > best.year ? s : best), prev[0]) : undefined;
+                startAnchor = last;
               }
             }
 

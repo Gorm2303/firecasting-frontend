@@ -80,8 +80,12 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
         ? Math.min(12, Math.max(1, Math.trunc(rawStartMonth)))
         : 1;
 
-    const rangeStart = options?.phaseRange?.startDateIso ? parseIsoDateLocal(options.phaseRange.startDateIso) : null;
-    const rangeEnd = options?.phaseRange?.endDateIso ? parseIsoDateLocal(options.phaseRange.endDateIso) : null;
+    const rangeStart = options?.phaseRange?.startDateIso
+      ? parseIsoDateLocal(options.phaseRange.startDateIso)
+      : null;
+    const rangeEnd = options?.phaseRange?.endDateIso
+      ? parseIsoDateLocal(options.phaseRange.endDateIso)
+      : null;
 
     const startYearFromRange = rangeStart ? rangeStart.getFullYear() : firstYear;
     const startMonthFromRange = rangeStart ? rangeStart.getMonth() + 1 : startMonth;
@@ -91,6 +95,27 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
     const endMonthExclusiveFromRange = rangeEnd ? rangeEnd.getMonth() + 1 : null;
 
     const startAnchor = options?.startAnchor;
+
+    // If the phase starts in a calendar year that has no reported yearly summary,
+    // generate "year 0" months within that start year by interpolating from the
+    // start anchor to the first available yearly summary (typically startYear+1).
+    if (startAnchor && rangeStart) {
+      const syntheticYear0 = startYearFromRange;
+      const firstReported = yearlyForPhase[0];
+      if (firstReported && syntheticYear0 < firstReported.year) {
+        let monthEnd = 12;
+        if (endYearFromRange !== null && endMonthExclusiveFromRange !== null && endYearFromRange === syntheticYear0) {
+          monthEnd = endMonthExclusiveFromRange - 1;
+        }
+
+        for (let month = startMonthFromRange; month <= monthEnd; month++) {
+          // Mirror the existing convention: month 1 is t=0, Dec is near (but not equal to) next-year.
+          const monthIndex = month - startMonthFromRange + 1;
+          const t = (monthIndex - 1) / 12;
+          result.push(lerpYearly(startAnchor, firstReported, phaseName, syntheticYear0, month, t));
+        }
+      }
+    }
 
     // For each year, interpolate to the next year
     for (let i = 0; i < yearlyForPhase.length; i++) {
