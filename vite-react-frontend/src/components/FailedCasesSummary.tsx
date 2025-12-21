@@ -1,5 +1,5 @@
 // FailedCasesSummary.tsx
-import React, { useId, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MonthlySummary } from '../models/MonthlySummary';
 import { YearlySummary } from '../models/YearlySummary';
 
@@ -17,7 +17,6 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
   defaultMode = 'yearly',
 }) => {
   const [mode, setMode] = useState<FailedCasesSummaryMode>(defaultMode);
-  const radioName = useId();
 
   const canShowMonthly = Boolean(monthlyData && monthlyData.length > 0);
   const effectiveMode: FailedCasesSummaryMode = mode === 'monthly' && !canShowMonthly ? 'yearly' : mode;
@@ -60,7 +59,7 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
       <div
         style={{
           display: 'flex',
-          gap: '1rem',
+          gap: '0.75rem',
           alignItems: 'center',
           justifyContent: 'center',
           flexWrap: 'wrap',
@@ -69,33 +68,67 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
         }}
       >
         <span style={{ fontSize: '0.95rem' }}>View:</span>
-        <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-          <input
-            type="radio"
-            name={radioName}
-            checked={effectiveMode === 'yearly'}
-            onChange={() => setMode('yearly')}
-          />
+
+        <span style={{ fontSize: '0.95rem', opacity: canShowMonthly || effectiveMode === 'yearly' ? 1 : 0.6 }}>
           Yearly
-        </label>
+        </span>
+
         <label
           style={{
-            display: 'flex',
-            gap: '0.35rem',
+            display: 'inline-flex',
             alignItems: 'center',
+            gap: 8,
             opacity: canShowMonthly ? 1 : 0.5,
+            cursor: canShowMonthly ? 'pointer' : 'not-allowed',
           }}
           title={canShowMonthly ? '' : 'Monthly view is unavailable'}
         >
           <input
-            type="radio"
-            name={radioName}
+            type="checkbox"
+            role="switch"
+            aria-label="Toggle failed cases view monthly"
             checked={effectiveMode === 'monthly'}
-            onChange={() => setMode('monthly')}
             disabled={!canShowMonthly}
+            onChange={(e) => setMode(e.target.checked ? 'monthly' : 'yearly')}
+            style={{
+              position: 'absolute',
+              opacity: 0,
+              width: 1,
+              height: 1,
+              overflow: 'hidden',
+            }}
           />
-          Monthly
+          <span
+            aria-hidden="true"
+            style={{
+              width: 44,
+              height: 24,
+              borderRadius: 999,
+              border: '1px solid #444',
+              backgroundColor: effectiveMode === 'monthly' ? '#2e2e2e' : '#111',
+              display: 'inline-block',
+              position: 'relative',
+              flex: '0 0 auto',
+            }}
+          >
+            <span
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 999,
+                backgroundColor: '#fff',
+                position: 'absolute',
+                top: 1,
+                left: effectiveMode === 'monthly' ? 22 : 2,
+                transition: 'left 120ms ease-out',
+              }}
+            />
+          </span>
         </label>
+
+        <span style={{ fontSize: '0.95rem', opacity: canShowMonthly ? 1 : 0.6 }}>
+          Monthly
+        </span>
       </div>
       <div
         style={{
