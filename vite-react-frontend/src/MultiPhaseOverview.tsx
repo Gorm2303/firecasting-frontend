@@ -1,12 +1,15 @@
 import React from 'react';
 import { YearlySummary } from './models/YearlySummary';
+import { SimulationTimelineContext } from './models/types';
 import YearlySummaryOverview from './YearlySummaryOverview';
+import { getPhaseStartMonth } from './utils/phaseTimeline';
 
 interface MultiPhaseOverviewProps {
   data: YearlySummary[];
+  timeline?: SimulationTimelineContext | null;
 }
 
-const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data }) => {
+const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline }) => {
   // Group entries by contiguous phaseName blocks
   const grouped: { name: string; data: YearlySummary[] }[] = [];
 
@@ -39,7 +42,14 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data }) => {
           <h2 style={{ textAlign: 'center' }}>
             {group.name.charAt(0) + group.name.slice(1).toLowerCase()} – Phase #{index + 1}
           </h2>
-          <YearlySummaryOverview data={group.data} />
+          <YearlySummaryOverview
+            data={group.data}
+            firstYearStartMonth={
+              timeline
+                ? getPhaseStartMonth(timeline.startDate, timeline.phaseDurationsInMonths, index) ?? undefined
+                : undefined
+            }
+          />
         </div>
       ))}
     </div>

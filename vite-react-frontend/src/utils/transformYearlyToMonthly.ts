@@ -1,6 +1,11 @@
 import { YearlySummary } from '../models/YearlySummary';
 import { MonthlySummary } from '../models/MonthlySummary';
 
+type TransformOptions = {
+  /** Return the 1..12 start month for the first year of a given phase. */
+  getFirstYearStartMonth?: (phaseName: string) => number | undefined;
+};
+
 /**
  * Transforms yearly summaries into monthly summaries using linear interpolation.
  * For each phase and year, generates 12 monthly records interpolating linearly
@@ -9,7 +14,7 @@ import { MonthlySummary } from '../models/MonthlySummary';
  * Example: if year 2025 has avg capital 100 and year 2026 has 110,
  * then Jan 2025 ≈ 100.83, Feb 2025 ≈ 101.67, ..., Dec 2025 ≈ 109.17
  */
-export function transformYearlyToMonthly(yearly: YearlySummary[]): MonthlySummary[] {
+export function transformYearlyToMonthly(yearly: YearlySummary[], options?: TransformOptions): MonthlySummary[] {
   if (yearly.length === 0) return [];
 
   // Group by phase to handle interpolation per phase independently
@@ -25,17 +30,26 @@ export function transformYearlyToMonthly(yearly: YearlySummary[]): MonthlySummar
   const result: MonthlySummary[] = [];
 
   // Process each phase
-  for (const [, yearlyForPhase] of byPhase.entries()) {
+  for (const [phaseName, yearlyForPhase] of byPhase.entries()) {
     // Sort by year ascending
     yearlyForPhase.sort((a, b) => a.year - b.year);
+
+    const firstYear = yearlyForPhase[0]?.year;
+    const rawStartMonth = options?.getFirstYearStartMonth?.(phaseName);
+    const startMonth =
+      rawStartMonth && Number.isFinite(rawStartMonth)
+        ? Math.min(12, Math.max(1, Math.trunc(rawStartMonth)))
+        : 1;
 
     // For each year, interpolate to the next year
     for (let i = 0; i < yearlyForPhase.length; i++) {
       const current = yearlyForPhase[i];
       const next = i + 1 < yearlyForPhase.length ? yearlyForPhase[i + 1] : null;
 
-      // Generate 12 months for this year
-      for (let month = 1; month <= 12; month++) {
+      const monthStart = current.year === firstYear ? startMonth : 1;
+
+      // Generate months for this year
+      for (let month = monthStart; month <= 12; month++) {
         const t = (month - 1) / 12; // 0 at Jan, 11/12 at Dec
 
         let interpolated: MonthlySummary;

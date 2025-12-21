@@ -20,6 +20,8 @@ const formatNumber = (value: number): string =>
 
 interface YearlySummaryOverviewProps {
   data: YearlySummary[];
+  /** 1..12. If provided, the chart's first year starts at this month instead of January. */
+  firstYearStartMonth?: number;
 }
 
 /**
@@ -84,9 +86,15 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
   return null;
 };
 
-const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) => {
+const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data, firstYearStartMonth }) => {
   // Transform yearly → monthly with linear interpolation
-  const monthlyData = useMemo(() => transformYearlyToMonthly(data), [data]);
+  const monthlyData = useMemo(
+    () =>
+      transformYearlyToMonthly(data, {
+        getFirstYearStartMonth: () => firstYearStartMonth,
+      }),
+    [data, firstYearStartMonth]
+  );
   // Transform the monthly data for the stacked areas
   const stackedData = useMemo(() => transformDataForBands(monthlyData), [monthlyData]);
 

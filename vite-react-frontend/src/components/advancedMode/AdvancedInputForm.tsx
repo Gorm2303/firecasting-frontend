@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { getApiBaseUrl } from '../../config/runtimeEnv';
+import { SimulationTimelineContext } from '../../models/types';
 import {
   ArrayFieldConfig,
   FieldConfig,
@@ -17,7 +18,7 @@ import {
 import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
-  onSimulationComplete: (stats: YearlySummary[]) => void;
+  onSimulationComplete: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
 }
 
 const containerStyle: React.CSSProperties = {
@@ -353,6 +354,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [timelineForRun, setTimelineForRun] = useState<SimulationTimelineContext | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'taxation' | 'returns' | 'phases'>('general');
 
   const TAB_MAPPING: Record<string, string> = {
@@ -915,6 +917,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       setFieldErrors({});
 
       const req = buildAdvancedRequest(formData);
+      setTimelineForRun({
+        startDate: req.startDate?.date,
+        phaseDurationsInMonths: (req.phases ?? []).map((p) => Number(p.durationInMonths) || 0),
+      });
       const totalMonths = req.phases.reduce(
         (sum, p) => sum + (Number(p.durationInMonths) || 0),
         0
@@ -1069,7 +1075,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
             onComplete={(result) => {
               setSubmitting(false);
               setSimulationId(null);
-              onSimulationComplete(result);
+              onSimulationComplete(result, timelineForRun ?? undefined);
             }}
           />
         )}
