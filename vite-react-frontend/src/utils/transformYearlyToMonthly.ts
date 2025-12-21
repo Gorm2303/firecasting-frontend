@@ -4,7 +4,46 @@ import { MonthlySummary } from '../models/MonthlySummary';
 type TransformOptions = {
   /** Return the 1..12 start month for the first year of a given phase. */
   getFirstYearStartMonth?: (phaseName: string) => number | undefined;
+  /** Optional calendar range for a phase; months at/after endDate are not generated. */
+  phaseRange?: { startDateIso: string; endDateIso?: string };
+  /** Optional start anchor for first-year interpolation (previous year values or initial deposit). */
+  startAnchor?: YearlySummary;
 };
+
+function parseIsoDateLocal(isoDate: string): Date | null {
+  const m = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(String(isoDate ?? ''));
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (mo < 1 || mo > 12) return null;
+  if (d < 1 || d > 31) return null;
+  return new Date(y, mo - 1, d);
+}
+
+function lerpYearly(a: YearlySummary, b: YearlySummary, phaseName: string, year: number, month: number, t: number): MonthlySummary {
+  const lerpVal = (x: number, y: number) => lerp(Number(x) || 0, Number(y) || 0, t);
+  return {
+    phaseName,
+    year,
+    month,
+    yearMonth: `${year}-${String(month).padStart(2, '0')}`,
+    averageCapital: lerpVal(a.averageCapital, b.averageCapital),
+    medianCapital: lerpVal(a.medianCapital, b.medianCapital),
+    minCapital: lerpVal(a.minCapital, b.minCapital),
+    maxCapital: lerpVal(a.maxCapital, b.maxCapital),
+    stdDevCapital: lerpVal(a.stdDevCapital, b.stdDevCapital),
+    cumulativeGrowthRate: lerpVal(a.cumulativeGrowthRate, b.cumulativeGrowthRate),
+    quantile5: lerpVal(a.quantile5, b.quantile5),
+    quantile25: lerpVal(a.quantile25, b.quantile25),
+    quantile75: lerpVal(a.quantile75, b.quantile75),
+    quantile95: lerpVal(a.quantile95, b.quantile95),
+    var: lerpVal(a.var, b.var),
+    cvar: lerpVal(a.cvar, b.cvar),
+    negativeCapitalPercentage: lerpVal(a.negativeCapitalPercentage, b.negativeCapitalPercentage),
+  };
+}
 
 /**
  * Transforms yearly summaries into monthly summaries using linear interpolation.
@@ -41,15 +80,52 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
         ? Math.min(12, Math.max(1, Math.trunc(rawStartMonth)))
         : 1;
 
+    const rangeStart = options?.phaseRange?.startDateIso ? parseIsoDateLocal(options.phaseRange.startDateIso) : null;
+    const rangeEnd = options?.phaseRange?.endDateIso ? parseIsoDateLocal(options.phaseRange.endDateIso) : null;
+
+    const startYearFromRange = rangeStart ? rangeStart.getFullYear() : firstYear;
+    const startMonthFromRange = rangeStart ? rangeStart.getMonth() + 1 : startMonth;
+
+    // End is exclusive: months at/after endDate's month are not produced.
+    const endYearFromRange = rangeEnd ? rangeEnd.getFullYear() : null;
+    const endMonthExclusiveFromRange = rangeEnd ? rangeEnd.getMonth() + 1 : null;
+
+    const startAnchor = options?.startAnchor;
+
     // For each year, interpolate to the next year
     for (let i = 0; i < yearlyForPhase.length; i++) {
       const current = yearlyForPhase[i];
       const next = i + 1 < yearlyForPhase.length ? yearlyForPhase[i + 1] : null;
 
-      const monthStart = current.year === firstYear ? startMonth : 1;
+      const monthStart = current.year === startYearFromRange ? startMonthFromRange : 1;
+
+      let monthEnd = 12;
+      if (endYearFromRange !== null && current.year === endYearFromRange && endMonthExclusiveFromRange !== null) {
+        monthEnd = endMonthExclusiveFromRange - 1;
+      }
+
+      if (monthEnd < monthStart) {
+        continue;
+      }
 
       // Generate months for this year
       for (let month = monthStart; month <= 12; month++) {
+        if (month > monthEnd) break;
+
+        const isFirstYearOfPhase = current.year === startYearFromRange;
+
+        // Fix interpolation at phase start:
+        // - If we have a startAnchor (previous year or initial deposit), interpolate from it
+        //   toward the *next year* value when available (fallback to current year).
+        if (isFirstYearOfPhase && startAnchor) {
+          const nextYearSummary = yearlyForPhase.find((s) => s.year === current.year + 1);
+          const target = nextYearSummary ?? current;
+          const span = Math.max(0, monthEnd - monthStart);
+          const t = span === 0 ? 0 : (month - monthStart) / span;
+          result.push(lerpYearly(startAnchor, target, current.phaseName, current.year, month, t));
+          continue;
+        }
+
         const t = (month - 1) / 12; // 0 at Jan, 11/12 at Dec
 
         let interpolated: MonthlySummary;
