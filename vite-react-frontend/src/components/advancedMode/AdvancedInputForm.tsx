@@ -103,6 +103,27 @@ const actionsRowStyle: React.CSSProperties = {
   flexWrap: 'wrap',
 };
 
+const tabRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '0.5rem',
+  marginBottom: '1.5rem',
+  borderBottom: '1px solid #333',
+  paddingBottom: '0.5rem',
+};
+
+const tabButtonStyle = (active: boolean): React.CSSProperties => ({
+  padding: '8px 16px',
+  borderRadius: '8px 8px 0 0',
+  border: '1px solid #333',
+  borderBottom: active ? '2px solid #007bff' : '1px solid #333',
+  background: active ? 'rgba(0, 123, 255, 0.1)' : 'transparent',
+  cursor: 'pointer',
+  fontSize: '0.9rem',
+  fontWeight: active ? 600 : 400,
+  color: active ? '#007bff' : 'inherit',
+  transition: 'all 0.2s ease',
+});
+
 const btnStyle: React.CSSProperties = {
   padding: '6px 10px',
   borderRadius: 8,
@@ -328,6 +349,23 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'general' | 'taxation' | 'returns' | 'phases'>('general');
+
+  const TAB_MAPPING: Record<string, string> = {
+    startDate: 'general',
+    inflation: 'general',
+    taxRule: 'general',
+    tax: 'taxation',
+    returner: 'returns',
+    phases: 'phases',
+  };
+
+  const hasTabErrors = (tabId: string): boolean => {
+    return Object.keys(fieldErrors).some((path) => {
+      const fieldId = path.split(/[.\[]/)[0];
+      return (TAB_MAPPING[fieldId] || 'general') === tabId;
+    });
+  };
 
   const SIM_API_BASE = getApiBaseUrl();
   const formsUrl = new URL('../forms/advanced-simulation', SIM_API_BASE + '/').toString();
@@ -652,8 +690,19 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         const groupField = field as GroupFieldConfig;
         const groupValue = value && typeof value === 'object' ? value : {};
         return (
-          <div style={groupContainerStyle} key={field.id}>
-            <div style={groupTitleStyle}>{field.label}</div>
+          <div
+            style={{
+              ...groupContainerStyle,
+              border: '1px solid #333',
+              borderRadius: 8,
+              padding: '1rem',
+              background: 'rgba(255,255,255,0.02)',
+            }}
+            key={field.id}
+          >
+            <div style={{ ...groupTitleStyle, borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+              {field.label}
+            </div>
             <div style={formGridStyle}>
               {groupField.children.map((child) =>
                 renderField(
@@ -661,8 +710,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                   groupValue[child.id],
                   (v) => onChange({ ...groupValue, [child.id]: v }),
                   groupValue,
-                  root
-                  ,
+                  root,
                   path ? `${path}.${child.id}` : child.id
                 )
               )}
@@ -687,70 +735,86 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
               </span>
             </div>
 
-            {arr.map((item, idx) => {
-              const itemValue = item && typeof item === 'object' ? item : {};
-              return (
-                <div
-                  key={`${field.id}-${idx}`}
-                  style={{
-                    border: '1px solid #333',
-                    borderRadius: 8,
-                    padding: '0.75rem',
-                    marginBottom: '0.75rem',
-                  }}
-                >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {arr.map((item, idx) => {
+                const itemValue = item && typeof item === 'object' ? item : {};
+                const phaseType = String(itemValue.phaseType || 'DEPOSIT').toUpperCase();
+                
+                let cardBorder = '1px solid #333';
+                let cardBg = 'transparent';
+                if (phaseType === 'DEPOSIT') cardBorder = '1px solid #28a745';
+                if (phaseType === 'WITHDRAW') cardBorder = '1px solid #dc3545';
+                if (phaseType === 'PASSIVE') cardBorder = '1px solid #ffc107';
+
+                return (
                   <div
+                    key={`${field.id}-${idx}`}
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      marginBottom: '0.5rem',
+                      border: cardBorder,
+                      borderRadius: 12,
+                      padding: '1rem',
+                      background: cardBg,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                     }}
                   >
-                    <div style={{ fontWeight: 600 }}>
-                      {arrField.item.label} {idx + 1}
-                    </div>
-                    <button
-                      type="button"
-                      style={btnStyle}
-                      disabled={!canRemove}
-                      onClick={() => {
-                        const next = arr.filter((_, i) => i !== idx);
-                        onChange(next);
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '1rem',
+                        borderBottom: '1px solid #333',
+                        paddingBottom: '0.5rem',
                       }}
                     >
-                      Remove
-                    </button>
-                  </div>
+                      <div style={{ fontWeight: 600, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ opacity: 0.6 }}>#{idx + 1}</span>
+                        {itemValue.phaseType || arrField.item.label}
+                      </div>
+                      <button
+                        type="button"
+                        style={{ ...btnStyle, color: '#dc3545', borderColor: '#dc3545' }}
+                        disabled={!canRemove}
+                        onClick={() => {
+                          const next = arr.filter((_, i) => i !== idx);
+                          onChange(next);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
 
-                  <div style={formGridStyle}>
-                    {arrField.item.children.map((child) =>
-                      renderField(
-                        child,
-                        itemValue[child.id],
-                        (v) => {
-                          const nextItem = { ...itemValue, [child.id]: v };
-                          const nextArr = arr.map((x, i) => (i === idx ? nextItem : x));
-                          onChange(nextArr);
-                        },
-                        itemValue,
-                        root,
-                        `${path}[${idx}].${child.id}`
-                      )
-                    )}
+                    <div style={formGridStyle}>
+                      {arrField.item.children.map((child) =>
+                        renderField(
+                          child,
+                          itemValue[child.id],
+                          (v) => {
+                            const nextItem = { ...itemValue, [child.id]: v };
+                            const nextArr = arr.map((x, i) => (i === idx ? nextItem : x));
+                            onChange(nextArr);
+                          },
+                          itemValue,
+                          root,
+                          `${path}[${idx}].${child.id}`
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
-            <button
-              type="button"
-              style={btnStyle}
-              disabled={!canAdd}
-              onClick={() => onChange([...arr, buildInitialValueForField(arrField.item)])}
-            >
-              Add {arrField.item.label}
-            </button>
+            <div style={{ marginTop: '1rem' }}>
+              <button
+                type="button"
+                style={{ ...btnStyle, width: '100%', padding: '12px', borderStyle: 'dashed', fontWeight: 600 }}
+                disabled={!canAdd}
+                onClick={() => onChange([...arr, buildInitialValueForField(arrField.item)])}
+              >
+                + Add {arrField.item.label}
+              </button>
+            </div>
           </div>
         );
       }
@@ -864,18 +928,51 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       )}
 
       <form onSubmit={handleSubmit}>
-        {formConfig.fields.map((field) => (
-          <div key={field.id}>
-            {renderField(
-              field,
-              formData[field.id],
-              (newValue) => setFormData((prev) => ({ ...(prev ?? {}), [field.id]: newValue })),
-              formData,
-              formData,
-              field.id
-            )}
-          </div>
-        ))}
+        <div style={tabRowStyle}>
+          <button
+            type="button"
+            style={tabButtonStyle(activeTab === 'general')}
+            onClick={() => setActiveTab('general')}
+          >
+            General {hasTabErrors('general') && <span style={{ color: '#dc3545', marginLeft: '4px' }}>●</span>}
+          </button>
+          <button
+            type="button"
+            style={tabButtonStyle(activeTab === 'taxation')}
+            onClick={() => setActiveTab('taxation')}
+          >
+            Taxation {hasTabErrors('taxation') && <span style={{ color: '#dc3545', marginLeft: '4px' }}>●</span>}
+          </button>
+          <button
+            type="button"
+            style={tabButtonStyle(activeTab === 'returns')}
+            onClick={() => setActiveTab('returns')}
+          >
+            Returns {hasTabErrors('returns') && <span style={{ color: '#dc3545', marginLeft: '4px' }}>●</span>}
+          </button>
+          <button
+            type="button"
+            style={tabButtonStyle(activeTab === 'phases')}
+            onClick={() => setActiveTab('phases')}
+          >
+            Phases {hasTabErrors('phases') && <span style={{ color: '#dc3545', marginLeft: '4px' }}>●</span>}
+          </button>
+        </div>
+
+        {formConfig.fields
+          .filter((f) => (TAB_MAPPING[f.id] || 'general') === activeTab)
+          .map((field) => (
+            <div key={field.id}>
+              {renderField(
+                field,
+                formData[field.id],
+                (newValue) => setFormData((prev) => ({ ...(prev ?? {}), [field.id]: newValue })),
+                formData,
+                formData,
+                field.id
+              )}
+            </div>
+          ))}
 
         <div style={actionsRowStyle}>
           <button type="button" onClick={handleReset}>
