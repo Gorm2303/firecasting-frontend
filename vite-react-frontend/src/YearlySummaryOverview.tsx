@@ -12,6 +12,7 @@ import {
   Line,
 } from 'recharts';
 import { YearlySummary } from './models/YearlySummary';
+import { transformYearlyToMonthly } from './utils/transformYearlyToMonthly';
 import FailedCasesSummary from './components/FailedCasesSummary';
 
 const formatNumber = (value: number): string =>
@@ -22,14 +23,16 @@ interface YearlySummaryOverviewProps {
 }
 
 /**
- * Transforms the original YearlySummary data into a format that’s
+ * Transforms monthly data into a format that's
  * suitable for rendering the stacked areas:
  * - outer band: from 5th to 95th quantiles
  * - inner band: from 25th to 75th quantiles
  */
-const transformDataForBands = (source: YearlySummary[]) => {
+const transformDataForBands = (source: any[]) => {
   return source.map((d) => ({
+    yearMonth: d.yearMonth,
     year: d.year,
+    month: d.month,
     lower5: d.quantile5,
     // Difference between 95th and 5th quantile
     band5_95: d.quantile95 - d.quantile5,
@@ -47,7 +50,7 @@ interface CustomTooltipProps {
 }
 
 /**
- * Custom tooltip that displays the Year along with each quantile value.
+ * Custom tooltip that displays the Year-Month along with each quantile value.
  */
 const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
   if (active && payload && payload.length && payload[0].payload) {
@@ -58,6 +61,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
     const quantile25 = dataPoint.lower25;
     const quantile75 = dataPoint.lower25 + dataPoint.band25_75;
     const median = dataPoint.medianCapital;
+    const yearMonth = dataPoint.yearMonth || label;
     return (
       <div
         style={{
@@ -68,7 +72,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
           color: '#333',
         }}
       >
-        <p style={{ margin: '0 0 4px 0' }}>{`Year: ${label}`}</p>
+        <p style={{ margin: '0 0 4px 0' }}>{`${yearMonth}`}</p>
         <p style={{ margin: 0 }}>{`95th Quantile: ${formatNumber(quantile95)}`}</p>
         <p style={{ margin: 0 }}>{`75th Quantile: ${formatNumber(quantile75)}`}</p>
         <p style={{ margin: 0 }}>{`Median: ${formatNumber(median)}`}</p>
@@ -81,8 +85,10 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
 };
 
 const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) => {
-  // Transform the data for the stacked areas
-  const stackedData = useMemo(() => transformDataForBands(data), [data]);
+  // Transform yearly → monthly with linear interpolation
+  const monthlyData = useMemo(() => transformYearlyToMonthly(data), [data]);
+  // Transform the monthly data for the stacked areas
+  const stackedData = useMemo(() => transformDataForBands(monthlyData), [monthlyData]);
 
   return (
     <div
@@ -106,8 +112,13 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey="year"
-              label={{ value: 'Year', position: 'insideBottomRight', offset: -6 }}
+              dataKey="yearMonth"
+              label={{ value: 'Month', position: 'insideBottomRight', offset: -6 }}
+              tick={{ fontSize: 11 }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+              interval={11}
             />
             <YAxis
               label={{ value: 'Capital', angle: -90, position: 'insideBottomLeft' }}
@@ -145,7 +156,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({ data }) =
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <FailedCasesSummary data={data} />
+      <FailedCasesSummary data={monthlyData} />
     </div>
   );
 };
