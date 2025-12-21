@@ -1,14 +1,31 @@
 // FailedCasesSummary.tsx
-import React from 'react';
+import React, { useId, useMemo, useState } from 'react';
+import { MonthlySummary } from '../models/MonthlySummary';
 import { YearlySummary } from '../models/YearlySummary';
 
+type FailedCasesSummaryMode = 'yearly' | 'monthly';
+
 interface FailedCasesSummaryProps {
-  data: YearlySummary[];
+  yearlyData: YearlySummary[];
+  monthlyData?: MonthlySummary[];
+  defaultMode?: FailedCasesSummaryMode;
 }
 
-const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
-  // Filter only the years with nonzero failure rates.
-  const failedCases = data.filter((item) => item.negativeCapitalPercentage > 0);
+const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
+  yearlyData,
+  monthlyData,
+  defaultMode = 'yearly',
+}) => {
+  const [mode, setMode] = useState<FailedCasesSummaryMode>(defaultMode);
+  const radioName = useId();
+
+  const canShowMonthly = Boolean(monthlyData && monthlyData.length > 0);
+  const effectiveMode: FailedCasesSummaryMode = mode === 'monthly' && !canShowMonthly ? 'yearly' : mode;
+
+  const failedCases = useMemo(() => {
+    const source = effectiveMode === 'monthly' ? (monthlyData ?? []) : yearlyData;
+    return source.filter((item) => item.negativeCapitalPercentage > 0);
+  }, [effectiveMode, monthlyData, yearlyData]);
 
   if (failedCases.length === 0) {
     return <div style={{ marginTop: '1rem' }}>No failed cases were recorded.</div>;
@@ -25,6 +42,36 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
       }}
     >      
       <h3 style={{ fontSize: '1.4rem', marginBottom: '0' }}>Failed Cases Summary</h3>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', margin: '0.25rem 0 0.75rem 0' }}>
+        <span style={{ fontSize: '0.95rem' }}>View:</span>
+        <label style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <input
+            type="radio"
+            name={radioName}
+            checked={effectiveMode === 'yearly'}
+            onChange={() => setMode('yearly')}
+          />
+          Yearly
+        </label>
+        <label
+          style={{
+            display: 'flex',
+            gap: '0.35rem',
+            alignItems: 'center',
+            opacity: canShowMonthly ? 1 : 0.5,
+          }}
+          title={canShowMonthly ? '' : 'Monthly view is unavailable'}
+        >
+          <input
+            type="radio"
+            name={radioName}
+            checked={effectiveMode === 'monthly'}
+            onChange={() => setMode('monthly')}
+            disabled={!canShowMonthly}
+          />
+          Monthly
+        </label>
+      </div>
       <table style={{ width: '50%', borderCollapse: 'collapse'}}>
       <colgroup>
           {/* First two columns take only as much width as their content */}
@@ -37,7 +84,7 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
         <thead>
           <tr>
             <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
-              Year
+              {effectiveMode === 'monthly' ? 'Year-Month' : 'Year'}
             </th>
             <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
               Failure Rate (%)
@@ -51,9 +98,19 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
           </tr>
         </thead>
         <tbody>
-          {failedCases.map((fc) => (
-            <tr key={fc.year} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '8px', textAlign: 'center' }}>{fc.year}</td>
+          {failedCases.map((fc) => {
+            const key =
+              effectiveMode === 'monthly'
+                ? (fc as MonthlySummary).yearMonth
+                : String((fc as YearlySummary).year);
+            const label =
+              effectiveMode === 'monthly'
+                ? (fc as MonthlySummary).yearMonth
+                : String((fc as YearlySummary).year);
+
+            return (
+              <tr key={key} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: '8px', textAlign: 'center' }}>{label}</td>
               <td style={{ padding: '8px', textAlign: 'center', color: '#cc6666' }}>
                 {fc.negativeCapitalPercentage.toFixed(2)}%
               </td>
@@ -81,8 +138,9 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({ data }) => {
               <td style={{ padding: '8px', textAlign: 'center', color: '#66cc66' }}>
                 {(100 - fc.negativeCapitalPercentage).toFixed(2)}%
               </td>
-            </tr>
-          ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

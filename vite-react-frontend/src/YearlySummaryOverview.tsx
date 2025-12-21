@@ -180,7 +180,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <FailedCasesSummary data={monthlyData} />
+      <FailedCasesSummary yearlyData={data} monthlyData={monthlyData} />
     </div>
   );
 };
