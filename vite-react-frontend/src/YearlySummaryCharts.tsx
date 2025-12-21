@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { YearlySummary } from './models/YearlySummary';
+import { MonthlySummary } from './models/MonthlySummary';
+import { transformYearlyToMonthly } from './utils/transformYearlyToMonthly';
 import StatChart from './components/StatChart';
 
 interface YearlySummaryChartsProps {
@@ -7,6 +9,9 @@ interface YearlySummaryChartsProps {
 }
 
 const YearlySummaryCharts: React.FC<YearlySummaryChartsProps> = ({ data }) => {
+  // Transform yearly → monthly with linear interpolation
+  const monthlyData = useMemo(() => transformYearlyToMonthly(data), [data]);
+
   // Define the list of statistics to chart.
   const statsList = [
     { key: 'averageCapital', label: 'Average Capital' },
@@ -29,8 +34,8 @@ const YearlySummaryCharts: React.FC<YearlySummaryChartsProps> = ({ data }) => {
       {statsList.map((stat) => (
         <StatChart
           key={stat.key}
-          data={data}
-          dataKey={stat.key as keyof YearlySummary}
+          data={monthlyData}
+          dataKey={stat.key as keyof MonthlySummary}
           label={stat.label}
         />
       ))}
