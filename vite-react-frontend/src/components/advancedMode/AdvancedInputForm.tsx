@@ -711,11 +711,25 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           ? ({ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' } as React.CSSProperties)
           : formGridStyle;
         
-        // For parent groups with regime-based children, distribute normal fields in a 2-column grid, then full-width for regime section
+        // For parent groups with regime-based children, must use flex so distribution group can span full width
+        // For regime-based distribution itself, must use flex (not grid) so regimes array fills the space
         const shouldUseHybridLayout = hasRegimeBasedChild && groupField.children.some(c => c.id === 'distribution');
-        const childrenRenderStyle: React.CSSProperties | undefined = shouldUseHybridLayout
-          ? ({ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem 1rem', marginBottom: '1rem' } as React.CSSProperties)
+        const childrenRenderStyle: React.CSSProperties = (isRegimeBasedSelected || hasRegimeBasedChild)
+          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' }
           : childrenGridStyle;
+        
+        // DEBUG: Log layout decisions for regime-based distributions
+        if (isDistributionGroup || hasRegimeBasedChild) {
+          console.log(`[GROUP LAYOUT DEBUG] field.id="${field.id}"`, {
+            isDistributionGroup,
+            isRegimeBasedSelected,
+            hasRegimeBasedChild,
+            shouldUseHybridLayout,
+            distributionType: groupValue?.type || groupValue?.distribution?.type,
+            childrenGridStyle: isRegimeBasedSelected ? 'FLEX (regime-based)' : (hasRegimeBasedChild ? 'FLEX (parent of regime)' : 'GRID (default)'),
+            childrenRenderStyle: shouldUseHybridLayout ? '2-COL HYBRID GRID' : 'childrenGridStyle',
+          });
+        }
         
         return (
           <div
@@ -779,6 +793,14 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           ? ({ ...phasesContainerStyle, display: 'flex', flexDirection: 'column', gap: '1rem' } as React.CSSProperties)
           : phasesContainerStyle;
 
+        if (isRegimesArray) {
+          console.log(`[REGIMES ARRAY DEBUG]`, {
+            field: field.id,
+            itemCount: arr.length,
+            containerStyle: { display: 'flex', flexDirection: 'column', gap: '1rem', ...phasesContainerStyle },
+          });
+        }
+
         return (
           <div style={containerStyle} key={field.id}>
             <div style={phasesTitleRowStyle}>
@@ -802,6 +824,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                 return (
                   <div
                     key={`${field.id}-${idx}`}
+                    data-testid={isRegimesArray ? `regime-card-${idx}` : undefined}
                     style={{
                       border: cardBorder,
                       borderRadius: 12,
