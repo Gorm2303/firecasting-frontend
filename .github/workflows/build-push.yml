@@ -37,8 +37,6 @@ jobs:
           context: ./vite-react-frontend
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: |
-            VITE_API_BASE_URL=${{ vars.PROD_API_BASE_URL }}
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:sha-${{ steps.vars.outputs.SHORT_SHA }}
