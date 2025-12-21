@@ -737,8 +737,14 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         const canAdd = arrField.maxItems == null || arr.length < arrField.maxItems;
         const canRemove = arrField.minItems == null ? true : arr.length > arrField.minItems;
 
+        // Check if this is the regimes array within distribution group
+        const isRegimesArray = field.id === 'regimes';
+        const containerStyle = isRegimesArray
+          ? { ...phasesContainerStyle, width: '100%' }
+          : phasesContainerStyle;
+
         return (
-          <div style={phasesContainerStyle} key={field.id}>
+          <div style={containerStyle} key={field.id}>
             <div style={phasesTitleRowStyle}>
               <h3 style={phasesTitleStyle}>{field.label}</h3>
               <span style={phasesCountStyle}>
