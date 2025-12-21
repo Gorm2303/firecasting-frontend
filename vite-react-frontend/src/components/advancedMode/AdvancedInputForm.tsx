@@ -772,6 +772,8 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
                       padding: '1rem',
                       background: cardBg,
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      width: isRegimesArray ? '100%' : undefined,
+                      boxSizing: 'border-box',
                     }}
                   >
                     <div
