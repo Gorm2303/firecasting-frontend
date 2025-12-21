@@ -1,7 +1,8 @@
 // src/api/simulation.ts
 import { SimulationRequest } from '../models/types';
+import { getApiBaseUrl } from '../config/runtimeEnv';
 
-const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}`;
+const BASE_URL = getApiBaseUrl();
 
 type StartResponse = { id: string };
 

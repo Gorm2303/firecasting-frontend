@@ -1,6 +1,7 @@
 // src/components/SimulationProgress.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { YearlySummary } from "../models/YearlySummary";
+import { getApiBaseUrl } from "../config/runtimeEnv";
 
 interface SimulationProgressProps {
   simulationId: string;
@@ -9,7 +10,7 @@ interface SimulationProgressProps {
   theme?: "auto" | "light" | "dark";
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = getApiBaseUrl();
 
 const SimulationProgress: React.FC<SimulationProgressProps> = ({
   simulationId,

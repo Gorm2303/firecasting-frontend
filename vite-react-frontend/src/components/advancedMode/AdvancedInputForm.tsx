@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
+import { getApiBaseUrl } from '../../config/runtimeEnv';
 import {
   ArrayFieldConfig,
   FieldConfig,
@@ -328,7 +329,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const [submitting, setSubmitting] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
 
-  const SIM_API_BASE = `${import.meta.env.VITE_API_BASE_URL}`.replace(/\/+$/, '');
+  const SIM_API_BASE = getApiBaseUrl();
   const formsUrl = new URL('../forms/advanced-simulation', SIM_API_BASE + '/').toString();
   const startAdvancedUrl = new URL('start-advanced', SIM_API_BASE + '/').toString();
 
@@ -337,10 +338,13 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
       setLoadingConfig(true);
       setError(null);
 
-      const res = await fetch(formsUrl);
-      if (!res.ok) throw new Error(`Failed to fetch form config: ${res.status}`);
+      const fetchFormConfigFrom = async (url: string): Promise<FormConfig> => {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`Failed to fetch form config: ${res.status}`);
+        return (await res.json()) as FormConfig;
+      };
 
-      const json = (await res.json()) as FormConfig;
+      const json = await fetchFormConfigFrom(formsUrl);
       const initial = buildInitialFormState(json);
 
       setFormConfig(json);
