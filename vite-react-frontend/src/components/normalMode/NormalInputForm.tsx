@@ -1,7 +1,7 @@
 // src/features/simulation/SimulationForm.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
-import { PhaseRequest, SimulationRequest } from '../../models/types';
+import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseForm from '../../components/normalMode/NormalPhaseForm';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import ExportStatisticsButton from '../../components/ExportStatisticsButton';
@@ -122,7 +122,7 @@ export default function SimulationForm({
   tutorialSteps,
   onExitTutorial, // optional
 }: {
-  onSimulationComplete?: (stats: YearlySummary[]) => void;
+  onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
 }) {
@@ -268,7 +268,13 @@ export default function SimulationForm({
             setStats(result);
             setSimulateInProgress(false);
             setSimulationId(null);
-            onSimulationComplete?.(result);
+            const timeline: SimulationTimelineContext = {
+              startDate,
+              phaseTypes: phases.map((p) => p.phaseType),
+              phaseDurationsInMonths: phases.map((p) => Number(p.durationInMonths) || 0),
+              firstPhaseInitialDeposit: phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
+            };
+            onSimulationComplete?.(result, timeline);
           }}
         />
       )}

@@ -3,12 +3,10 @@ import React, { useState, useEffect } from 'react';
 import NormalInputForm from '../components/normalMode/NormalInputForm';
 import AdvancedInputForm from '../components/advancedMode/AdvancedInputForm';
 import { YearlySummary } from '../models/YearlySummary';
-import YearlySummaryTable from '../YearlySummaryTable';
-import YearlySummaryCharts from '../YearlySummaryCharts';
+import { SimulationTimelineContext } from '../models/types';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { Link } from 'react-router-dom';
 
-type MainTab = 'table' | 'charts' | 'summary';
 type FormMode = 'normal' | 'advanced';
 
 const FORM_MODE_KEY = 'firecasting:formMode';
@@ -21,17 +19,20 @@ const getInitialFormMode = (): FormMode => {
 
 const SimulationPage: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
-  const [activeTab, setActiveTab] = useState<MainTab>('summary');
+  const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
   const [ackSim, setAckSim] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
 
   useEffect(() => {
     setStats(null);
-    setActiveTab('summary');
+    setTimeline(null);
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
   }, [formMode]);
 
-  const handleSimulationComplete = (results: YearlySummary[]) => setStats(results);
+  const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext) => {
+    setStats(results);
+    setTimeline(ctx ?? null);
+  };
 
   const FormComponent =
     formMode === 'advanced' ? AdvancedInputForm : NormalInputForm;
@@ -71,7 +72,7 @@ const SimulationPage: React.FC = () => {
         </div>
       )}
 
-      <div style={{ maxWidth: 450, margin: '0 auto' }}>
+      <div style={{ maxWidth: formMode === 'advanced' ? 960 : 450, margin: '0 auto' }}>
         <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
 
         <div role="group" aria-label="Form mode" style={{
@@ -95,33 +96,7 @@ const SimulationPage: React.FC = () => {
 
       {stats && (
         <div style={{ marginTop: '1rem' }}>
-          <div style={{ display: 'flex', marginBottom: '1rem' }}>
-            <button onClick={() => setActiveTab('summary')} style={{
-              padding: '0.5rem 1rem', marginRight: '1rem',
-              backgroundColor: activeTab === 'summary' ? '#8884d8' : '#f0f0f0',
-              color: activeTab === 'summary' ? 'white' : 'black', border: 'none', cursor: 'pointer',
-            }}>
-              Summary
-            </button>
-            <button onClick={() => setActiveTab('table')} style={{
-              padding: '0.5rem 1rem', marginRight: '1rem',
-              backgroundColor: activeTab === 'table' ? '#8884d8' : '#f0f0f0',
-              color: activeTab === 'table' ? 'white' : 'black', border: 'none', cursor: 'pointer',
-            }}>
-              Table
-            </button>
-            <button onClick={() => setActiveTab('charts')} style={{
-              padding: '0.5rem 1rem', marginRight: '1rem',
-              backgroundColor: activeTab === 'charts' ? '#8884d8' : '#f0f0f0',
-              color: activeTab === 'charts' ? 'white' : 'black', border: 'none', cursor: 'pointer',
-            }}>
-              Charts
-            </button>
-          </div>
-
-          {activeTab === 'summary' && <MultiPhaseOverview data={stats} />}
-          {activeTab === 'table' && <YearlySummaryTable stats={stats} />}
-          {activeTab === 'charts' && <YearlySummaryCharts data={stats} />}
+          <MultiPhaseOverview data={stats} timeline={timeline} />
         </div>
       )}
     </div>
