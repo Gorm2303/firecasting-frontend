@@ -31,6 +31,21 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
     return <div style={{ marginTop: '1rem' }}>No failed cases were recorded.</div>;
   }
 
+  const firstColMinWidth = effectiveMode === 'monthly' ? 90 : 60;
+  const firstColCellStyle = {
+    padding: '8px',
+    textAlign: 'center' as const,
+    whiteSpace: 'nowrap' as const,
+    minWidth: `${firstColMinWidth}px`,
+  };
+  const firstColHeaderStyle = {
+    borderBottom: '1px solid #ccc',
+    padding: '8px',
+    textAlign: 'center' as const,
+    whiteSpace: 'nowrap' as const,
+    minWidth: `${firstColMinWidth}px`,
+  };
+
   return (
     <div
       style={{
@@ -72,7 +87,7 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
           Monthly
         </label>
       </div>
-      <table style={{ width: '50%', borderCollapse: 'collapse'}}>
+        <table style={{ width: '60%', borderCollapse: 'collapse' }}>
       <colgroup>
           {/* First two columns take only as much width as their content */}
           <col style={{ width: '1%', whiteSpace: 'nowrap' }} />
@@ -83,7 +98,7 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
         </colgroup>
         <thead>
           <tr>
-            <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
+            <th style={firstColHeaderStyle}>
               {effectiveMode === 'monthly' ? 'Year-Month' : 'Year'}
             </th>
             <th style={{ borderBottom: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
@@ -110,7 +125,7 @@ const FailedCasesSummary: React.FC<FailedCasesSummaryProps> = ({
 
             return (
               <tr key={key} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '8px', textAlign: 'center' }}>{label}</td>
+                <td style={firstColCellStyle}>{label}</td>
               <td style={{ padding: '8px', textAlign: 'center', color: '#cc6666' }}>
                 {fc.negativeCapitalPercentage.toFixed(2)}%
               </td>
