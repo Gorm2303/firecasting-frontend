@@ -76,6 +76,8 @@ const groupTitleStyle: React.CSSProperties = {
 
 const phasesContainerStyle: React.CSSProperties = {
   marginTop: '1rem',
+  width: '100%',
+  boxSizing: 'border-box',
 };
 
 const phasesTitleRowStyle: React.CSSProperties = {
@@ -696,7 +698,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         
         // If regime-based distribution is selected, use full-width layout for better readability
         const childrenGridStyle: React.CSSProperties = isRegimeBasedSelected 
-          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }
+          ? { display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' }
           : formGridStyle;
         
         return (
@@ -740,7 +742,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
         // Check if this is the regimes array within distribution group
         const isRegimesArray = field.id === 'regimes';
         const containerStyle = isRegimesArray
-          ? { ...phasesContainerStyle, width: '100%' }
+          ? { ...phasesContainerStyle, display: 'flex', flexDirection: 'column', gap: '1rem' }
           : phasesContainerStyle;
 
         return (
