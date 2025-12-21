@@ -706,9 +706,16 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           );
         
         // If regime-based distribution is selected, use full-width layout for better readability
+        // For parent groups (like 'returner'), use flex column layout to properly accommodate regime-based children
         const childrenGridStyle: React.CSSProperties | undefined = (isRegimeBasedSelected || hasRegimeBasedChild)
           ? ({ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', width: '100%', boxSizing: 'border-box' } as React.CSSProperties)
           : formGridStyle;
+        
+        // For parent groups with regime-based children, distribute normal fields in a 2-column grid, then full-width for regime section
+        const shouldUseHybridLayout = hasRegimeBasedChild && groupField.children.some(c => c.id === 'distribution');
+        const childrenRenderStyle: React.CSSProperties | undefined = shouldUseHybridLayout
+          ? ({ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem 1rem', marginBottom: '1rem' } as React.CSSProperties)
+          : childrenGridStyle;
         
         return (
           <div
@@ -727,17 +734,33 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
             <div style={{ ...groupTitleStyle, borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
               {field.label}
             </div>
-            <div style={childrenGridStyle}>
-              {groupField.children.map((child) =>
-                renderField(
+            <div style={childrenRenderStyle}>
+              {groupField.children.map((child) => {
+                // For hybrid layout (parent with regime-based distribution), handle distribution specially
+                if (shouldUseHybridLayout && child.id === 'distribution') {
+                  return (
+                    <div key={child.id} style={{ gridColumn: '1 / -1', width: '100%', boxSizing: 'border-box' }}>
+                      {renderField(
+                        child,
+                        groupValue[child.id],
+                        (v) => onChange({ ...groupValue, [child.id]: v }),
+                        groupValue,
+                        root,
+                        path ? `${path}.${child.id}` : child.id
+                      )}
+                    </div>
+                  );
+                }
+                
+                return renderField(
                   child,
                   groupValue[child.id],
                   (v) => onChange({ ...groupValue, [child.id]: v }),
                   groupValue,
                   root,
                   path ? `${path}.${child.id}` : child.id
-                )
-              )}
+                );
+              })}
             </div>
             {maybeError}
           </div>
