@@ -1,5 +1,7 @@
 // src/pages/ExplorePage.tsx
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { convertToNormalFormData, convertToAdvancedFormData } from '../utils/scenarioLoader';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 type TaxToggle = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
@@ -312,11 +314,40 @@ const OutputsCell: React.FC<{ outputs: OutputPoint[] }> = ({ outputs }) => {
 };
 
 const ExplorePage: React.FC = () => {
+  const navigate = useNavigate();
+  
   // Under development banner
   const [ack, setAck] = useState(false);
 
   // (Optional) simple search across inputs text
   const [query, setQuery] = useState('');
+
+  /**
+   * Handles loading a scenario into the simulation form.
+   * 
+   * This function:
+   * 1. Converts the scenario's PhaseInput format to the form's PhaseRequest format
+   * 2. Navigates to the simulation page with the scenario data in location state
+   * 3. The SimulationPage will detect this data and populate the form accordingly
+   * 
+   * @param scenarioInputs - The input data from the selected scenario
+   */
+  const handleLoadScenario = (scenarioInputs: SimulationInputs) => {
+    // Convert scenario data to both normal and advanced form formats
+    // The SimulationPage will use the appropriate format based on the current form mode
+    const normalData = convertToNormalFormData(scenarioInputs);
+    const advancedData = convertToAdvancedFormData(scenarioInputs);
+    
+    // Navigate to simulation page with scenario data in location state
+    navigate('/simulation', {
+      state: {
+        scenarioData: {
+          normal: normalData,
+          advanced: advancedData,
+        },
+      },
+    });
+  };
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -419,8 +450,20 @@ const ExplorePage: React.FC = () => {
                     <button type="button" title="Open details (coming soon)" disabled style={{ padding: '6px 8px' }}>
                       View
                     </button>
-                    <button type="button" title="Clone into form (coming soon)" disabled style={{ padding: '6px 8px' }}>
-                      Clone
+                    <button
+                      type="button"
+                      title="Load this scenario into the simulation form"
+                      onClick={() => handleLoadScenario(r.inputs)}
+                      style={{
+                        padding: '6px 8px',
+                        border: '1px solid #444',
+                        backgroundColor: '#2e2e2e',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        borderRadius: 4,
+                      }}
+                    >
+                      Load
                     </button>
                     <button type="button" title="Download CSV (coming soon)" disabled style={{ padding: '6px 8px' }}>
                       CSV

@@ -117,20 +117,59 @@ const formatYearsMonths = (months: number) => {
   return `${years} year${years === 1 ? '' : 's'} ${leftoverMonths} month${leftoverMonths === 1 ? '' : 's'}`;
 };
 
+type InitialFormData = {
+  startDate: string;
+  overallTaxRule: OverallTaxRule;
+  taxPercentage: number;
+  phases: PhaseRequest[];
+};
+
 export default function SimulationForm({
   onSimulationComplete,
   tutorialSteps,
   onExitTutorial, // optional
+  initialData, // optional initial data from loaded scenario
 }: {
   onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
+  initialData?: InitialFormData;
 }) {
-  // same state as NormalInputForm
-  const [startDate, setStartDate] = useState('2025-01-01');
-  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
-  const [taxPercentage, setTaxPercentage] = useState(42);
-  const [phases, setPhases] = useState<PhaseRequest[]>([]);
+  // Initialize state with default values or initialData if provided
+  // This ensures the form starts with scenario data when loaded from ExplorePage
+  const [startDate, setStartDate] = useState(initialData?.startDate ?? '2025-01-01');
+  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>(
+    initialData?.overallTaxRule ?? 'CAPITAL'
+  );
+  const [taxPercentage, setTaxPercentage] = useState(initialData?.taxPercentage ?? 42);
+  const [phases, setPhases] = useState<PhaseRequest[]>(initialData?.phases ?? []);
+
+  /**
+   * Effect to load scenario data when initialData is provided.
+   * 
+   * This runs when initialData changes (e.g., when user clicks "Load" in ExplorePage).
+   * It completely replaces the current form state with the scenario data, ensuring
+   * no residual data from previous drafts remains.
+   * 
+   * The effect only runs when initialData is truthy to avoid clearing the form
+   * when initialData is undefined.
+   */
+  useEffect(() => {
+    if (initialData) {
+      // Completely replace all form fields with scenario data
+      // This ensures no residual data from previous drafts remains
+      setStartDate(initialData.startDate);
+      setOverallTaxRule(initialData.overallTaxRule);
+      setTaxPercentage(initialData.taxPercentage);
+      // Deep copy phases to avoid reference issues
+      setPhases(initialData.phases.map(p => ({ ...p, taxRules: [...(p.taxRules || [])] })));
+      
+      // Clear any existing simulation results when loading new scenario
+      setStats(null);
+      setSimulationId(null);
+      setSimulateInProgress(false);
+    }
+  }, [initialData]);
 
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
