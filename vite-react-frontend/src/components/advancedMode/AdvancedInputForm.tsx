@@ -19,6 +19,7 @@ import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
   onSimulationComplete: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
+  initialData?: Record<string, any>; // Optional initial data from loaded scenario
 }
 
 const containerStyle: React.CSSProperties = {
@@ -344,7 +345,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
   };
 };
 
-const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
+const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, initialData }) => {
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
   const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(null);
@@ -377,6 +378,39 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   const formsUrl = new URL('../forms/advanced-simulation', SIM_API_BASE + '/').toString();
   const startAdvancedUrl = new URL('start-advanced', SIM_API_BASE + '/').toString();
 
+  /**
+   * Deep merges scenario data into the default form state.
+   * 
+   * This function ensures that:
+   * 1. All default fields from the form config are preserved
+   * 2. Scenario data overrides defaults where provided
+   * 3. Nested objects (like phases array) are properly merged
+   * 
+   * @param defaultState - The default form state from buildInitialFormState
+   * @param scenarioData - The scenario data to merge in
+   * @returns Merged form state with scenario data taking precedence
+   */
+  const mergeScenarioData = useCallback((defaultState: Record<string, any>, scenarioData: Record<string, any>): Record<string, any> => {
+    const merged = JSON.parse(JSON.stringify(defaultState)); // Deep copy
+    
+    // Merge scenario data into default state
+    // For arrays (like phases), completely replace them to avoid partial merges
+    for (const key in scenarioData) {
+      if (Array.isArray(scenarioData[key])) {
+        // Arrays are completely replaced to ensure clean state
+        merged[key] = JSON.parse(JSON.stringify(scenarioData[key]));
+      } else if (scenarioData[key] && typeof scenarioData[key] === 'object') {
+        // Nested objects are merged recursively
+        merged[key] = { ...merged[key], ...scenarioData[key] };
+      } else {
+        // Primitive values are directly assigned
+        merged[key] = scenarioData[key];
+      }
+    }
+    
+    return merged;
+  }, []);
+
   const fetchConfig = useCallback(async () => {
     try {
       setLoadingConfig(true);
@@ -393,18 +427,53 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
 
       setFormConfig(json);
       setInitialFormData(initial);
-      setFormData(JSON.parse(JSON.stringify(initial)));
+      
+      // If initialData (scenario) is provided, merge it with defaults
+      // Otherwise, use the default initial state
+      const finalFormData = initialData
+        ? mergeScenarioData(initial, initialData)
+        : JSON.parse(JSON.stringify(initial));
+      
+      setFormData(finalFormData);
     } catch (e: any) {
       console.error(e);
       setError(e.message ?? 'Error fetching form config');
     } finally {
       setLoadingConfig(false);
     }
-  }, [formsUrl]);
+  }, [formsUrl, initialData, mergeScenarioData]);
 
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  /**
+   * Effect to reload scenario data when initialData changes.
+   * 
+   * This runs when initialData is provided (e.g., when user clicks "Load" in ExplorePage).
+   * It completely replaces the current form state with the scenario data merged with defaults,
+   * ensuring no residual data from previous drafts remains.
+   * 
+   * The effect only runs when:
+   * 1. initialData is truthy (scenario was loaded)
+   * 2. formConfig and initialFormData are available (form is ready)
+   * 
+   * This ensures the scenario data is applied after the form config is loaded.
+   */
+  useEffect(() => {
+    if (initialData && formConfig && initialFormData) {
+      // Merge scenario data with default form state
+      const merged = mergeScenarioData(initialFormData, initialData);
+      setFormData(merged);
+      
+      // Clear any existing simulation results and errors when loading new scenario
+      setSimulationId(null);
+      setSubmitting(false);
+      setError(null);
+      setFieldErrors({});
+      setSubmitErrorDetails([]);
+    }
+  }, [initialData, formConfig, initialFormData, mergeScenarioData]);
 
   type ApiError = { message?: string; details?: string[] };
 

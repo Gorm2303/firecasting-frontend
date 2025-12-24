@@ -1,5 +1,6 @@
 // src/pages/SimulationPage.tsx
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import NormalInputForm from '../components/normalMode/NormalInputForm';
 import AdvancedInputForm from '../components/advancedMode/AdvancedInputForm';
 import { YearlySummary } from '../models/YearlySummary';
@@ -18,16 +19,32 @@ const getInitialFormMode = (): FormMode => {
 };
 
 const SimulationPage: React.FC = () => {
+  const location = useLocation();
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
   const [ackSim, setAckSim] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
+  
+  // Extract scenario data from location state if present
+  // This is set when user clicks "Load" button in ExplorePage
+  const scenarioData = (location.state as any)?.scenarioData;
 
   useEffect(() => {
     setStats(null);
     setTimeline(null);
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
   }, [formMode]);
+
+  /**
+   * Clears location state after scenario is loaded to prevent re-loading
+   * on subsequent navigations. This ensures the scenario is only loaded once.
+   */
+  useEffect(() => {
+    if (scenarioData && location.state) {
+      // Clear the state to prevent re-loading on back/forward navigation
+      window.history.replaceState({}, '');
+    }
+  }, [scenarioData, location.state]);
 
   const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext) => {
     setStats(results);
@@ -90,7 +107,16 @@ const SimulationPage: React.FC = () => {
         </div>
 
         <div key={formMode}>
-          <FormComponent onSimulationComplete={handleSimulationComplete} />
+          <FormComponent
+            onSimulationComplete={handleSimulationComplete}
+            initialData={
+              scenarioData
+                ? formMode === 'normal'
+                  ? scenarioData.normal
+                  : scenarioData.advanced
+                : undefined
+            }
+          />
         </div>
       </div>
 
