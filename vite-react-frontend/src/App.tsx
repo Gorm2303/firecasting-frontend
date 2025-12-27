@@ -5,6 +5,7 @@ import InfoPage from './pages/InfoPage';
 import ExplorePage from './pages/ExplorePage';
 import SimulationPage from './pages/SimulationPage';
 import TutorialPage from './pages/TutorialPage';
+import InvestmentCalculatorPage from './pages/InvestmentCalculatorPage';
 
 const TAB_BAR_RESERVED_HEIGHT = 80;
 
@@ -24,6 +25,14 @@ const BottomPageTabs: React.FC = () => (
       className={({ isActive }) => `bottom-page-tabs__btn ${isActive ? 'is-active' : ''}`}
     >
       <div style={{ fontSize: 'medium' }}>Explore 📚</div>
+    </NavLink>
+
+    <NavLink
+      to="/investment-calculator"
+      role="tab"
+      className={({ isActive }) => `bottom-page-tabs__btn ${isActive ? 'is-active' : ''}`}
+    >
+      <div style={{ fontSize: 'medium' }}>Calculator 💰</div>
     </NavLink>
 
     <NavLink
@@ -55,6 +64,7 @@ const App: React.FC = () => {
           <Route path="/simulation/tutorial" element={<TutorialPage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/info" element={<InfoPage />} />
+          <Route path="/investment-calculator" element={<InvestmentCalculatorPage />} />
           <Route path="*" element={<Navigate to="/simulation" replace />} />
         </Routes>
       </div>
