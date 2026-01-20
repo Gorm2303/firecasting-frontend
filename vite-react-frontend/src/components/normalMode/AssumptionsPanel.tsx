@@ -1,4 +1,3 @@
-import React from 'react';
 import type { PhaseRequest, SimulationRequest } from '../../models/types';
 
 const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
