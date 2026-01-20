@@ -24,7 +24,7 @@ describe('NormalInputForm scenarios', () => {
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2033-02-03' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Open saved scenarios/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Saved scenarios/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
 
     // Change the form away from the saved config

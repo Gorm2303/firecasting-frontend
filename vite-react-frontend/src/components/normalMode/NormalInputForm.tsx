@@ -453,13 +453,19 @@ export default function SimulationForm({
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
         <button
           type="button"
-          aria-label="Open saved scenarios"
+          aria-label="Saved scenarios"
           title="Saved scenarios"
           onClick={openScenarioModal}
           disabled={simulateInProgress}
-          style={btn(simulateInProgress ? 'disabled' : 'ghost')}
+          style={{
+            ...btn(simulateInProgress ? 'disabled' : 'ghost'),
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
         >
           <span aria-hidden="true">🗂</span>
+          <span>Saved scenarios</span>
         </button>
       </div>
 
@@ -580,7 +586,7 @@ export default function SimulationForm({
                 disabled={!selectedScenarioId || simulateInProgress}
                 style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
               >
-                <span aria-hidden="true">⟳</span>
+                <span aria-hidden="true">📥</span>
               </button>
               <button
                 type="button"
@@ -598,7 +604,15 @@ export default function SimulationForm({
                 title="Delete"
                 onClick={handleDeleteScenario}
                 disabled={!selectedScenarioId || simulateInProgress}
-                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+                style={
+                  !selectedScenarioId || simulateInProgress
+                    ? btn('disabled')
+                    : {
+                        ...btn('ghost'),
+                        color: 'crimson',
+                        borderColor: 'crimson',
+                      }
+                }
               >
                 <span aria-hidden="true">🗑</span>
               </button>
