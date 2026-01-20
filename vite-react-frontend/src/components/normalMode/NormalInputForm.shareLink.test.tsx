@@ -17,7 +17,6 @@ describe('NormalInputForm share links', () => {
   it('creates a share link for a saved scenario', async () => {
     const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => 'My scenario');
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     window.localStorage.clear();
 
@@ -56,12 +55,10 @@ describe('NormalInputForm share links', () => {
 
     promptSpy.mockRestore();
     confirmSpy.mockRestore();
-    alertSpy.mockRestore();
   });
 
   it('loads from /simulation?scenario=... and auto-runs', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     const request = {
       startDate: { date: '2033-02-03' },
@@ -98,6 +95,5 @@ describe('NormalInputForm share links', () => {
     expect((screen.getByLabelText(/Start Date:/i) as HTMLInputElement).value).toBe('2033-02-03');
 
     confirmSpy.mockRestore();
-    alertSpy.mockRestore();
   });
 });

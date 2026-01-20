@@ -157,6 +157,7 @@ export default function SimulationForm({
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
+  const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
@@ -318,7 +319,8 @@ export default function SimulationForm({
       const writeText = navigator.clipboard?.writeText;
       if (typeof writeText !== 'function') throw new Error('Clipboard API unavailable');
       await writeText.call(navigator.clipboard, shareUrl);
-      window.alert('Share link copied to clipboard.');
+      setDidCopyShareUrl(true);
+      window.setTimeout(() => setDidCopyShareUrl(false), 2500);
     } catch {
       window.prompt('Copy share link:', shareUrl);
     }
@@ -760,7 +762,13 @@ export default function SimulationForm({
                       onClick={handleCopyShareUrl}
                       style={btn('ghost')}
                     >
-                      Copy
+                      {didCopyShareUrl ? (
+                        <span aria-label="Copied" title="Copied">
+                          ✓
+                        </span>
+                      ) : (
+                        'Copy'
+                      )}
                     </button>
                   </div>
                 </label>
