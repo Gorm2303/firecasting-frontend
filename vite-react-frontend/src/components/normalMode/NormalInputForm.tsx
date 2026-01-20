@@ -143,7 +143,7 @@ export default function SimulationForm({
   const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
   const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('custom');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
   const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
     ...initialDefaults,
     startDate: { date: initialDefaults.startDate.date },
@@ -152,6 +152,7 @@ export default function SimulationForm({
 
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
+  const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
@@ -203,6 +204,24 @@ export default function SimulationForm({
   const refreshSavedScenarios = useCallback(() => {
     setSavedScenarios(listSavedScenarios());
   }, []);
+
+  const openScenarioModal = useCallback(() => {
+    refreshSavedScenarios();
+    setIsScenarioModalOpen(true);
+  }, [refreshSavedScenarios]);
+
+  const closeScenarioModal = useCallback(() => {
+    setIsScenarioModalOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isScenarioModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeScenarioModal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [closeScenarioModal, isScenarioModalOpen]);
 
   const handleSaveScenario = useCallback(() => {
     const name = window.prompt('Scenario name?');
@@ -260,7 +279,8 @@ export default function SimulationForm({
     applyRequestToForm(scenario.request);
     setSelectedScenarioId(scenario.id);
     void runSimulationWithRequest(scenario.request);
-  }, [applyRequestToForm, isDirty, runSimulationWithRequest]);
+    closeScenarioModal();
+  }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
 
   const handleDeleteScenario = useCallback(() => {
     if (!selectedScenarioId) return;
@@ -430,56 +450,17 @@ export default function SimulationForm({
         {simulateInProgress ? 'Running…' : 'Run Simulation'}
       </button>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-        <label style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '1.1rem' }}>Saved scenario:</span>
-          <select
-            value={selectedScenarioId}
-            onChange={(e) => setSelectedScenarioId(e.target.value)}
-            disabled={simulateInProgress}
-            style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-          >
-            <option value="">— Select —</option>
-            {savedScenarios.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            aria-label="Load scenario"
-            title="Load scenario"
-            onClick={() => handleLoadScenario(selectedScenarioId)}
-            disabled={!selectedScenarioId || simulateInProgress}
-            style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
-          >
-            <span aria-hidden="true">⟳</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Save scenario"
-            title="Save scenario"
-            onClick={handleSaveScenario}
-            disabled={simulateInProgress}
-            style={btn(simulateInProgress ? 'disabled' : 'ghost')}
-          >
-            <span aria-hidden="true">💾</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Delete scenario"
-            title="Delete scenario"
-            onClick={handleDeleteScenario}
-            disabled={!selectedScenarioId || simulateInProgress}
-            style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
-          >
-            <span aria-hidden="true">🗑</span>
-          </button>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <button
+          type="button"
+          aria-label="Open saved scenarios"
+          title="Saved scenarios"
+          onClick={openScenarioModal}
+          disabled={simulateInProgress}
+          style={btn(simulateInProgress ? 'disabled' : 'ghost')}
+        >
+          <span aria-hidden="true">🗂</span>
+        </button>
       </div>
 
       {simulateInProgress && simulationId && (
@@ -525,6 +506,105 @@ export default function SimulationForm({
           isFirst={isFirst}
           isLast={isLast}
         />
+      )}
+
+      {isScenarioModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Saved scenarios"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000000,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeScenarioModal();
+          }}
+        >
+          <div
+            style={{
+              width: 'min(420px, 92vw)',
+              background: '#111',
+              color: '#fff',
+              border: '1px solid #333',
+              borderRadius: 12,
+              padding: 14,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>Saved scenarios</div>
+              <button
+                type="button"
+                aria-label="Close saved scenarios"
+                title="Close"
+                onClick={closeScenarioModal}
+                style={btn('ghost')}
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Scenario</span>
+              <select
+                value={selectedScenarioId}
+                onChange={(e) => setSelectedScenarioId(e.target.value)}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
+              >
+                <option value="">— Select —</option>
+                {savedScenarios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                aria-label="Load scenario"
+                title="Load (also runs simulation)"
+                onClick={() => handleLoadScenario(selectedScenarioId)}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true">⟳</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Save scenario"
+                title="Save"
+                onClick={handleSaveScenario}
+                disabled={simulateInProgress}
+                style={btn(simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true">💾</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Delete scenario"
+                title="Delete"
+                onClick={handleDeleteScenario}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true">🗑</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </form>
   );
