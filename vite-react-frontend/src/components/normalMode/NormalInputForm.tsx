@@ -1,5 +1,5 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseForm from '../../components/normalMode/NormalPhaseForm';
@@ -7,6 +7,9 @@ import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import ExportStatisticsButton from '../../components/ExportStatisticsButton';
 import SimulationProgress from '../../components/SimulationProgress';
 import { startSimulation, exportSimulationCsv } from '../../api/simulation';
+import { createDefaultSimulationRequest } from '../../config/simulationDefaults';
+import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
+import { deepEqual } from '../../utils/deepEqual';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -126,11 +129,19 @@ export default function SimulationForm({
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
 }) {
-  // same state as NormalInputForm
-  const [startDate, setStartDate] = useState('2025-01-01');
-  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
-  const [taxPercentage, setTaxPercentage] = useState(42);
-  const [phases, setPhases] = useState<PhaseRequest[]>([]);
+  const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
+
+  const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
+  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>(initialDefaults.overallTaxRule);
+  const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
+  const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('custom');
+  const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
+    ...initialDefaults,
+    startDate: { date: initialDefaults.startDate.date },
+    phases: initialDefaults.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+  }));
 
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
@@ -153,6 +164,41 @@ export default function SimulationForm({
 
   const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
   const overLimit = totalMonths > MAX_MONTHS;
+
+  const currentRequest = useMemo<SimulationRequest>(() => {
+    return {
+      startDate: { date: startDate },
+      overallTaxRule,
+      taxPercentage,
+      phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+    };
+  }, [startDate, overallTaxRule, taxPercentage, phases]);
+
+  const isDirty = useMemo(() => !deepEqual(currentRequest, baselineRequest), [currentRequest, baselineRequest]);
+
+  const selectedTemplate = useMemo(() => getTemplateById(selectedTemplateId), [selectedTemplateId]);
+
+  const applyTemplate = useCallback((templateId: SimulationTemplateId) => {
+    const template = getTemplateById(templateId);
+
+    if (templateId !== 'custom' && isDirty) {
+      const ok = window.confirm('Applying a template will overwrite your current inputs. Continue?');
+      if (!ok) return;
+    }
+
+    setSelectedTemplateId(templateId);
+
+    if (templateId === 'custom') {
+      return;
+    }
+
+    const resolved = resolveTemplateToRequest(template);
+    setStartDate(resolved.startDate.date);
+    setOverallTaxRule(resolved.overallTaxRule);
+    setTaxPercentage(resolved.taxPercentage);
+    setPhases(resolved.phases);
+    setBaselineRequest(resolved);
+  }, [isDirty]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -199,6 +245,28 @@ export default function SimulationForm({
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={inputWrapperStyle}>
+          <label style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '1.1rem' }}>Template:</span>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
+              disabled={simulateInProgress}
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
+            >
+              {SIMULATION_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
+              {selectedTemplate.description}
+              {isDirty && selectedTemplateId !== 'custom' && (
+                <span style={{ display: 'block', marginTop: 2 }}>Edits detected — you’ll be asked before overwriting.</span>
+              )}
+            </div>
+          </label>
+
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
             <input
