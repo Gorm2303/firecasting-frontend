@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../api/simulation', () => {
   return {
@@ -24,13 +24,15 @@ describe('NormalInputForm scenarios', () => {
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2033-02-03' } });
 
+    fireEvent.click(screen.getByRole('button', { name: /Open saved scenarios/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
 
     // Change the form away from the saved config
     fireEvent.change(startDate, { target: { value: '2044-04-04' } });
 
     // Select saved scenario
-    const scenarioSelect = screen.getByLabelText(/Saved scenario:/i) as HTMLSelectElement;
+    const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
+    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
     await waitFor(() => {
       expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
     });
