@@ -19,6 +19,7 @@ import {
 import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { QRCodeSVG } from 'qrcode.react';
+import AssumptionsPanel from './AssumptionsPanel';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -156,6 +157,7 @@ export default function SimulationForm({
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
@@ -439,9 +441,30 @@ export default function SimulationForm({
   const inputWrapperStyle = { width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' } as const;
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div style={inputWrapperStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>Inputs</div>
+            <button
+              type="button"
+              onClick={() => setAssumptionsOpen((v) => !v)}
+              aria-expanded={assumptionsOpen}
+              aria-controls="assumptions-panel"
+              title="Explain modeling assumptions"
+              style={{
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1px solid #333',
+                background: assumptionsOpen ? '#1e1e1e' : '#111',
+                color: '#fff',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Assumptions
+            </button>
+          </div>
           <label style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Template:</span>
             <select
@@ -494,6 +517,12 @@ export default function SimulationForm({
             />
           </label>
         </div>
+
+        {assumptionsOpen && (
+          <div id="assumptions-panel">
+            <AssumptionsPanel request={currentRequest} />
+          </div>
+        )}
       </div>
 
       <div data-tour="phase-list">
