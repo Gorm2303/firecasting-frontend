@@ -111,14 +111,18 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
         {
           phaseType: 'DEPOSIT',
           durationInMonths: 30 * 12,
-          initialDeposit: 500,
-          monthlyDeposit: 500,
+          initialDeposit: 825,
+          monthlyDeposit: 825,
           yearlyIncreaseInPercentage: 1.5,
+        },
+        {
+            phaseType: 'PASSIVE', 
+            durationInMonths: 15 * 12 
         },
         {
             phaseType: 'WITHDRAW', 
             durationInMonths: 1 * 12,
-            withdrawAmount: 30000,
+            withdrawAmount: 100000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
         }
@@ -143,8 +147,8 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
         },
         {
             phaseType: 'WITHDRAW', 
-            durationInMonths: 5 * 12,
-            withdrawAmount: 5000,
+            durationInMonths: 1,
+            withdrawAmount: 123000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
             taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
