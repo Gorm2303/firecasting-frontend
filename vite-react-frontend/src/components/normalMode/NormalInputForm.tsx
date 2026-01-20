@@ -1,5 +1,5 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
@@ -17,6 +17,9 @@ import {
   type SavedScenario,
 } from '../../config/savedScenarios';
 import { deepEqual } from '../../utils/deepEqual';
+import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { QRCodeSVG } from 'qrcode.react';
+import InfoTooltip from '../InfoTooltip';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -153,9 +156,18 @@ export default function SimulationForm({
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string>('');
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
+
+  const scenarioParamOnLoad = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('scenario');
+    } catch {
+      return null;
+    }
+  }, []);
 
   const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
   const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) =>
@@ -212,6 +224,7 @@ export default function SimulationForm({
 
   const closeScenarioModal = useCallback(() => {
     setIsScenarioModalOpen(false);
+    setShareUrl('');
   }, []);
 
   useEffect(() => {
@@ -282,6 +295,35 @@ export default function SimulationForm({
     closeScenarioModal();
   }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
 
+  const handleShareScenario = useCallback(() => {
+    if (!selectedScenarioId) return;
+    const scenario = findScenarioById(selectedScenarioId);
+    if (!scenario) return;
+
+    const ok = window.confirm(
+      'This share link encodes your full scenario inputs in the URL. Anyone with the link can view/decode them. Continue?'
+    );
+    if (!ok) return;
+
+    const param = encodeScenarioToShareParam(scenario.request);
+    const url = new URL(window.location.href);
+    url.pathname = '/simulation';
+    url.searchParams.set('scenario', param);
+    setShareUrl(url.toString());
+  }, [selectedScenarioId]);
+
+  const handleCopyShareUrl = useCallback(async () => {
+    if (!shareUrl) return;
+    try {
+      const writeText = navigator.clipboard?.writeText;
+      if (typeof writeText !== 'function') throw new Error('Clipboard API unavailable');
+      await writeText.call(navigator.clipboard, shareUrl);
+      window.alert('Share link copied to clipboard.');
+    } catch {
+      window.prompt('Copy share link:', shareUrl);
+    }
+  }, [shareUrl]);
+
   const handleDeleteScenario = useCallback(() => {
     if (!selectedScenarioId) return;
     const scenario = findScenarioById(selectedScenarioId);
@@ -322,9 +364,48 @@ export default function SimulationForm({
     setBaselineRequest(resolved);
   }, [isDirty]);
 
+  const hasAppliedInitialTemplateRef = useRef(false);
   useEffect(() => {
+    if (hasAppliedInitialTemplateRef.current) return;
+    hasAppliedInitialTemplateRef.current = true;
+
+    if (scenarioParamOnLoad) return;
     applyTemplate(selectedTemplateId); // Apply starter template on first load
-  }, []);
+  }, [applyTemplate, scenarioParamOnLoad, selectedTemplateId]);
+
+  const hasAppliedScenarioFromUrlRef = useRef(false);
+  useEffect(() => {
+    if (hasAppliedScenarioFromUrlRef.current) return;
+    if (!scenarioParamOnLoad) return;
+
+    const decoded = decodeScenarioFromShareParam(scenarioParamOnLoad);
+    if (!decoded) {
+      hasAppliedScenarioFromUrlRef.current = true;
+      window.alert('Invalid or corrupted share link.');
+      return;
+    }
+
+    const okPrivacy = window.confirm(
+      'This link contains a scenario encoded in the URL. Anyone with the link can decode it. Load and run it now?'
+    );
+    if (!okPrivacy) {
+      hasAppliedScenarioFromUrlRef.current = true;
+      return;
+    }
+
+    if (isDirty) {
+      const okOverwrite = window.confirm('Loading this scenario will overwrite your current inputs. Continue?');
+      if (!okOverwrite) {
+        hasAppliedScenarioFromUrlRef.current = true;
+        return;
+      }
+    }
+
+    applyRequestToForm(decoded);
+    setSelectedScenarioId('');
+    void runSimulationWithRequest(decoded);
+    hasAppliedScenarioFromUrlRef.current = true;
+  }, [applyRequestToForm, isDirty, runSimulationWithRequest, scenarioParamOnLoad]);
 
   const handleAddDefaultPhase = () => {
     handleAddPhase(createDefaultPhase('DEPOSIT'));
@@ -356,7 +437,7 @@ export default function SimulationForm({
 
   // Optional: give stable anchors for selectors
   // Add data attributes to key controls to avoid fragile text-based selectors
-  const inputWrapperStyle = { width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' } as const;
+  const inputWrapperStyle = { width: 275, display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'stretch' } as const;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
@@ -364,18 +445,23 @@ export default function SimulationForm({
         <div style={inputWrapperStyle}>
           <label style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Template:</span>
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
-              disabled={simulateInProgress}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            >
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              >
               {SIMULATION_TEMPLATES.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
               ))}
-            </select>
+              </select>
+              <InfoTooltip label="Info: Template">
+                A template fills in a complete example scenario (phases + taxes). Selecting a new template overwrites the current inputs.
+              </InfoTooltip>
+            </div>
             <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
               {selectedTemplate.description}
             </div>
@@ -383,35 +469,50 @@ export default function SimulationForm({
 
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            />
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              />
+              <InfoTooltip label="Info: Start date">
+                The simulation timeline begins here. Phase durations are applied month-by-month starting from this date.
+              </InfoTooltip>
+            </div>
           </label>
 
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
-            <select
-              value={overallTaxRule}
-              onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            >
-              <option value="CAPITAL">Capital Gains</option>
-              <option value="NOTIONAL">Notional Gains</option>
-            </select>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <select
+                value={overallTaxRule}
+                onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              >
+                <option value="CAPITAL">Capital Gains</option>
+                <option value="NOTIONAL">Notional Gains</option>
+              </select>
+              <InfoTooltip label="Info: Tax rule">
+                Choose how taxes are applied. Capital gains tax happens when you withdraw. Notional gains tax happens at year-end on gains since the prior year-end.
+              </InfoTooltip>
+            </div>
           </label>
 
           <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
-            <input
-              type="number"
-              step="0.01"
-              value={taxPercentage}
-              onChange={e => setTaxPercentage(+e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            />
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                type="number"
+                step="0.01"
+                value={taxPercentage}
+                onChange={e => setTaxPercentage(+e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              />
+              <InfoTooltip label="Info: Tax percentage">
+                The tax rate applied by the selected tax rule. Phase exemptions (e.g. exemption card / stock exemption) reduce what gets taxed.
+              </InfoTooltip>
+            </div>
           </label>
         </div>
       </div>
@@ -580,6 +681,16 @@ export default function SimulationForm({
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 type="button"
+                aria-label="Share scenario"
+                title="Share (creates a link that loads + runs)"
+                onClick={handleShareScenario}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🔗</span>
+              </button>
+              <button
+                type="button"
                 aria-label="Load scenario"
                 title="Load (also runs simulation)"
                 onClick={() => handleLoadScenario(selectedScenarioId)}
@@ -617,6 +728,48 @@ export default function SimulationForm({
                 <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🗑</span>
               </button>
             </div>
+
+            {shareUrl && (
+              <div style={{ marginTop: 6, borderTop: '1px solid #2a2a2a', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
+                  This link encodes your full scenario inputs in the URL (anyone with it can decode them).
+                </div>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Share link</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      aria-label="Share link"
+                      readOnly
+                      value={shareUrl}
+                      style={{
+                        flex: 1,
+                        padding: '0.35rem 0.45rem',
+                        fontSize: '0.9rem',
+                        borderRadius: 8,
+                        border: '1px solid #333',
+                        background: '#0b0b0b',
+                        color: '#fff',
+                      }}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Copy share link"
+                      title="Copy"
+                      onClick={handleCopyShareUrl}
+                      style={btn('ghost')}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </label>
+
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 8, background: '#fff', borderRadius: 10 }}>
+                  <QRCodeSVG value={shareUrl} width={220} height={220} includeMargin />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
