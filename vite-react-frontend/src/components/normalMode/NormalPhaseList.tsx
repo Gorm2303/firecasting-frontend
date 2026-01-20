@@ -1,5 +1,6 @@
 import React from 'react';
 import { PhaseRequest } from '../../models/types';
+import { createDefaultPhase } from '../../config/simulationDefaults';
 
 type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
 
@@ -8,8 +9,9 @@ interface PhaseListProps {
   onPhaseChange: (
     index: number,
     field: keyof PhaseRequest,
-    value: number | string
+    value: number | string | undefined
   ) => void;
+  onPhaseReplace: (index: number, phase: PhaseRequest) => void;
   onPhaseRemove: (index: number) => void;
   onToggleTaxRule: (index: number, rule: ExemptionRule) => void;
 }
@@ -46,6 +48,7 @@ const normaliseDuration = (years: number, months: number) => {
 const PhaseList: React.FC<PhaseListProps> = ({
   phases,
   onPhaseChange,
+  onPhaseReplace,
   onPhaseRemove,
   onToggleTaxRule,
 }) => {
@@ -81,6 +84,49 @@ const PhaseList: React.FC<PhaseListProps> = ({
       onPhaseChange(idx, 'durationInMonths', totalMonths);
     };
 
+  const handlePhaseTypeChange =
+    (idx: number) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextType = e.target.value as PhaseRequest['phaseType'];
+      const current = phases[idx];
+      const base = createDefaultPhase(nextType);
+      onPhaseReplace(idx, {
+        ...base,
+        durationInMonths: current?.durationInMonths ?? base.durationInMonths,
+        taxRules: current?.taxRules ?? [],
+      });
+    };
+
+  const getWithdrawMode = (p: PhaseRequest): 'RATE' | 'AMOUNT' => {
+    const rate = Number(p.withdrawRate ?? 0);
+    const amount = Number(p.withdrawAmount ?? 0);
+    return rate > 0 && amount === 0 ? 'RATE' : 'AMOUNT';
+  };
+
+  const handleWithdrawModeChange =
+    (idx: number) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const mode = e.target.value as 'RATE' | 'AMOUNT';
+      const current = phases[idx];
+      if (!current || current.phaseType !== 'WITHDRAW') return;
+
+      if (mode === 'RATE') {
+        onPhaseReplace(idx, {
+          ...current,
+          withdrawRate: Number(current.withdrawRate ?? 4) || 4,
+          withdrawAmount: 0,
+          lowerVariationPercentage: Number(current.lowerVariationPercentage ?? 0),
+          upperVariationPercentage: Number(current.upperVariationPercentage ?? 0),
+        });
+      } else {
+        onPhaseReplace(idx, {
+          ...current,
+          withdrawAmount: Number(current.withdrawAmount ?? 10000) || 10000,
+          withdrawRate: 0,
+          lowerVariationPercentage: Number(current.lowerVariationPercentage ?? 0),
+          upperVariationPercentage: Number(current.upperVariationPercentage ?? 0),
+        });
+      }
+    };
+
   return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
       <div
@@ -93,7 +139,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
         }}
       >
         <h2 style={{ textAlign: 'center', fontSize: '1.5rem', margin: 0 }}>
-          Phases Added
+          Phases
         </h2>
 
         {phases.length === 0 ? (
@@ -103,6 +149,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
         ) : (
           phases.map((p, idx) => {
             const { years, months } = splitMonths(p.durationInMonths);
+            const withdrawMode = p.phaseType === 'WITHDRAW' ? getWithdrawMode(p) : 'AMOUNT';
 
             return (
               <div
@@ -156,6 +203,22 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     alignItems: 'center',
                   }}
                 >
+                  <span style={{ fontSize: '0.95rem' }}>Type:</span>
+                  <select
+                    value={p.phaseType}
+                    onChange={handlePhaseTypeChange(idx)}
+                    style={{
+                      width: '100%',
+                      padding: '0.15rem 0.3rem',
+                      boxSizing: 'border-box',
+                      fontSize: '0.95rem',
+                    }}
+                  >
+                    <option value="DEPOSIT">DEPOSIT</option>
+                    <option value="PASSIVE">PASSIVE</option>
+                    <option value="WITHDRAW">WITHDRAW</option>
+                  </select>
+
                   <span style={{ fontSize: '0.95rem' }}>Duration:</span>
                   <div
                     style={{
@@ -225,7 +288,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Initial Deposit:</span>
                       <input
                         type="number"
-                        value={p.initialDeposit}
+                        value={p.initialDeposit ?? ''}
                         onChange={handleChange(idx, 'initialDeposit')}
                         style={{
                           width: '100%',
@@ -238,7 +301,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Monthly Deposit:</span>
                       <input
                         type="number"
-                        value={p.monthlyDeposit}
+                        value={p.monthlyDeposit ?? ''}
                         onChange={handleChange(idx, 'monthlyDeposit')}
                         style={{
                           width: '100%',
@@ -252,7 +315,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <input
                         type="number"
                         step="0.01"
-                        value={p.yearlyIncreaseInPercentage}
+                        value={p.yearlyIncreaseInPercentage ?? ''}
                         onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
                         style={{
                           width: '100%',
@@ -266,28 +329,24 @@ const PhaseList: React.FC<PhaseListProps> = ({
 
                   {p.phaseType === 'WITHDRAW' && (
                     <>
-                      {p.withdrawAmount != null && p.withdrawAmount > 0 ? (
+                      <span style={{ fontSize: '0.95rem' }}>Withdraw Type:</span>
+                      <select
+                        value={withdrawMode}
+                        onChange={handleWithdrawModeChange(idx)}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      >
+                        <option value="RATE">Withdraw Rate</option>
+                        <option value="AMOUNT">Withdraw Amount</option>
+                      </select>
+
+                      {withdrawMode === 'RATE' ? (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Withdraw Amount:
-                          </span>
-                          <input
-                            type="number"
-                            value={p.withdrawAmount}
-                            onChange={handleChange(idx, 'withdrawAmount')}
-                            style={{
-                              width: '100%',
-                              padding: '0.15rem 0.3rem',
-                              boxSizing: 'border-box',
-                              fontSize: '0.95rem',
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Withdraw Rate %:
-                          </span>
+                          <span style={{ fontSize: '0.95rem' }}>Withdraw Rate %:</span>
                           <input
                             type="number"
                             step="0.01"
@@ -301,20 +360,13 @@ const PhaseList: React.FC<PhaseListProps> = ({
                             }}
                           />
                         </>
-                      )}
-
-                      {p.lowerVariationPercentage != null && (
+                      ) : (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Lower Variation %:
-                          </span>
+                          <span style={{ fontSize: '0.95rem' }}>Withdraw Amount:</span>
                           <input
                             type="number"
-                            value={p.lowerVariationPercentage}
-                            onChange={handleChange(
-                              idx,
-                              'lowerVariationPercentage'
-                            )}
+                            value={p.withdrawAmount ?? ''}
+                            onChange={handleChange(idx, 'withdrawAmount')}
                             style={{
                               width: '100%',
                               padding: '0.15rem 0.3rem',
@@ -325,27 +377,33 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         </>
                       )}
 
-                      {p.upperVariationPercentage != null && (
-                        <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Upper Variation %:
-                          </span>
-                          <input
-                            type="number"
-                            value={p.upperVariationPercentage}
-                            onChange={handleChange(
-                              idx,
-                              'upperVariationPercentage'
-                            )}
-                            style={{
-                              width: '100%',
-                              padding: '0.15rem 0.3rem',
-                              boxSizing: 'border-box',
-                              fontSize: '0.95rem',
-                            }}
-                          />
-                        </>
-                      )}
+                      <span style={{ fontSize: '0.95rem' }}>Lower Variation %:</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={p.lowerVariationPercentage ?? ''}
+                        onChange={handleChange(idx, 'lowerVariationPercentage')}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      />
+
+                      <span style={{ fontSize: '0.95rem' }}>Upper Variation %:</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={p.upperVariationPercentage ?? ''}
+                        onChange={handleChange(idx, 'upperVariationPercentage')}
+                        style={{
+                          width: '100%',
+                          padding: '0.15rem 0.3rem',
+                          boxSizing: 'border-box',
+                          fontSize: '0.95rem',
+                        }}
+                      />
                     </>
                   )}
                 </div>

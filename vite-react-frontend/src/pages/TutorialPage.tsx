@@ -11,7 +11,7 @@ const TutorialPage: React.FC = () => {
     { id:'start-date', title:'Start Date', body:'Pick when your simulation begins.', selector:'[data-tour="start-date"]', placement:'bottom' },
     { id:'tax-rule',   title:'Tax Rule',   body:'Choose Capital or Notional.', selector:'[data-tour="tax-rule"]', placement:'bottom' },
     { id:'tax-percent',title:'Tax %',      body:'Enter the tax percentage.', selector:'[data-tour="tax-percent"]', placement:'bottom' },
-    { id:'phase-form', title:'Add a Phase',body:'Add your first phase and keep defaults.', selector:'[data-tour="phase-form"]', placement:'top' },
+    { id:'phase-add', title:'Add a Phase',body:'Add a new phase (you can edit it in the list).', selector:'[data-tour="add-phase"]', placement:'top' },
     { id:'phase-list', title:'Review',     body:'Edit or remove phases here.', selector:'[data-tour="phase-list"]', placement:'bottom' },
     { id:'run',        title:'Run',        body:'Click to run and see results.', selector:'[data-tour="run"]', placement:'top' },
     { id:'done',       title:'All set!',   body:'You completed the tutorial.' },

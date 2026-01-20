@@ -48,6 +48,7 @@ const transformDataForBands = (source: any[]) => {
     // Difference between 75th and 25th quantile
     band25_75: d.quantile75 - d.quantile25,
     medianCapital: d.medianCapital,
+    negativeCapitalPercentage: d.negativeCapitalPercentage,
   }));
 };
 
@@ -69,6 +70,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
     const quantile25 = dataPoint.lower25;
     const quantile75 = dataPoint.lower25 + dataPoint.band25_75;
     const median = dataPoint.medianCapital;
+    const failPct = Number(dataPoint.negativeCapitalPercentage) || 0;
     const yearMonth = dataPoint.yearMonth || label;
     return (
       <div
@@ -86,6 +88,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
         <p style={{ margin: 0 }}>{`Median: ${formatNumber(median)}`}</p>
         <p style={{ margin: 0 }}>{`25th Quantile: ${formatNumber(quantile25)}`}</p>
         <p style={{ margin: 0 }}>{`5th Quantile: ${formatNumber(quantile5)}`}</p>
+        <p style={{ margin: '4px 0 0 0' }}>{`Failure Rate: ${failPct.toFixed(2)}%`}</p>
       </div>
     );
   }
@@ -152,6 +155,13 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
               label={{ value: 'Capital', angle: -90, position: 'insideBottomLeft' }}
               tickFormatter={formatNumber}
             />
+            <YAxis
+              yAxisId="failure"
+              orientation="right"
+              domain={[0, 100]}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v) => `${v}%`}
+            />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
 
@@ -180,6 +190,15 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
               strokeWidth={2}
               dot={false}
               name="Median Capital"
+            />
+            <Line
+              type="monotone"
+              yAxisId="failure"
+              dataKey="negativeCapitalPercentage"
+              stroke="#ff4d4d"
+              strokeWidth={2}
+              dot={false}
+              name="Failure Rate (%)"
             />
           </ComposedChart>
         </ResponsiveContainer>

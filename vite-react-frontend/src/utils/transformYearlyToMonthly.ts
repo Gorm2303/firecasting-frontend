@@ -90,9 +90,10 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
     const startYearFromRange = rangeStart ? rangeStart.getFullYear() : firstYear;
     const startMonthFromRange = rangeStart ? rangeStart.getMonth() + 1 : startMonth;
 
-    // End is exclusive: months at/after endDate's month are not produced.
+    // End month is inclusive: the endDate's month is produced.
+    // This intentionally duplicates the boundary month so it appears in both phases.
     const endYearFromRange = rangeEnd ? rangeEnd.getFullYear() : null;
-    const endMonthExclusiveFromRange = rangeEnd ? rangeEnd.getMonth() + 1 : null;
+    const endMonthInclusiveFromRange = rangeEnd ? rangeEnd.getMonth() + 1 : null;
 
     const startAnchor = options?.startAnchor;
 
@@ -104,8 +105,8 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
       const firstReported = yearlyForPhase[0];
       if (firstReported && syntheticYear0 < firstReported.year) {
         let monthEnd = 12;
-        if (endYearFromRange !== null && endMonthExclusiveFromRange !== null && endYearFromRange === syntheticYear0) {
-          monthEnd = endMonthExclusiveFromRange - 1;
+        if (endYearFromRange !== null && endMonthInclusiveFromRange !== null && endYearFromRange === syntheticYear0) {
+          monthEnd = endMonthInclusiveFromRange;
         }
 
         for (let month = startMonthFromRange; month <= monthEnd; month++) {
@@ -125,8 +126,8 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
       const monthStart = current.year === startYearFromRange ? startMonthFromRange : 1;
 
       let monthEnd = 12;
-      if (endYearFromRange !== null && current.year === endYearFromRange && endMonthExclusiveFromRange !== null) {
-        monthEnd = endMonthExclusiveFromRange - 1;
+      if (endYearFromRange !== null && current.year === endYearFromRange && endMonthInclusiveFromRange !== null) {
+        monthEnd = endMonthInclusiveFromRange;
       }
 
       if (monthEnd < monthStart) {

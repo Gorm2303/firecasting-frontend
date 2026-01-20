@@ -1,12 +1,22 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
-import NormalPhaseForm from '../../components/normalMode/NormalPhaseForm';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import ExportStatisticsButton from '../../components/ExportStatisticsButton';
 import SimulationProgress from '../../components/SimulationProgress';
 import { startSimulation, exportSimulationCsv } from '../../api/simulation';
+import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
+import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
+import {
+  deleteScenario,
+  findScenarioById,
+  findScenarioByName,
+  listSavedScenarios,
+  saveScenario,
+  type SavedScenario,
+} from '../../config/savedScenarios';
+import { deepEqual } from '../../utils/deepEqual';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -126,19 +136,32 @@ export default function SimulationForm({
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
 }) {
-  // same state as NormalInputForm
-  const [startDate, setStartDate] = useState('2025-01-01');
-  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>('CAPITAL');
-  const [taxPercentage, setTaxPercentage] = useState(42);
-  const [phases, setPhases] = useState<PhaseRequest[]>([]);
+  const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
+  const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
+  const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>(initialDefaults.overallTaxRule);
+  const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
+  const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
+  const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
+    ...initialDefaults,
+    startDate: { date: initialDefaults.startDate.date },
+    phases: initialDefaults.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+  }));
+
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
+  const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
 
   const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
-  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string) =>
+  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) =>
     setPhases(phs => phs.map((p, i) => (i === index ? { ...p, [field]: value as any } : p)));
+  const handlePhaseReplace = (index: number, phase: PhaseRequest) =>
+    setPhases(phs => phs.map((p, i) => (i === index ? { ...phase, taxRules: phase.taxRules ?? [] } : p)));
   const handlePhaseRemove = (index: number) => setPhases(phs => phs.filter((_, i) => i !== index));
   const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') =>
     setPhases(phs =>
@@ -154,27 +177,167 @@ export default function SimulationForm({
   const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
   const overLimit = totalMonths > MAX_MONTHS;
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (overLimit) {
-      alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(totalMonths)}).`);
+  const currentRequest = useMemo<SimulationRequest>(() => {
+    return {
+      startDate: { date: startDate },
+      overallTaxRule,
+      taxPercentage,
+      phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+    };
+  }, [startDate, overallTaxRule, taxPercentage, phases]);
+
+  const isDirty = useMemo(() => !deepEqual(currentRequest, baselineRequest), [currentRequest, baselineRequest]);
+
+  const applyRequestToForm = useCallback((req: SimulationRequest) => {
+    setStartDate(req.startDate.date);
+    setOverallTaxRule(req.overallTaxRule);
+    setTaxPercentage(req.taxPercentage);
+    setPhases(req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+    setBaselineRequest({
+      ...req,
+      startDate: { date: req.startDate.date },
+      phases: req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+    });
+    setSelectedTemplateId('custom');
+  }, []);
+
+  const refreshSavedScenarios = useCallback(() => {
+    setSavedScenarios(listSavedScenarios());
+  }, []);
+
+  const openScenarioModal = useCallback(() => {
+    refreshSavedScenarios();
+    setIsScenarioModalOpen(true);
+  }, [refreshSavedScenarios]);
+
+  const closeScenarioModal = useCallback(() => {
+    setIsScenarioModalOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isScenarioModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeScenarioModal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [closeScenarioModal, isScenarioModalOpen]);
+
+  const handleSaveScenario = useCallback(() => {
+    const name = window.prompt('Scenario name?');
+    if (!name) return;
+
+    const existing = findScenarioByName(name);
+    if (existing) {
+      const ok = window.confirm(`Overwrite existing scenario "${existing.name}"?`);
+      if (!ok) return;
+      const saved = saveScenario(existing.name, currentRequest, existing.id);
+      refreshSavedScenarios();
+      setSelectedScenarioId(saved.id);
       return;
     }
+
+    const saved = saveScenario(name, currentRequest);
+    refreshSavedScenarios();
+    setSelectedScenarioId(saved.id);
+  }, [currentRequest, refreshSavedScenarios]);
+
+  const runSimulationWithRequest = useCallback(async (req: SimulationRequest) => {
+    const total = (req.phases ?? []).reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
+    if (total > MAX_MONTHS) {
+      alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(total)}).`);
+      return;
+    }
+
     setSimulateInProgress(true);
     setStats(null);
     setSimulationId(null);
+
     try {
-      const id = await startSimulation({
-        startDate: { date: startDate },
-        overallTaxRule,
-        taxPercentage,
-        phases,
-      } as SimulationRequest);
+      const sanitized: SimulationRequest = {
+        ...req,
+        startDate: { date: req.startDate.date },
+        phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      };
+
+      const id = await startSimulation(sanitized);
       setSimulationId(id);
     } catch (err) {
       alert((err as Error).message);
       setSimulateInProgress(false);
     }
+  }, []);
+
+  const handleLoadScenario = useCallback((scenarioId: string) => {
+    if (!scenarioId) return;
+    const scenario = findScenarioById(scenarioId);
+    if (!scenario) return;
+    if (isDirty) {
+      const ok = window.confirm('Loading a scenario will overwrite your current inputs. Continue?');
+      if (!ok) return;
+    }
+    applyRequestToForm(scenario.request);
+    setSelectedScenarioId(scenario.id);
+    void runSimulationWithRequest(scenario.request);
+    closeScenarioModal();
+  }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
+
+  const handleDeleteScenario = useCallback(() => {
+    if (!selectedScenarioId) return;
+    const scenario = findScenarioById(selectedScenarioId);
+    const ok = window.confirm(`Delete scenario "${scenario?.name ?? 'this scenario'}"?`);
+    if (!ok) return;
+    deleteScenario(selectedScenarioId);
+    refreshSavedScenarios();
+    setSelectedScenarioId('');
+  }, [refreshSavedScenarios, selectedScenarioId]);
+
+  const selectedTemplate = useMemo(() => getTemplateById(selectedTemplateId), [selectedTemplateId]);
+
+  useEffect(() => {
+    if (selectedTemplateId !== 'custom' && isDirty) {
+      setSelectedTemplateId('custom');
+    }
+  }, [isDirty, selectedTemplateId]);
+
+  const applyTemplate = useCallback((templateId: SimulationTemplateId) => {
+    const template = getTemplateById(templateId);
+
+    if (templateId !== 'custom' && isDirty) {
+      const ok = window.confirm('Applying a template will overwrite your current inputs. Continue?');
+      if (!ok) return;
+    }
+
+    setSelectedTemplateId(templateId);
+
+    if (templateId === 'custom') {
+      return;
+    }
+
+    const resolved = resolveTemplateToRequest(template);
+    setStartDate(resolved.startDate.date);
+    setOverallTaxRule(resolved.overallTaxRule);
+    setTaxPercentage(resolved.taxPercentage);
+    setPhases(resolved.phases);
+    setBaselineRequest(resolved);
+  }, [isDirty]);
+
+  useEffect(() => {
+    applyTemplate(selectedTemplateId); // Apply starter template on first load
+  }, []);
+
+  const handleAddDefaultPhase = () => {
+    handleAddPhase(createDefaultPhase('DEPOSIT'));
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    void runSimulationWithRequest({
+      startDate: { date: startDate },
+      overallTaxRule,
+      taxPercentage,
+      phases,
+    });
   };
 
   // --- tutorial stepper (only if steps provided) ---
@@ -199,6 +362,25 @@ export default function SimulationForm({
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={inputWrapperStyle}>
+          <label style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '1.1rem' }}>Template:</span>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
+              disabled={simulateInProgress}
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
+            >
+              {SIMULATION_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
+              {selectedTemplate.description}
+            </div>
+          </label>
+
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
             <input
@@ -234,18 +416,25 @@ export default function SimulationForm({
         </div>
       </div>
 
-      {/* Reuse your existing components */}
-      <div data-tour="phase-form">
-        <NormalPhaseForm onAddPhase={handleAddPhase} />
-      </div>
       <div data-tour="phase-list">
         <NormalPhaseList
           phases={phases}
           onPhaseChange={handlePhaseChange}
+          onPhaseReplace={handlePhaseReplace}
           onPhaseRemove={handlePhaseRemove}
           onToggleTaxRule={handlePhaseToggleRule}
         />
       </div>
+
+      <button
+        data-tour="add-phase"
+        type="button"
+        onClick={handleAddDefaultPhase}
+        disabled={simulateInProgress}
+        style={{ padding: '0.75rem', fontSize: '1.1rem', marginTop: '0.25rem', opacity: simulateInProgress ? 0.65 : 1 }}
+      >
+        Add Phase
+      </button>
 
       <div style={{ margin: '0.5rem 0', fontWeight: 600 }}>
         Total duration: {formatYearsMonths(totalMonths)} (max {MAX_YEARS} years)
@@ -260,6 +449,25 @@ export default function SimulationForm({
       >
         {simulateInProgress ? 'Running…' : 'Run Simulation'}
       </button>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <button
+          type="button"
+          aria-label="Saved scenarios"
+          title="Saved scenarios"
+          onClick={openScenarioModal}
+          disabled={simulateInProgress}
+          style={{
+            ...btn(simulateInProgress ? 'disabled' : 'ghost'),
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span aria-hidden="true">🗂</span>
+          <span>Saved scenarios</span>
+        </button>
+      </div>
 
       {simulateInProgress && simulationId && (
         <SimulationProgress
@@ -304,6 +512,113 @@ export default function SimulationForm({
           isFirst={isFirst}
           isLast={isLast}
         />
+      )}
+
+      {isScenarioModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Saved scenarios"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000000,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeScenarioModal();
+          }}
+        >
+          <div
+            style={{
+              width: 'min(420px, 92vw)',
+              background: '#111',
+              color: '#fff',
+              border: '1px solid #333',
+              borderRadius: 12,
+              padding: 14,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>Saved scenarios</div>
+              <button
+                type="button"
+                aria-label="Close saved scenarios"
+                title="Close"
+                onClick={closeScenarioModal}
+                style={btn('ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1, display: 'inline-block' }}>✕</span>
+              </button>
+            </div>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Scenario</span>
+              <select
+                value={selectedScenarioId}
+                onChange={(e) => setSelectedScenarioId(e.target.value)}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
+              >
+                <option value="">— Select —</option>
+                {savedScenarios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                aria-label="Load scenario"
+                title="Load (also runs simulation)"
+                onClick={() => handleLoadScenario(selectedScenarioId)}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>▶</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Save scenario"
+                title="Save"
+                onClick={handleSaveScenario}
+                disabled={simulateInProgress}
+                style={btn(simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>💾</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Delete scenario"
+                title="Delete"
+                onClick={handleDeleteScenario}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={
+                  !selectedScenarioId || simulateInProgress
+                    ? btn('disabled')
+                    : {
+                        ...btn('ghost'),
+                        color: 'crimson',
+                        borderColor: 'crimson',
+                      }
+                }
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🗑</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </form>
   );
