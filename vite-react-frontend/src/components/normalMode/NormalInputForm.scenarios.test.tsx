@@ -1,12 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+vi.mock('../../api/simulation', () => {
+  return {
+    startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
+    exportSimulationCsv: vi.fn(),
+  };
+});
+
 import SimulationForm from './NormalInputForm';
 
 describe('NormalInputForm scenarios', () => {
   it('saves and reloads a scenario with identical inputs', async () => {
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('My scenario');
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     window.localStorage.clear();
 
@@ -27,11 +36,15 @@ describe('NormalInputForm scenarios', () => {
     });
 
     fireEvent.change(scenarioSelect, { target: { value: scenarioSelect.querySelectorAll('option')[1].getAttribute('value') } });
-    fireEvent.click(screen.getByRole('button', { name: /^Load$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Load scenario/i }));
 
-    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+    });
+
     expect(startDate.value).toBe('2033-02-03');
 
     promptSpy.mockRestore();
+    alertSpy.mockRestore();
   });
 });
