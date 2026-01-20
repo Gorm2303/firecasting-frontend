@@ -192,7 +192,56 @@ const InfoPage: React.FC = () => {
 
         <section>
           <h2 tabIndex={-1}>Assumptions and Limitations</h2>
-          <p>List and description of assumptions and limitations in the application.</p>
+          <p>
+            This simulator is intentionally opinionated and simplified. The goal is to be useful for planning and exploring
+            tradeoffs, not to perfectly model every detail of a real brokerage account.
+          </p>
+
+          <details open>
+            <summary><strong>Returns (market model)</strong></summary>
+            <p>
+              Normal mode uses a data-driven return model based on historical DJIA prices. The engine samples returns over time
+              rather than using a single fixed annual rate.
+            </p>
+            <p>
+              Limitation: past returns do not guarantee future performance; the model does not guarantee “regime changes” match
+              reality.
+            </p>
+          </details>
+
+          <details>
+            <summary><strong>Inflation</strong></summary>
+            <p>
+              Normal mode currently assumes a fixed yearly inflation factor of <strong>1.02</strong> (≈ 2%/year). Inflation compounds
+              at year-end inside the simulation.
+            </p>
+            <p>
+              Withdrawals are inflation-adjusted over time, meaning “10,000/month” is treated like a real-spending target that
+              increases as prices rise.
+            </p>
+          </details>
+
+          <details>
+            <summary><strong>Tax timing</strong></summary>
+            <p>
+              Taxes depend on the selected tax rule:
+            </p>
+            <ul>
+              <li><strong>Notional gains</strong>: applied at year-end on gains since the previous year-end.</li>
+              <li><strong>Capital gains</strong>: applied when withdrawing (month-end), on the portion treated as gains.</li>
+            </ul>
+            <p>
+              Phase exemptions (e.g. exemption card / stock exemption) reduce the taxable amount before the tax rate is applied.
+            </p>
+          </details>
+
+          <details>
+            <summary><strong>Rebalancing / asset allocation</strong></summary>
+            <p>
+              Normal mode tracks a single pooled portfolio value. There is no explicit asset allocation or rebalancing input.
+              Deposits, withdrawals, returns, and taxes all apply to the same pool.
+            </p>
+          </details>
         </section>
 
         <section>
