@@ -196,7 +196,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '160px auto',
-                    columnGap: '0.5rem',
+                    columnGap: '0.3rem',
                     rowGap: '0.3rem',
                     alignItems: 'center',
                   }}
