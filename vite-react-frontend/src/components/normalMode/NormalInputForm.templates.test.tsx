@@ -8,10 +8,10 @@ describe('NormalInputForm templates', () => {
 
     render(<SimulationForm />);
 
-    const templateSelect = screen.getByLabelText('Template:') as HTMLSelectElement;
+    const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
     fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
 
-    const startDate = screen.getByLabelText('Start Date:') as HTMLInputElement;
+    const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     expect(startDate.value).toBe('2040-01-01');
 
     expect(screen.getByRole('note')).toHaveTextContent('Starts later');
@@ -23,10 +23,10 @@ describe('NormalInputForm templates', () => {
 
     render(<SimulationForm />);
 
-    const startDate = screen.getByLabelText('Start Date:') as HTMLInputElement;
+    const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2030-01-01' } });
 
-    const templateSelect = screen.getByLabelText('Template:') as HTMLSelectElement;
+    const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
     fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
