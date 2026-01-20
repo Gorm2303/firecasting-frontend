@@ -19,7 +19,7 @@ import {
 import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { QRCodeSVG } from 'qrcode.react';
-import AssumptionsPanel from './AssumptionsPanel';
+import InfoTooltip from '../InfoTooltip';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -157,7 +157,6 @@ export default function SimulationForm({
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
-  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
@@ -441,44 +440,28 @@ export default function SimulationForm({
   const inputWrapperStyle = { width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' } as const;
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={inputWrapperStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>Inputs</div>
-            <button
-              type="button"
-              onClick={() => setAssumptionsOpen((v) => !v)}
-              aria-expanded={assumptionsOpen}
-              aria-controls="assumptions-panel"
-              title="Explain modeling assumptions"
-              style={{
-                padding: '6px 10px',
-                borderRadius: 8,
-                border: '1px solid #333',
-                background: assumptionsOpen ? '#1e1e1e' : '#111',
-                color: '#fff',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Assumptions
-            </button>
-          </div>
           <label style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Template:</span>
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
-              disabled={simulateInProgress}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              >
               {SIMULATION_TEMPLATES.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
               ))}
-            </select>
+              </select>
+              <InfoTooltip label="Info: Template">
+                A template fills in a complete example scenario (phases + taxes). Selecting a new template overwrites the current inputs.
+              </InfoTooltip>
+            </div>
             <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
               {selectedTemplate.description}
             </div>
@@ -486,43 +469,52 @@ export default function SimulationForm({
 
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              />
+              <InfoTooltip label="Info: Start date">
+                The simulation timeline begins here. Phase durations are applied month-by-month starting from this date.
+              </InfoTooltip>
+            </div>
           </label>
 
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
-            <select
-              value={overallTaxRule}
-              onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            >
-              <option value="CAPITAL">Capital Gains</option>
-              <option value="NOTIONAL">Notional Gains</option>
-            </select>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={overallTaxRule}
+                onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              >
+                <option value="CAPITAL">Capital Gains</option>
+                <option value="NOTIONAL">Notional Gains</option>
+              </select>
+              <InfoTooltip label="Info: Tax rule">
+                Choose how taxes are applied. Capital gains tax happens when you withdraw. Notional gains tax happens at year-end on gains since the prior year-end.
+              </InfoTooltip>
+            </div>
           </label>
 
           <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
-            <input
-              type="number"
-              step="0.01"
-              value={taxPercentage}
-              onChange={e => setTaxPercentage(+e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem' }}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="number"
+                step="0.01"
+                value={taxPercentage}
+                onChange={e => setTaxPercentage(+e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+              />
+              <InfoTooltip label="Info: Tax percentage">
+                The tax rate applied by the selected tax rule. Phase exemptions (e.g. exemption card / stock exemption) reduce what gets taxed.
+              </InfoTooltip>
+            </div>
           </label>
         </div>
-
-        {assumptionsOpen && (
-          <div id="assumptions-panel">
-            <AssumptionsPanel request={currentRequest} />
-          </div>
-        )}
       </div>
 
       <div data-tour="phase-list">

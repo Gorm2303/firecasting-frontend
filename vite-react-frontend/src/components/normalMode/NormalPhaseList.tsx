@@ -1,6 +1,7 @@
 import React from 'react';
 import { PhaseRequest } from '../../models/types';
 import { createDefaultPhase } from '../../config/simulationDefaults';
+import InfoTooltip from '../InfoTooltip';
 
 type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
 
@@ -219,7 +220,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     <option value="WITHDRAW">WITHDRAW</option>
                   </select>
 
-                  <span style={{ fontSize: '0.95rem' }}>Duration:</span>
+                  <span style={{ fontSize: '0.95rem' }}>
+                    Duration:
+                    <InfoTooltip label="Info: Phase duration">
+                      How long this phase lasts. The simulation advances month-by-month.
+                    </InfoTooltip>
+                  </span>
                   <div
                     style={{
                       display: 'flex',
@@ -285,7 +291,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
 
                   {p.phaseType === 'DEPOSIT' && (
                     <>
-                      <span style={{ fontSize: '0.95rem' }}>Initial Deposit:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Initial Deposit:
+                        <InfoTooltip label="Info: Initial deposit">
+                          A one-time deposit at the beginning of this phase.
+                        </InfoTooltip>
+                      </span>
                       <input
                         type="number"
                         value={p.initialDeposit ?? ''}
@@ -298,7 +309,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         }}
                       />
 
-                      <span style={{ fontSize: '0.95rem' }}>Monthly Deposit:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Monthly Deposit:
+                        <InfoTooltip label="Info: Monthly deposit">
+                          Added at each month-end during this phase.
+                        </InfoTooltip>
+                      </span>
                       <input
                         type="number"
                         value={p.monthlyDeposit ?? ''}
@@ -311,7 +327,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         }}
                       />
 
-                      <span style={{ fontSize: '0.95rem' }}>Yearly Increase %:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Yearly Increase %:
+                        <InfoTooltip label="Info: Yearly deposit increase">
+                          Increases the monthly deposit once per year by this percentage.
+                        </InfoTooltip>
+                      </span>
                       <input
                         type="number"
                         step="0.01"
@@ -329,7 +350,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
 
                   {p.phaseType === 'WITHDRAW' && (
                     <>
-                      <span style={{ fontSize: '0.95rem' }}>Withdraw Type:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Withdraw Type:
+                        <InfoTooltip label="Info: Withdraw type">
+                          Choose whether you specify a fixed monthly amount, or a yearly withdrawal rate (as % of current portfolio).
+                        </InfoTooltip>
+                      </span>
                       <select
                         value={withdrawMode}
                         onChange={handleWithdrawModeChange(idx)}
@@ -346,7 +372,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
 
                       {withdrawMode === 'RATE' ? (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>Withdraw Rate %:</span>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Withdraw Rate %:
+                            <InfoTooltip label="Info: Withdraw rate">
+                              A yearly % of the current portfolio, converted to a monthly withdrawal.
+                            </InfoTooltip>
+                          </span>
                           <input
                             type="number"
                             step="0.01"
@@ -362,7 +393,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         </>
                       ) : (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>Withdraw Amount:</span>
+                          <span style={{ fontSize: '0.95rem' }}>
+                            Withdraw Amount:
+                            <InfoTooltip label="Info: Withdraw amount">
+                              A fixed monthly withdrawal amount. The engine inflation-adjusts this over time.
+                            </InfoTooltip>
+                          </span>
                           <input
                             type="number"
                             value={p.withdrawAmount ?? ''}
@@ -377,7 +413,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         </>
                       )}
 
-                      <span style={{ fontSize: '0.95rem' }}>Lower Variation %:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Lower Variation %:
+                        <InfoTooltip label="Info: Lower variation">
+                          If the last month return is negative, withdrawals can be reduced by up to this %.
+                        </InfoTooltip>
+                      </span>
                       <input
                         type="number"
                         step="0.01"
@@ -391,7 +432,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         }}
                       />
 
-                      <span style={{ fontSize: '0.95rem' }}>Upper Variation %:</span>
+                      <span style={{ fontSize: '0.95rem' }}>
+                        Upper Variation %:
+                        <InfoTooltip label="Info: Upper variation">
+                          If the last month return is positive, withdrawals can be increased by up to this %.
+                        </InfoTooltip>
+                      </span>
                       <input
                         type="number"
                         step="0.01"
@@ -415,7 +461,12 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     marginTop: '0.3rem',
                   }}
                 >
-                  <legend style={{ fontSize: '0.95rem' }}>Tax Exemptions</legend>
+                  <legend style={{ fontSize: '0.95rem' }}>
+                    Tax Exemptions
+                    <InfoTooltip label="Info: Tax exemptions">
+                      These reduce the taxable amount within this phase (before applying the overall tax rate).
+                    </InfoTooltip>
+                  </legend>
                   <label
                     style={{
                       display: 'block',
