@@ -437,7 +437,7 @@ export default function SimulationForm({
 
   // Optional: give stable anchors for selectors
   // Add data attributes to key controls to avoid fragile text-based selectors
-  const inputWrapperStyle = { width: 250, display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'stretch' } as const;
+  const inputWrapperStyle = { width: 275, display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'stretch' } as const;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
@@ -445,7 +445,7 @@ export default function SimulationForm({
         <div style={inputWrapperStyle}>
           <label style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Template:</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <select
                 value={selectedTemplateId}
                 onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
@@ -469,7 +469,7 @@ export default function SimulationForm({
 
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <input
                 type="date"
                 value={startDate}
@@ -484,7 +484,7 @@ export default function SimulationForm({
 
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <select
                 value={overallTaxRule}
                 onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
@@ -501,7 +501,7 @@ export default function SimulationForm({
 
           <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <input
                 type="number"
                 step="0.01"

@@ -132,16 +132,13 @@ const PhaseList: React.FC<PhaseListProps> = ({
     <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
       <div
         style={{
-          width: '360px',
+          width: '375px',
           display: 'flex',
           flexDirection: 'column',
           fontSize: '0.95rem',
           gap: '0.75rem',
         }}
       >
-        <h2 style={{ textAlign: 'center', fontSize: '1.5rem', margin: 0 }}>
-          Phases
-        </h2>
 
         {phases.length === 0 ? (
           <p style={{ textAlign: 'center', margin: '1rem 0' }}>
@@ -198,7 +195,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '140px auto',
+                    gridTemplateColumns: '160px auto',
                     columnGap: '0.5rem',
                     rowGap: '0.3rem',
                     alignItems: 'center',
