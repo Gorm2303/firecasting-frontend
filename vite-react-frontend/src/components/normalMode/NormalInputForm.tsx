@@ -2,12 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
-import NormalPhaseForm from '../../components/normalMode/NormalPhaseForm';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import ExportStatisticsButton from '../../components/ExportStatisticsButton';
 import SimulationProgress from '../../components/SimulationProgress';
 import { startSimulation, exportSimulationCsv } from '../../api/simulation';
-import { createDefaultSimulationRequest } from '../../config/simulationDefaults';
+import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
 import { deepEqual } from '../../utils/deepEqual';
 
@@ -148,8 +147,10 @@ export default function SimulationForm({
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
 
   const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
-  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string) =>
+  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) =>
     setPhases(phs => phs.map((p, i) => (i === index ? { ...p, [field]: value as any } : p)));
+  const handlePhaseReplace = (index: number, phase: PhaseRequest) =>
+    setPhases(phs => phs.map((p, i) => (i === index ? { ...phase, taxRules: phase.taxRules ?? [] } : p)));
   const handlePhaseRemove = (index: number) => setPhases(phs => phs.filter((_, i) => i !== index));
   const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') =>
     setPhases(phs =>
@@ -199,6 +200,10 @@ export default function SimulationForm({
     setPhases(resolved.phases);
     setBaselineRequest(resolved);
   }, [isDirty]);
+
+  const handleAddDefaultPhase = () => {
+    handleAddPhase(createDefaultPhase('DEPOSIT'));
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -302,18 +307,25 @@ export default function SimulationForm({
         </div>
       </div>
 
-      {/* Reuse your existing components */}
-      <div data-tour="phase-form">
-        <NormalPhaseForm onAddPhase={handleAddPhase} />
-      </div>
       <div data-tour="phase-list">
         <NormalPhaseList
           phases={phases}
           onPhaseChange={handlePhaseChange}
+          onPhaseReplace={handlePhaseReplace}
           onPhaseRemove={handlePhaseRemove}
           onToggleTaxRule={handlePhaseToggleRule}
         />
       </div>
+
+      <button
+        data-tour="add-phase"
+        type="button"
+        onClick={handleAddDefaultPhase}
+        disabled={simulateInProgress}
+        style={{ padding: '0.75rem', fontSize: '1.1rem', marginTop: '0.25rem', opacity: simulateInProgress ? 0.65 : 1 }}
+      >
+        Add Phase
+      </button>
 
       <div style={{ margin: '0.5rem 0', fontWeight: 600 }}>
         Total duration: {formatYearsMonths(totalMonths)} (max {MAX_YEARS} years)
