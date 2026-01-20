@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SimulationForm from './NormalInputForm';
+import { getTemplateById, resolveTemplateToRequest } from '../../config/simulationTemplates';
 
 describe('NormalInputForm templates', () => {
   it('applies Late starter template and shows explanation', () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
+    const expected = resolveTemplateToRequest(getTemplateById('late-starter'));
 
     render(<SimulationForm />);
 
@@ -12,9 +15,9 @@ describe('NormalInputForm templates', () => {
     fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
 
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
-    expect(startDate.value).toBe('2040-01-01');
+    expect(startDate.value).toBe(expected.startDate.date);
 
-    expect(screen.getByRole('note')).toHaveTextContent('Starts later');
+    expect(screen.getByRole('note')).toHaveTextContent(getTemplateById('late-starter').description);
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
@@ -31,5 +34,19 @@ describe('NormalInputForm templates', () => {
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(startDate.value).toBe('2030-01-01');
+  });
+
+  it('switches template back to Custom when editing', async () => {
+    render(<SimulationForm />);
+
+    const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
+    fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
+
+    const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
+    fireEvent.change(startDate, { target: { value: '2041-01-01' } });
+
+    await waitFor(() => {
+      expect((screen.getByLabelText(/Template:/i) as HTMLSelectElement).value).toBe('custom');
+    });
   });
 });

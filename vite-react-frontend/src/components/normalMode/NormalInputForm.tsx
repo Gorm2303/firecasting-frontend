@@ -179,6 +179,12 @@ export default function SimulationForm({
 
   const selectedTemplate = useMemo(() => getTemplateById(selectedTemplateId), [selectedTemplateId]);
 
+  useEffect(() => {
+    if (selectedTemplateId !== 'custom' && isDirty) {
+      setSelectedTemplateId('custom');
+    }
+  }, [isDirty, selectedTemplateId]);
+
   const applyTemplate = useCallback((templateId: SimulationTemplateId) => {
     const template = getTemplateById(templateId);
 
@@ -266,9 +272,6 @@ export default function SimulationForm({
             </select>
             <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
               {selectedTemplate.description}
-              {isDirty && selectedTemplateId !== 'custom' && (
-                <span style={{ display: 'block', marginTop: 2 }}>Edits detected — you’ll be asked before overwriting.</span>
-              )}
             </div>
           </label>
 
