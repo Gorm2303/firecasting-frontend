@@ -556,7 +556,7 @@ export default function SimulationForm({
                 onClick={closeScenarioModal}
                 style={btn('ghost')}
               >
-                <span aria-hidden="true">✕</span>
+                <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1, display: 'inline-block' }}>✕</span>
               </button>
             </div>
 
@@ -586,7 +586,7 @@ export default function SimulationForm({
                 disabled={!selectedScenarioId || simulateInProgress}
                 style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
               >
-                <span aria-hidden="true">📥</span>
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>▶</span>
               </button>
               <button
                 type="button"
@@ -596,7 +596,7 @@ export default function SimulationForm({
                 disabled={simulateInProgress}
                 style={btn(simulateInProgress ? 'disabled' : 'ghost')}
               >
-                <span aria-hidden="true">💾</span>
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>💾</span>
               </button>
               <button
                 type="button"
@@ -614,7 +614,7 @@ export default function SimulationForm({
                       }
                 }
               >
-                <span aria-hidden="true">🗑</span>
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🗑</span>
               </button>
             </div>
           </div>
