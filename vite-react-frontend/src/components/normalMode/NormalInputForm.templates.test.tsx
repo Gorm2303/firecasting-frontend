@@ -5,19 +5,19 @@ import SimulationForm from './NormalInputForm';
 import { getTemplateById, resolveTemplateToRequest } from '../../config/simulationTemplates';
 
 describe('NormalInputForm templates', () => {
-  it('applies Late starter template and shows explanation', () => {
+  it('applies Starter template and shows explanation', () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
-    const expected = resolveTemplateToRequest(getTemplateById('late-starter'));
+    const expected = resolveTemplateToRequest(getTemplateById('starter'));
 
     render(<SimulationForm />);
 
     const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
-    fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
+    fireEvent.change(templateSelect, { target: { value: 'starter' } });
 
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     expect(startDate.value).toBe(expected.startDate.date);
 
-    expect(screen.getByRole('note')).toHaveTextContent(getTemplateById('late-starter').description);
+    expect(screen.getByRole('note')).toHaveTextContent(getTemplateById('starter').description);
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
@@ -30,7 +30,7 @@ describe('NormalInputForm templates', () => {
     fireEvent.change(startDate, { target: { value: '2030-01-01' } });
 
     const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
-    fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
+    fireEvent.change(templateSelect, { target: { value: 'starter' } });
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(startDate.value).toBe('2030-01-01');
@@ -40,7 +40,7 @@ describe('NormalInputForm templates', () => {
     render(<SimulationForm />);
 
     const templateSelect = screen.getByLabelText(/Template:/i) as HTMLSelectElement;
-    fireEvent.change(templateSelect, { target: { value: 'late-starter' } });
+    fireEvent.change(templateSelect, { target: { value: 'starter' } });
 
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2041-01-01' } });

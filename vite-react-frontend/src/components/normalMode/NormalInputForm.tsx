@@ -135,7 +135,7 @@ export default function SimulationForm({
   const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
   const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('custom');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
   const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
     ...initialDefaults,
     startDate: { date: initialDefaults.startDate.date },
@@ -206,6 +206,10 @@ export default function SimulationForm({
     setPhases(resolved.phases);
     setBaselineRequest(resolved);
   }, [isDirty]);
+
+  useEffect(() => {
+    applyTemplate(selectedTemplateId); // Apply starter template on first load
+  }, []);
 
   const handleAddDefaultPhase = () => {
     handleAddPhase(createDefaultPhase('DEPOSIT'));

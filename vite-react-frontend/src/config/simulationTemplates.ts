@@ -1,7 +1,7 @@
 import type { PhaseRequest, SimulationRequest } from '../models/types';
 import { createDefaultSimulationRequest, normalizePhase } from './simulationDefaults';
 
-export type SimulationTemplateId = 'custom' | 'late-starter';
+export type SimulationTemplateId = 'starter' | 'custom' | 'aktiesparekonto' | 'aktiedepot' | 'pension' | 'childSavings';
 
 export type SimulationTemplate = {
   id: SimulationTemplateId;
@@ -19,28 +19,137 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
     description: 'Use your own inputs (no preset applied).',
   },
   {
-    id: 'late-starter',
-    label: 'Late starter',
-    description: 'Starts later with higher monthly deposits to compensate. You can tweak any value after applying.',
+    id: 'starter',
+    label: 'Starter',
+    description: 'A simple simulation with a 15-year deposit phase.',
     patch: {
-      startDate: { date: '2040-01-01' },
+      startDate: { date: '2026-01-01' },
       phases: [
-        // Deposit hard for 15 years
+        // Deposit for 15 years
         {
           phaseType: 'DEPOSIT',
           durationInMonths: 15 * 12,
           initialDeposit: 5000,
-          monthlyDeposit: 20000,
+          monthlyDeposit: 5000,
           yearlyIncreaseInPercentage: 2,
         },
-        // Then withdraw for 30 years
+      ],
+    },
+  },
+  {
+    id: 'aktiesparekonto',
+    label: 'Aktiesparekonto',
+    description: 'Simulation using the Danish "Aktiesparekonto" tax rules.',
+    patch: {
+      startDate: { date: '2026-01-01' },
+      overallTaxRule: 'NOTIONAL',
+      taxPercentage: 17,
+      phases: [
         {
-          phaseType: 'WITHDRAW',
-          durationInMonths: 30 * 12,
-          withdrawAmount: 25000,
-          lowerVariationPercentage: 0,
-          upperVariationPercentage: 0,
+          phaseType: 'DEPOSIT',
+          durationInMonths: 2 * 12,
+          initialDeposit: 0,
+          monthlyDeposit: 7250,
+          yearlyIncreaseInPercentage: 0,
         },
+        {
+            phaseType: 'PASSIVE', 
+            durationInMonths: 23 * 12 
+        },
+        {
+            phaseType: 'WITHDRAW', 
+            durationInMonths: 30 * 12,
+            withdrawAmount: 3000,
+            lowerVariationPercentage: 0,
+            upperVariationPercentage: 0
+
+        }
+      ],
+    },
+  },
+    {
+    id: 'aktiedepot',
+    label: 'Aktiedepot',
+    description: 'Simulation using the Danish "Aktiedepot" tax rules for capital gains.',
+    patch: {
+      startDate: { date: '2026-01-01' },
+      overallTaxRule: 'CAPITAL',
+      taxPercentage: 42,
+      phases: [
+        {
+          phaseType: 'DEPOSIT',
+          durationInMonths: 20 * 12,
+          initialDeposit: 5000,
+          monthlyDeposit: 5000,
+          yearlyIncreaseInPercentage: 2,
+        },
+        {
+            phaseType: 'PASSIVE', 
+            durationInMonths: 5 * 12 
+        },
+        {
+            phaseType: 'WITHDRAW', 
+            durationInMonths: 30 * 12,
+            withdrawAmount: 10000,
+            lowerVariationPercentage: 0,
+            upperVariationPercentage: 0,
+            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+
+        }
+      ],
+    },
+  },
+    {
+    id: 'pension',
+    label: 'Pension (Aldersopsparing)',
+    description: 'Simulation using the Danish "Pension (Aldersopsparing)" tax rules.',
+    patch: {
+      startDate: { date: '2026-01-01' },
+      overallTaxRule: 'NOTIONAL',
+      taxPercentage: 15.3,
+      phases: [
+        {
+          phaseType: 'DEPOSIT',
+          durationInMonths: 30 * 12,
+          initialDeposit: 500,
+          monthlyDeposit: 500,
+          yearlyIncreaseInPercentage: 1.5,
+        },
+        {
+            phaseType: 'WITHDRAW', 
+            durationInMonths: 1 * 12,
+            withdrawAmount: 30000,
+            lowerVariationPercentage: 0,
+            upperVariationPercentage: 0,
+        }
+      ],
+    },
+  },
+    {
+    id: 'childSavings',
+    label: 'Child Savings (Aktiedepot)',
+    description: 'Simulation using the Danish "Aktiedepot" tax rules for capital gains.',
+    patch: {
+      startDate: { date: '2026-01-01' },
+      overallTaxRule: 'CAPITAL',
+      taxPercentage: 42,
+      phases: [
+        {
+          phaseType: 'DEPOSIT',
+          durationInMonths: 21 * 12,
+          initialDeposit: 5000,
+          monthlyDeposit: 250,
+          yearlyIncreaseInPercentage: 2,
+        },
+        {
+            phaseType: 'WITHDRAW', 
+            durationInMonths: 5 * 12,
+            withdrawAmount: 5000,
+            lowerVariationPercentage: 0,
+            upperVariationPercentage: 0,
+            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+
+        }
       ],
     },
   },
