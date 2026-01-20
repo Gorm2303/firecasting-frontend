@@ -1,5 +1,5 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
@@ -17,6 +17,8 @@ import {
   type SavedScenario,
 } from '../../config/savedScenarios';
 import { deepEqual } from '../../utils/deepEqual';
+import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { QRCodeSVG } from 'qrcode.react';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -153,9 +155,18 @@ export default function SimulationForm({
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string>('');
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
+
+  const scenarioParamOnLoad = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('scenario');
+    } catch {
+      return null;
+    }
+  }, []);
 
   const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
   const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) =>
@@ -212,6 +223,7 @@ export default function SimulationForm({
 
   const closeScenarioModal = useCallback(() => {
     setIsScenarioModalOpen(false);
+    setShareUrl('');
   }, []);
 
   useEffect(() => {
@@ -282,6 +294,35 @@ export default function SimulationForm({
     closeScenarioModal();
   }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
 
+  const handleShareScenario = useCallback(() => {
+    if (!selectedScenarioId) return;
+    const scenario = findScenarioById(selectedScenarioId);
+    if (!scenario) return;
+
+    const ok = window.confirm(
+      'This share link encodes your full scenario inputs in the URL. Anyone with the link can view/decode them. Continue?'
+    );
+    if (!ok) return;
+
+    const param = encodeScenarioToShareParam(scenario.request);
+    const url = new URL(window.location.href);
+    url.pathname = '/simulation';
+    url.searchParams.set('scenario', param);
+    setShareUrl(url.toString());
+  }, [selectedScenarioId]);
+
+  const handleCopyShareUrl = useCallback(async () => {
+    if (!shareUrl) return;
+    try {
+      const writeText = navigator.clipboard?.writeText;
+      if (typeof writeText !== 'function') throw new Error('Clipboard API unavailable');
+      await writeText.call(navigator.clipboard, shareUrl);
+      window.alert('Share link copied to clipboard.');
+    } catch {
+      window.prompt('Copy share link:', shareUrl);
+    }
+  }, [shareUrl]);
+
   const handleDeleteScenario = useCallback(() => {
     if (!selectedScenarioId) return;
     const scenario = findScenarioById(selectedScenarioId);
@@ -322,9 +363,48 @@ export default function SimulationForm({
     setBaselineRequest(resolved);
   }, [isDirty]);
 
+  const hasAppliedInitialTemplateRef = useRef(false);
   useEffect(() => {
+    if (hasAppliedInitialTemplateRef.current) return;
+    hasAppliedInitialTemplateRef.current = true;
+
+    if (scenarioParamOnLoad) return;
     applyTemplate(selectedTemplateId); // Apply starter template on first load
-  }, []);
+  }, [applyTemplate, scenarioParamOnLoad, selectedTemplateId]);
+
+  const hasAppliedScenarioFromUrlRef = useRef(false);
+  useEffect(() => {
+    if (hasAppliedScenarioFromUrlRef.current) return;
+    if (!scenarioParamOnLoad) return;
+
+    const decoded = decodeScenarioFromShareParam(scenarioParamOnLoad);
+    if (!decoded) {
+      hasAppliedScenarioFromUrlRef.current = true;
+      window.alert('Invalid or corrupted share link.');
+      return;
+    }
+
+    const okPrivacy = window.confirm(
+      'This link contains a scenario encoded in the URL. Anyone with the link can decode it. Load and run it now?'
+    );
+    if (!okPrivacy) {
+      hasAppliedScenarioFromUrlRef.current = true;
+      return;
+    }
+
+    if (isDirty) {
+      const okOverwrite = window.confirm('Loading this scenario will overwrite your current inputs. Continue?');
+      if (!okOverwrite) {
+        hasAppliedScenarioFromUrlRef.current = true;
+        return;
+      }
+    }
+
+    applyRequestToForm(decoded);
+    setSelectedScenarioId('');
+    void runSimulationWithRequest(decoded);
+    hasAppliedScenarioFromUrlRef.current = true;
+  }, [applyRequestToForm, isDirty, runSimulationWithRequest, scenarioParamOnLoad]);
 
   const handleAddDefaultPhase = () => {
     handleAddPhase(createDefaultPhase('DEPOSIT'));
@@ -580,6 +660,16 @@ export default function SimulationForm({
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 type="button"
+                aria-label="Share scenario"
+                title="Share (creates a link that loads + runs)"
+                onClick={handleShareScenario}
+                disabled={!selectedScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🔗</span>
+              </button>
+              <button
+                type="button"
                 aria-label="Load scenario"
                 title="Load (also runs simulation)"
                 onClick={() => handleLoadScenario(selectedScenarioId)}
@@ -617,6 +707,48 @@ export default function SimulationForm({
                 <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🗑</span>
               </button>
             </div>
+
+            {shareUrl && (
+              <div style={{ marginTop: 6, borderTop: '1px solid #2a2a2a', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
+                  This link encodes your full scenario inputs in the URL (anyone with it can decode them).
+                </div>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Share link</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      aria-label="Share link"
+                      readOnly
+                      value={shareUrl}
+                      style={{
+                        flex: 1,
+                        padding: '0.35rem 0.45rem',
+                        fontSize: '0.9rem',
+                        borderRadius: 8,
+                        border: '1px solid #333',
+                        background: '#0b0b0b',
+                        color: '#fff',
+                      }}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Copy share link"
+                      title="Copy"
+                      onClick={handleCopyShareUrl}
+                      style={btn('ghost')}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </label>
+
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 8, background: '#fff', borderRadius: 10 }}>
+                  <QRCodeSVG value={shareUrl} width={220} height={220} includeMargin />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
