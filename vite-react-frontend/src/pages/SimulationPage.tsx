@@ -107,12 +107,38 @@ const SimulationPage: React.FC = () => {
           }}
         />
       </label>
-      {importReplayId && (
-        <span style={{ fontSize: 12, opacity: 0.8 }}>
-          Replay: {importReplayId.slice(0, 8)}…
-        </span>
-      )}
     </>
+  );
+
+  const exportControl = (
+    <button
+      type="button"
+      onClick={() => {
+        if (!lastCompletedSimulationId) return;
+        exportRunBundle(lastCompletedSimulationId, formMode).catch((e) => {
+          console.error(e);
+          alert(e?.message ?? 'Failed to export run bundle');
+        });
+      }}
+      disabled={!lastCompletedSimulationId}
+      style={{
+        padding: '6px 10px',
+        borderRadius: 8,
+        border: '1px solid #444',
+        cursor: !lastCompletedSimulationId ? 'not-allowed' : 'pointer',
+        fontSize: 14,
+        background: 'transparent',
+        color: '#ddd',
+        opacity: !lastCompletedSimulationId ? 0.5 : 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+      }}
+      title={lastCompletedSimulationId ? 'Download a reproducibility bundle (JSON)' : 'No completed run id available'}
+    >
+      <span aria-hidden="true">⬇️</span>
+      Export Run Bundle
+    </button>
   );
 
   const segBtn = (mode: FormMode, label: string) => (
@@ -180,6 +206,12 @@ const SimulationPage: React.FC = () => {
                 }}
               >
                 {importControl}
+                {exportControl}
+                {importReplayId && (
+                  <span style={{ fontSize: 12, opacity: 0.8 }}>
+                    Replay: {importReplayId.slice(0, 8)}…
+                  </span>
+                )}
               </div>
 
               {importSimulationId && !stats && (
@@ -197,16 +229,28 @@ const SimulationPage: React.FC = () => {
             <>
               <NormalInputForm
                 onSimulationComplete={handleSimulationComplete}
-                rightFooterActions={importControl}
+                rightFooterActions={
+                  <>
+                    {importControl}
+                    {exportControl}
+                  </>
+                }
                 footerBelow={
-                  importSimulationId && !stats ? (
-                    <div style={{ maxWidth: 960, margin: '0.75rem auto 0' }}>
-                      <SimulationProgress
-                        simulationId={importSimulationId}
-                        onComplete={handleImportComplete}
-                      />
-                    </div>
-                  ) : null
+                  <>
+                    {importReplayId && (
+                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
+                        Replay: {importReplayId.slice(0, 8)}…
+                      </div>
+                    )}
+                    {importSimulationId && !stats ? (
+                      <div style={{ maxWidth: 960, margin: '0.75rem auto 0' }}>
+                        <SimulationProgress
+                          simulationId={importSimulationId}
+                          onComplete={handleImportComplete}
+                        />
+                      </div>
+                    ) : null}
+                  </>
                 }
               />
             </>
@@ -237,30 +281,6 @@ const SimulationPage: React.FC = () => {
               {replayReport.note ? <span> {replayReport.note}</span> : null}
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                if (!lastCompletedSimulationId) return;
-                exportRunBundle(lastCompletedSimulationId, formMode).catch((e) => {
-                  console.error(e);
-                  alert(e?.message ?? 'Failed to export run bundle');
-                });
-              }}
-              disabled={!lastCompletedSimulationId}
-              style={{
-                padding: '0.5rem 0.75rem',
-                borderRadius: 10,
-                border: '1px solid #444',
-                backgroundColor: !lastCompletedSimulationId ? 'transparent' : '#2e2e2e',
-                color: !lastCompletedSimulationId ? 'inherit' : 'white',
-                cursor: !lastCompletedSimulationId ? 'not-allowed' : 'pointer',
-              }}
-              title={lastCompletedSimulationId ? 'Download a reproducibility bundle (JSON)' : 'No completed run id available'}
-            >
-              Export Run Bundle
-            </button>
-          </div>
           <MultiPhaseOverview data={stats} timeline={timeline} />
         </div>
       )}
