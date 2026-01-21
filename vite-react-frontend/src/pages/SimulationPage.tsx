@@ -6,7 +6,8 @@ import { YearlySummary } from '../models/YearlySummary';
 import { SimulationTimelineContext } from '../models/types';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { Link } from 'react-router-dom';
-import { exportRunBundle } from '../api/simulation';
+import { exportRunBundle, getReplayStatus, importRunBundle, ReplayStatusResponse } from '../api/simulation';
+import SimulationProgress from '../components/SimulationProgress';
 
 type FormMode = 'normal' | 'advanced';
 
@@ -25,10 +26,18 @@ const SimulationPage: React.FC = () => {
   const [ackSim, setAckSim] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
 
+  const [importSimulationId, setImportSimulationId] = useState<string | null>(null);
+  const [importReplayId, setImportReplayId] = useState<string | null>(null);
+  const [replayReport, setReplayReport] = useState<ReplayStatusResponse | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+
   useEffect(() => {
     setStats(null);
     setTimeline(null);
     setLastCompletedSimulationId(null);
+    setImportSimulationId(null);
+    setImportReplayId(null);
+    setReplayReport(null);
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
   }, [formMode]);
 
@@ -36,6 +45,20 @@ const SimulationPage: React.FC = () => {
     setStats(results);
     setTimeline(ctx ?? null);
     setLastCompletedSimulationId(simulationId ?? null);
+  };
+
+  const handleImportComplete = async (results: YearlySummary[]) => {
+    setStats(results);
+    setTimeline(null);
+    setLastCompletedSimulationId(importSimulationId);
+    if (importReplayId) {
+      try {
+        const r = await getReplayStatus(importReplayId);
+        setReplayReport(r);
+      } catch (e) {
+        console.error(e);
+      }
+    }
   };
 
   const FormComponent =
@@ -93,6 +116,58 @@ const SimulationPage: React.FC = () => {
           {segBtn('advanced', 'Advanced')}
         </div>
 
+        <div style={{
+          display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center',
+          marginBottom: 12,
+        }}>
+          <label style={{
+            padding: '0.4rem 0.8rem', border: '1px solid #444', borderRadius: 8,
+            cursor: importBusy ? 'not-allowed' : 'pointer',
+            opacity: importBusy ? 0.7 : 1,
+          }}>
+            Import Run Bundle
+            <input
+              type="file"
+              accept="application/json,.json"
+              disabled={importBusy}
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                setImportBusy(true);
+                setStats(null);
+                setTimeline(null);
+                setReplayReport(null);
+                try {
+                  const resp = await importRunBundle(f);
+                  setImportReplayId(resp.replayId);
+                  setImportSimulationId(resp.simulationId);
+                } catch (err: any) {
+                  console.error(err);
+                  alert(err?.message ?? 'Failed to import bundle');
+                } finally {
+                  setImportBusy(false);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </label>
+          {importReplayId && (
+            <span style={{ fontSize: 12, opacity: 0.8 }}>
+              Replay: {importReplayId.slice(0, 8)}…
+            </span>
+          )}
+        </div>
+
+        {importSimulationId && !stats && (
+          <div style={{ maxWidth: 960, margin: '0 auto' }}>
+            <SimulationProgress
+              simulationId={importSimulationId}
+              onComplete={handleImportComplete}
+            />
+          </div>
+        )}
+
         <div key={formMode}>
           <FormComponent onSimulationComplete={handleSimulationComplete} />
         </div>
@@ -100,6 +175,27 @@ const SimulationPage: React.FC = () => {
 
       {stats && (
         <div style={{ marginTop: '1rem' }}>
+          {replayReport && (
+            <div role="status" style={{
+              marginBottom: 10,
+              padding: '10px 12px',
+              border: '1px solid #444',
+              borderRadius: 10,
+              background: replayReport.exactMatch
+                ? 'rgba(16,185,129,0.12)'
+                : replayReport.withinTolerance
+                ? 'rgba(245,158,11,0.12)'
+                : 'rgba(239,68,68,0.10)',
+            }}>
+              <strong>Replay report:</strong>{' '}
+              {replayReport.exactMatch
+                ? 'Exact match.'
+                : replayReport.withinTolerance
+                ? `Within tolerance (max |Δ|=${replayReport.maxAbsDiff}).`
+                : `Mismatch (max |Δ|=${replayReport.maxAbsDiff}).`}
+              {replayReport.note ? <span> {replayReport.note}</span> : null}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
             <button
               type="button"

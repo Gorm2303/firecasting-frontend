@@ -6,6 +6,24 @@ const BASE_URL = getApiBaseUrl();
 
 type StartResponse = { id: string };
 
+type ImportReplayResponse = {
+  replayId: string;
+  simulationId: string;
+  status: string;
+  note?: string;
+};
+
+export type ReplayStatusResponse = {
+  replayId: string;
+  status: string;
+  simulationId?: string;
+  exactMatch?: boolean;
+  withinTolerance?: boolean;
+  mismatches?: number;
+  maxAbsDiff?: number;
+  note?: string;
+};
+
 export async function startSimulation(req: SimulationRequest): Promise<string> {
   const res = await fetch(`${BASE_URL}/start`, {
     method: 'POST',
@@ -16,6 +34,26 @@ export async function startSimulation(req: SimulationRequest): Promise<string> {
   const data: StartResponse = await res.json();
   if (!data?.id) throw new Error('No simulation id returned');
   return data.id;
+}
+
+export async function importRunBundle(file: File): Promise<ImportReplayResponse> {
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await fetch(`${BASE_URL}/import`, {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = (await res.json()) as ImportReplayResponse;
+  if (!data?.replayId || !data?.simulationId) throw new Error('Invalid import response');
+  return data;
+}
+
+export async function getReplayStatus(replayId: string): Promise<ReplayStatusResponse> {
+  const res = await fetch(`${BASE_URL}/replay/${encodeURIComponent(replayId)}`, { method: 'GET' });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as ReplayStatusResponse;
 }
 
 
