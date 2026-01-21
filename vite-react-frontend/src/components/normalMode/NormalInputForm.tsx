@@ -1218,23 +1218,29 @@ ref
                 Configure exemption limits and yearly increases. Enable per-phase exemptions inside each phase.
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Exemption card</div>
-                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, opacity: 0.95 }}>Limit</span>
-                    <div style={rowStyle}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Exemption card</div>
+
+                  <label className="fc-field-row" style={{ marginBottom: 8 }}>
+                    <span className="fc-field-label">Limit</span>
+                    <div className="fc-field-control">
                       <input type="number" value={exemptionCardLimit} onChange={(e) => setExemptionCardLimit(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div className="fc-field-info">
                       <InfoTooltip label="(i)">
                         Maximum tax-free amount per year for the exemption card rule.
                         If enabled in a phase, withdrawals up to this limit reduce the taxable amount.
                       </InfoTooltip>
                     </div>
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 13, opacity: 0.95 }}>Yearly increase</span>
-                    <div style={rowStyle}>
+
+                  <label className="fc-field-row">
+                    <span className="fc-field-label">Yearly increase</span>
+                    <div className="fc-field-control">
                       <input type="number" value={exemptionCardYearlyIncrease} onChange={(e) => setExemptionCardYearlyIncrease(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div className="fc-field-info">
                       <InfoTooltip label="(i)">
                         Yearly increase applied to the exemption card limit.
                         Use this to model a tax-free allowance that grows over time.
@@ -1244,31 +1250,40 @@ ref
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Stock exemption</div>
-                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, opacity: 0.95 }}>Tax rate %</span>
-                    <div style={rowStyle}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Stock exemption</div>
+
+                  <label className="fc-field-row" style={{ marginBottom: 8 }}>
+                    <span className="fc-field-label">Tax rate %</span>
+                    <div className="fc-field-control">
                       <input type="number" step="0.01" value={stockExemptionTaxRate} onChange={(e) => setStockExemptionTaxRate(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div className="fc-field-info">
                       <InfoTooltip label="(i)">
                         Reduced tax rate (%) applied to the portion covered by the stock exemption rule.
                         This can model preferential taxation for certain equity withdrawals.
                       </InfoTooltip>
                     </div>
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, opacity: 0.95 }}>Limit</span>
-                    <div style={rowStyle}>
+
+                  <label className="fc-field-row" style={{ marginBottom: 8 }}>
+                    <span className="fc-field-label">Limit</span>
+                    <div className="fc-field-control">
                       <input type="number" value={stockExemptionLimit} onChange={(e) => setStockExemptionLimit(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div className="fc-field-info">
                       <InfoTooltip label="(i)">
                         Maximum eligible amount per year for the stock exemption.
                         Amounts above this limit are taxed using the overall tax settings.
                       </InfoTooltip>
                     </div>
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 13, opacity: 0.95 }}>Yearly increase</span>
-                    <div style={rowStyle}>
+
+                  <label className="fc-field-row">
+                    <span className="fc-field-label">Yearly increase</span>
+                    <div className="fc-field-control">
                       <input type="number" value={stockExemptionYearlyIncrease} onChange={(e) => setStockExemptionYearlyIncrease(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div className="fc-field-info">
                       <InfoTooltip label="(i)">
                         Yearly increase applied to the stock exemption limit.
                         Use this if the exemption allowance increases over time.
@@ -1286,14 +1301,16 @@ ref
         <div style={cardStyle}>
           <div style={cardTitleStyle}>Return model</div>
           <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
-            <label style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '1.05rem' }}>Return type</span>
-              <div style={rowStyle}>
+            <label className="fc-field-row" style={{ marginBottom: 10 }}>
+              <span className="fc-field-label" style={{ fontSize: '1.05rem', opacity: 1 }}>Return type</span>
+              <div className="fc-field-control">
                 <select value={returnType} onChange={(e) => setReturnType(parseReturnType(e.target.value))} style={inputStyle}>
                   <option value="dataDrivenReturn">Data-driven (historical)</option>
                   <option value="distributionReturn">Distribution-based</option>
                   <option value="simpleReturn">Simple average</option>
                 </select>
+              </div>
+              <div className="fc-field-info">
                 <InfoTooltip label="(i)">
                   Select how yearly returns are generated.
                   Historical uses sampled data, distribution-based draws from a parametric model, and simple uses a constant average.
@@ -1301,10 +1318,12 @@ ref
               </div>
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-              <span style={{ fontSize: 13, opacity: 0.95 }}>RNG seed (optional)</span>
-              <div style={rowStyle}>
+            <label className="fc-field-row" style={{ marginBottom: 10 }}>
+              <span className="fc-field-label">RNG seed (optional)</span>
+              <div className="fc-field-control">
                 <input type="number" step="1" value={seed} onChange={(e) => setSeed(e.target.value)} style={inputStyle} />
+              </div>
+              <div className="fc-field-info">
                 <InfoTooltip label="(i)">
                   Optional random seed for return generation.
                   Non-negative values make results deterministic for the same inputs; negative forces a fresh random stream each run.
@@ -1313,10 +1332,12 @@ ref
             </label>
 
             {returnType === 'simpleReturn' && (
-              <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-                <span style={{ fontSize: 13, opacity: 0.95 }}>Average % / year</span>
-                <div style={rowStyle}>
+              <label className="fc-field-row" style={{ marginBottom: 10 }}>
+                <span className="fc-field-label">Average % / year</span>
+                <div className="fc-field-control">
                   <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => setSimpleAveragePercentage(e.target.value)} style={inputStyle} />
+                </div>
+                <div className="fc-field-info">
                   <InfoTooltip label="(i)">
                     Constant yearly return percentage applied each year.
                     Useful for quick what-if scenarios when you don’t want variability.
@@ -1327,15 +1348,17 @@ ref
 
             {returnType === 'distributionReturn' && (
               <div style={{ marginTop: 12 }}>
-                <label style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, opacity: 0.95 }}>Distribution</span>
-                  <div style={rowStyle}>
+                <label className="fc-field-row" style={{ marginBottom: 10 }}>
+                  <span className="fc-field-label">Distribution</span>
+                  <div className="fc-field-control">
                     <select value={distributionType} onChange={(e) => setDistributionType(parseDistributionType(e.target.value))} style={inputStyle}>
                       <option value="normal">Normal</option>
                       <option value="brownianMotion">Brownian motion</option>
                       <option value="studentT">Student t</option>
                       <option value="regimeBased">Regime-based</option>
                     </select>
+                  </div>
+                  <div className="fc-field-info">
                     <InfoTooltip label="(i)">
                       Parametric model used to draw returns.
                       Choose a simple distribution (Normal/Student t), a process model (Brownian), or switching regimes.
@@ -1344,21 +1367,25 @@ ref
                 </label>
 
                 {distributionType === 'normal' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Mean</span>
-                      <div style={rowStyle}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Mean</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={normalMean} onChange={(e) => setNormalMean(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Expected return per year (mean of the Normal distribution).
                           Higher mean increases typical growth, but does not change volatility.
                         </InfoTooltip>
                       </div>
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Std dev</span>
-                      <div style={rowStyle}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Std dev</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={normalStdDev} onChange={(e) => setNormalStdDev(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Volatility per year (standard deviation).
                           Larger values increase year-to-year swings and drawdown risk.
@@ -1369,21 +1396,25 @@ ref
                 )}
 
                 {distributionType === 'brownianMotion' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Drift</span>
-                      <div style={rowStyle}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Drift</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={brownianDrift} onChange={(e) => setBrownianDrift(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Expected growth component (drift) of the Brownian motion model.
                           Higher drift increases typical growth without changing randomness strength.
                         </InfoTooltip>
                       </div>
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Volatility</span>
-                      <div style={rowStyle}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Volatility</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={brownianVolatility} onChange={(e) => setBrownianVolatility(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Randomness strength (volatility) for the Brownian model.
                           Higher volatility means more variable outcomes and wider result spread.
@@ -1394,31 +1425,37 @@ ref
                 )}
 
                 {distributionType === 'studentT' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Mu</span>
-                      <div style={rowStyle}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Mu</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={studentMu} onChange={(e) => setStudentMu(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Location/center of the Student t distribution.
                           Similar role to a mean, but heavy tails can still produce extreme years.
                         </InfoTooltip>
                       </div>
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Sigma</span>
-                      <div style={rowStyle}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Sigma</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={studentSigma} onChange={(e) => setStudentSigma(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Scale/spread of the Student t distribution.
                           Higher sigma increases variability in outcomes.
                         </InfoTooltip>
                       </div>
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Nu</span>
-                      <div style={rowStyle}>
+                    <label className="fc-field-row">
+                      <span className="fc-field-label">Nu</span>
+                      <div className="fc-field-control">
                         <input type="number" step="0.0001" value={studentNu} onChange={(e) => setStudentNu(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           Degrees of freedom (tail heaviness).
                           Lower values produce fatter tails (more extreme years); higher values approach Normal behavior.
@@ -1430,10 +1467,12 @@ ref
 
                 {distributionType === 'regimeBased' && (
                   <div style={{ marginTop: 10 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 10 }}>
-                      <span style={{ fontSize: 13, opacity: 0.95 }}>Tick months</span>
-                      <div style={rowStyle}>
+                    <label className="fc-field-row" style={{ marginBottom: 10 }}>
+                      <span className="fc-field-label">Tick months</span>
+                      <div className="fc-field-control">
                         <input type="number" step="1" value={regimeTickMonths} onChange={(e) => setRegimeTickMonths(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div className="fc-field-info">
                         <InfoTooltip label="(i)">
                           How often regime switching is evaluated (in months).
                           Smaller values allow more frequent changes; larger values keep regimes stable longer.
@@ -1448,10 +1487,10 @@ ref
                     {regimes.map((r, i) => (
                       <details key={i} open={i === 0} style={{ border: '1px solid var(--fc-subtle-border)', borderRadius: 10, padding: 10, marginBottom: 10, background: 'var(--fc-subtle-bg)' }}>
                         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Regime {i}</summary>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                          <label style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 12, opacity: 0.9 }}>Distribution</span>
-                            <div style={rowStyle}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                          <label className="fc-field-row">
+                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Distribution</span>
+                            <div className="fc-field-control">
                               <select
                                 value={r.distributionType}
                                 onChange={(e) => updateRegime(i, { distributionType: e.target.value === 'studentT' ? 'studentT' : 'normal' })}
@@ -1460,6 +1499,8 @@ ref
                                 <option value="normal">Normal</option>
                                 <option value="studentT">Student t</option>
                               </select>
+                            </div>
+                            <div className="fc-field-info">
                               <InfoTooltip label="(i)">
                                 Choose the distribution used inside this regime.
                                 Student t allows fatter tails than Normal (more extreme years).
@@ -1467,10 +1508,12 @@ ref
                             </div>
                           </label>
 
-                          <label style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 12, opacity: 0.9 }}>Expected duration (months)</span>
-                            <div style={rowStyle}>
+                          <label className="fc-field-row">
+                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Expected duration (months)</span>
+                            <div className="fc-field-control">
                               <input type="number" step="1" value={r.expectedDurationMonths} onChange={(e) => updateRegime(i, { expectedDurationMonths: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div className="fc-field-info">
                               <InfoTooltip label="(i)">
                                 Average time spent in this regime before switching (in months).
                                 This influences how persistent each market regime is.
@@ -1478,30 +1521,38 @@ ref
                             </div>
                           </label>
 
-                          <label style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 0</span>
-                            <div style={rowStyle}>
+                          <label className="fc-field-row">
+                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 0</span>
+                            <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime0} onChange={(e) => updateRegime(i, { toRegime0: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div className="fc-field-info">
                               <InfoTooltip label="(i)">
                                 Relative weight/probability to move to regime 0 when switching.
                                 The weights (to 0/1/2) are normalized into probabilities.
                               </InfoTooltip>
                             </div>
                           </label>
-                          <label style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 1</span>
-                            <div style={rowStyle}>
+
+                          <label className="fc-field-row">
+                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 1</span>
+                            <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime1} onChange={(e) => updateRegime(i, { toRegime1: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div className="fc-field-info">
                               <InfoTooltip label="(i)">
                                 Relative weight/probability to move to regime 1 when switching.
                                 If all weights are equal, switching is unbiased.
                               </InfoTooltip>
                             </div>
                           </label>
-                          <label style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 2</span>
-                            <div style={rowStyle}>
+
+                          <label className="fc-field-row">
+                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 2</span>
+                            <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime2} onChange={(e) => updateRegime(i, { toRegime2: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div className="fc-field-info">
                               <InfoTooltip label="(i)">
                                 Relative weight/probability to move to regime 2 when switching.
                                 Increase this to spend more time in regime 2 overall.
@@ -1511,21 +1562,26 @@ ref
                         </div>
 
                         {r.distributionType === 'normal' ? (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                            <label style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: 12, opacity: 0.9 }}>Mean</span>
-                              <div style={rowStyle}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                            <label className="fc-field-row">
+                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Mean</span>
+                              <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.normalMean} onChange={(e) => updateRegime(i, { normalMean: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
                                   Expected return (mean) while in this regime.
                                   Use different means to model bull vs bear markets.
                                 </InfoTooltip>
                               </div>
                             </label>
-                            <label style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: 12, opacity: 0.9 }}>Std dev</span>
-                              <div style={rowStyle}>
+
+                            <label className="fc-field-row">
+                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Std dev</span>
+                              <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.normalStdDev} onChange={(e) => updateRegime(i, { normalStdDev: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
                                   Volatility (standard deviation) while in this regime.
                                   Higher volatility widens the spread of possible outcomes.
@@ -1534,31 +1590,39 @@ ref
                             </label>
                           </div>
                         ) : (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                            <label style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: 12, opacity: 0.9 }}>Mu</span>
-                              <div style={rowStyle}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                            <label className="fc-field-row">
+                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Mu</span>
+                              <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentMu} onChange={(e) => updateRegime(i, { studentMu: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
                                   Location/center of the Student t distribution for this regime.
                                   Similar to a mean, but with heavy-tail behavior depending on nu.
                                 </InfoTooltip>
                               </div>
                             </label>
-                            <label style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: 12, opacity: 0.9 }}>Sigma</span>
-                              <div style={rowStyle}>
+
+                            <label className="fc-field-row">
+                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Sigma</span>
+                              <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentSigma} onChange={(e) => updateRegime(i, { studentSigma: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
                                   Scale/spread of the Student t distribution for this regime.
                                   Increase to allow larger typical swings.
                                 </InfoTooltip>
                               </div>
                             </label>
-                            <label style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: 12, opacity: 0.9 }}>Nu</span>
-                              <div style={rowStyle}>
+
+                            <label className="fc-field-row">
+                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Nu</span>
+                              <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentNu} onChange={(e) => updateRegime(i, { studentNu: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
                                   Degrees of freedom controlling tail heaviness for this regime.
                                   Lower values allow more extreme outcomes; higher values behave closer to Normal.
