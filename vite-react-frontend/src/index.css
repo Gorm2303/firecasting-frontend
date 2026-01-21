@@ -143,3 +143,72 @@ button:focus-visible {
   }
 }
 
+/* Simulation page toolbar: avoid overflow on narrow screens (e.g. 375px wide). */
+.fc-sim-tools {
+  box-sizing: border-box;
+}
+
+@media (max-width: 420px) {
+  .fc-sim-tools {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc-sim-tools > * {
+    width: 100%;
+  }
+
+  .fc-sim-mode {
+    width: 100%;
+  }
+
+  .fc-sim-mode button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/* Form field row helper: label | control | info button. */
+.fc-field-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(0, 1.4fr) auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.fc-field-label {
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+.fc-field-control {
+  min-width: 0;
+}
+
+.fc-field-info {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 420px) {
+  .fc-field-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label label"
+      "control info";
+  }
+
+  .fc-field-label {
+    grid-area: label;
+  }
+
+  .fc-field-control {
+    grid-area: control;
+  }
+
+  .fc-field-info {
+    grid-area: info;
+  }
+}
+

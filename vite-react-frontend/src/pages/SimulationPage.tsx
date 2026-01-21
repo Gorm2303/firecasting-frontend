@@ -416,8 +416,9 @@ const SimulationPage: React.FC = () => {
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
         <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
 
-        <div role="group" aria-label="Simulation tools" style={{
+        <div role="group" aria-label="Simulation tools" className="fc-sim-tools" style={{
           display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center',
+          flexWrap: 'wrap',
           marginBottom: 12, border: '1px solid #444', borderRadius: 12, padding: 6,
         }}>
           <Link to="/simulation/tutorial" style={{
@@ -426,7 +427,7 @@ const SimulationPage: React.FC = () => {
           }}>
             Tutorial
           </Link>
-          <div role="group" aria-label="Mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div role="group" aria-label="Mode" className="fc-sim-mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {modeButton('Normal', 'normal')}
             {modeButton('Advanced', 'advanced')}
           </div>
