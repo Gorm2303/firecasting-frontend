@@ -6,6 +6,7 @@ import { YearlySummary } from '../models/YearlySummary';
 import { SimulationTimelineContext } from '../models/types';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { Link } from 'react-router-dom';
+import { exportRunBundle } from '../api/simulation';
 
 type FormMode = 'normal' | 'advanced';
 
@@ -20,18 +21,21 @@ const getInitialFormMode = (): FormMode => {
 const SimulationPage: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
+  const [lastCompletedSimulationId, setLastCompletedSimulationId] = useState<string | null>(null);
   const [ackSim, setAckSim] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
 
   useEffect(() => {
     setStats(null);
     setTimeline(null);
+    setLastCompletedSimulationId(null);
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
   }, [formMode]);
 
-  const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext) => {
+  const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext, simulationId?: string) => {
     setStats(results);
     setTimeline(ctx ?? null);
+    setLastCompletedSimulationId(simulationId ?? null);
   };
 
   const FormComponent =
@@ -96,6 +100,30 @@ const SimulationPage: React.FC = () => {
 
       {stats && (
         <div style={{ marginTop: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!lastCompletedSimulationId) return;
+                exportRunBundle(lastCompletedSimulationId, formMode).catch((e) => {
+                  console.error(e);
+                  alert(e?.message ?? 'Failed to export run bundle');
+                });
+              }}
+              disabled={!lastCompletedSimulationId}
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: 10,
+                border: '1px solid #444',
+                backgroundColor: !lastCompletedSimulationId ? 'transparent' : '#2e2e2e',
+                color: !lastCompletedSimulationId ? 'inherit' : 'white',
+                cursor: !lastCompletedSimulationId ? 'not-allowed' : 'pointer',
+              }}
+              title={lastCompletedSimulationId ? 'Download a reproducibility bundle (JSON)' : 'No completed run id available'}
+            >
+              Export Run Bundle
+            </button>
+          </div>
           <MultiPhaseOverview data={stats} timeline={timeline} />
         </div>
       )}

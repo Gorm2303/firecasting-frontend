@@ -40,3 +40,30 @@ export const exportSimulationCsv = async (): Promise<void> => {
   URL.revokeObjectURL(dl);
 };
 
+export const exportRunBundle = async (
+  simulationId: string,
+  uiMode: 'normal' | 'advanced'
+): Promise<void> => {
+  const base = BASE_URL.replace(/\/+$/, '');
+  const url = new URL(`${simulationId}/bundle`, base + '/');
+  url.searchParams.set('uiMode', uiMode);
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+  if (!res.ok) throw new Error(`Export bundle failed: ${res.status} ${res.statusText}`);
+
+  const blob = await res.blob();
+  const cd = res.headers.get('content-disposition') || '';
+  const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cd);
+  const fallback = `firecasting-run-${simulationId}.json`;
+  const filename = m ? decodeURIComponent(m[1]) : fallback;
+
+  const dl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = dl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(dl);
+};
+

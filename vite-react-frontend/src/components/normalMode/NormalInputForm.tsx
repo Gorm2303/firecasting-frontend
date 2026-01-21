@@ -135,7 +135,7 @@ export default function SimulationForm({
   tutorialSteps,
   onExitTutorial, // optional
 }: {
-  onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
+  onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
 }) {
@@ -576,6 +576,7 @@ export default function SimulationForm({
         <SimulationProgress
           simulationId={simulationId}
           onComplete={(result) => {
+            const completedId = simulationId;
             setStats(result);
             setSimulateInProgress(false);
             setSimulationId(null);
@@ -585,7 +586,7 @@ export default function SimulationForm({
               phaseDurationsInMonths: phases.map((p) => Number(p.durationInMonths) || 0),
               firstPhaseInitialDeposit: phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
             };
-            onSimulationComplete?.(result, timeline);
+            onSimulationComplete?.(result, timeline, completedId ?? undefined);
           }}
         />
       )}

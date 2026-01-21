@@ -18,7 +18,7 @@ import {
 import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
-  onSimulationComplete: (stats: YearlySummary[], timeline?: SimulationTimelineContext) => void;
+  onSimulationComplete: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
 }
 
 const containerStyle: React.CSSProperties = {
@@ -1076,9 +1076,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
           <SimulationProgress
             simulationId={simulationId}
             onComplete={(result) => {
+              const completedId = simulationId;
               setSubmitting(false);
               setSimulationId(null);
-              onSimulationComplete(result, timelineForRun ?? undefined);
+              onSimulationComplete(result, timelineForRun ?? undefined, completedId ?? undefined);
             }}
           />
         )}
