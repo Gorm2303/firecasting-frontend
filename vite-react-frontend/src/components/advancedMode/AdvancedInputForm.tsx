@@ -19,6 +19,8 @@ import SimulationProgress from '../SimulationProgress';
 
 interface InputFormProps {
   onSimulationComplete: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
+  externalLoadRequest?: any;
+  externalLoadNonce?: number;
 }
 
 const containerStyle: React.CSSProperties = {
@@ -344,7 +346,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
   };
 };
 
-const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) => {
+const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, externalLoadRequest, externalLoadNonce }) => {
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
   const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(null);
@@ -405,6 +407,147 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete }) =
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  const applyExternalLoad = useCallback((req: any) => {
+    if (!req || typeof req !== 'object') return;
+
+    const toIso = (v: any): string => {
+      if (!v) return '';
+      if (typeof v === 'string') return v;
+      if (typeof v?.date === 'string') return v.date;
+      const y = Number(v?.year);
+      const m = Number(v?.month);
+      const d = Number(v?.dayOfMonth);
+      if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d) && y > 0 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+      return '';
+    };
+
+    const rulesToExemptions = (rules: any): string => {
+      const arr = Array.isArray(rules) ? rules.map((x) => String(x).toUpperCase()) : [];
+      const hasE = arr.includes('EXEMPTIONCARD');
+      const hasS = arr.includes('STOCKEXEMPTION');
+      if (hasE && hasS) return 'BOTH';
+      if (hasE) return 'EXEMPTIONCARD';
+      if (hasS) return 'STOCKEXEMPTION';
+      return '';
+    };
+
+    setFormData((prev) => {
+      const next: Record<string, any> = { ...(prev ?? {}) };
+
+      // Basics
+      next.startDate = toIso(req?.startDate);
+      next.taxRule = String(req?.overallTaxRule ?? next.taxRule ?? '').toLowerCase();
+      next.tax = { ...(next.tax ?? {}) };
+      if (req?.taxPercentage !== undefined) next.tax.percentage = req.taxPercentage;
+
+      // Inflation (request uses factor, UI uses %)
+      if (req?.inflationFactor !== undefined) {
+        const f = Number(req.inflationFactor);
+        if (Number.isFinite(f) && f > 0) {
+          next.inflation = { ...(next.inflation ?? {}) };
+          next.inflation.averagePercentage = (f - 1) * 100;
+        }
+      }
+
+      // Tax exemptions
+      if (req?.taxExemptionConfig) {
+        next.tax = { ...(next.tax ?? {}) };
+        next.tax.exemptionCard = { ...(next.tax.exemptionCard ?? {}) };
+        next.tax.stockExemption = { ...(next.tax.stockExemption ?? {}) };
+
+        const ec = req.taxExemptionConfig.exemptionCard;
+        if (ec) {
+          if (ec.limit !== undefined) next.tax.exemptionCard.limit = ec.limit;
+          if (ec.yearlyIncrease !== undefined) next.tax.exemptionCard.increase = ec.yearlyIncrease;
+        }
+        const se = req.taxExemptionConfig.stockExemption;
+        if (se) {
+          if (se.taxRate !== undefined) next.tax.stockExemption.taxRate = se.taxRate;
+          if (se.limit !== undefined) next.tax.stockExemption.limit = se.limit;
+          if (se.yearlyIncrease !== undefined) next.tax.stockExemption.increase = se.yearlyIncrease;
+        }
+      }
+
+      // Returner
+      if (req?.returnType || req?.returnerConfig) {
+        next.returner = { ...(next.returner ?? {}) };
+        if (req?.returnType) next.returner.type = req.returnType;
+
+        const rc = req.returnerConfig ?? {};
+        next.returner.random = { ...(next.returner.random ?? {}) };
+        if (rc.seed !== undefined) next.returner.random.seed = rc.seed;
+
+        next.returner.simpleReturn = { ...(next.returner.simpleReturn ?? {}) };
+        if (rc.simpleAveragePercentage !== undefined) next.returner.simpleReturn.averagePercentage = rc.simpleAveragePercentage;
+
+        if (rc.distribution) {
+          next.returner.distribution = { ...(next.returner.distribution ?? {}) };
+          if (rc.distribution.type !== undefined) next.returner.distribution.type = rc.distribution.type;
+          if (rc.distribution.normal) {
+            next.returner.distribution.normal = { ...(next.returner.distribution.normal ?? {}) };
+            if (rc.distribution.normal.mean !== undefined) next.returner.distribution.normal.mean = rc.distribution.normal.mean;
+            if (rc.distribution.normal.standardDeviation !== undefined) next.returner.distribution.normal.standardDeviation = rc.distribution.normal.standardDeviation;
+          }
+          if (rc.distribution.brownianMotion) {
+            next.returner.distribution.brownianMotion = { ...(next.returner.distribution.brownianMotion ?? {}) };
+            if (rc.distribution.brownianMotion.drift !== undefined) next.returner.distribution.brownianMotion.drift = rc.distribution.brownianMotion.drift;
+            if (rc.distribution.brownianMotion.volatility !== undefined) next.returner.distribution.brownianMotion.volatility = rc.distribution.brownianMotion.volatility;
+          }
+          if (rc.distribution.studentT) {
+            next.returner.distribution.studentT = { ...(next.returner.distribution.studentT ?? {}) };
+            if (rc.distribution.studentT.mu !== undefined) next.returner.distribution.studentT.mu = rc.distribution.studentT.mu;
+            if (rc.distribution.studentT.sigma !== undefined) next.returner.distribution.studentT.sigma = rc.distribution.studentT.sigma;
+            if (rc.distribution.studentT.nu !== undefined) next.returner.distribution.studentT.nu = rc.distribution.studentT.nu;
+          }
+          if (rc.distribution.regimeBased) {
+            next.returner.distribution.regimeBased = { ...(next.returner.distribution.regimeBased ?? {}) };
+            if (rc.distribution.regimeBased.tickMonths !== undefined) next.returner.distribution.regimeBased.tickMonths = rc.distribution.regimeBased.tickMonths;
+            if (Array.isArray(rc.distribution.regimeBased.regimes)) {
+              next.returner.distribution.regimeBased.regimes = rc.distribution.regimeBased.regimes.map((r: any) => ({
+                distributionType: r?.distributionType,
+                expectedDurationMonths: r?.expectedDurationMonths,
+                switchWeights: { ...(r?.switchWeights ?? {}) },
+                normal: { ...(r?.normal ?? {}) },
+                studentT: { ...(r?.studentT ?? {}) },
+              }));
+            }
+          }
+        }
+      }
+
+      // Phases
+      if (Array.isArray(req?.phases)) {
+        next.phases = req.phases.map((p: any) => ({
+          phaseType: String(p?.phaseType ?? 'DEPOSIT').toUpperCase(),
+          durationInMonths: Number(p?.durationInMonths ?? 0),
+          initialDeposit: p?.initialDeposit,
+          monthlyDeposit: p?.monthlyDeposit,
+          yearlyIncreaseInPercentage: p?.yearlyIncreaseInPercentage,
+          withdrawRate: p?.withdrawRate,
+          withdrawAmount: p?.withdrawAmount,
+          lowerVariationPercentage: p?.lowerVariationPercentage,
+          upperVariationPercentage: p?.upperVariationPercentage,
+          taxExemptions: rulesToExemptions(p?.taxRules),
+        }));
+      }
+
+      return next;
+    });
+
+    setError(null);
+    setSubmitErrorDetails([]);
+    setFieldErrors({});
+    setActiveTab('general');
+  }, []);
+
+  useEffect(() => {
+    if (!externalLoadRequest) return;
+    if (!formConfig || !formData) return;
+    applyExternalLoad(externalLoadRequest);
+  }, [applyExternalLoad, externalLoadNonce, externalLoadRequest, formConfig, formData]);
 
   type ApiError = { message?: string; details?: string[] };
 

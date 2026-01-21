@@ -3,9 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
-import ExportStatisticsButton from '../../components/ExportStatisticsButton';
 import SimulationProgress from '../../components/SimulationProgress';
-import { startSimulation, exportSimulationCsv } from '../../api/simulation';
+import { startSimulation } from '../../api/simulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
 import {
@@ -136,12 +135,16 @@ export default function SimulationForm({
   footerBelow,
   tutorialSteps,
   onExitTutorial, // optional
+  externalLoadRequest,
+  externalLoadNonce,
 }: {
   onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
   rightFooterActions?: React.ReactNode;
   footerBelow?: React.ReactNode;
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
+  externalLoadRequest?: SimulationRequest | null;
+  externalLoadNonce?: number;
 }) {
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
@@ -164,7 +167,6 @@ export default function SimulationForm({
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
-  const [stats, setStats] = useState<YearlySummary[] | null>(null);
 
   const scenarioParamOnLoad = useMemo(() => {
     try {
@@ -218,6 +220,12 @@ export default function SimulationForm({
     setSelectedTemplateId('custom');
   }, []);
 
+  // External load hook (used by run-bundle import).
+  useEffect(() => {
+    if (!externalLoadRequest) return;
+    applyRequestToForm(externalLoadRequest);
+  }, [applyRequestToForm, externalLoadNonce, externalLoadRequest]);
+
   const refreshSavedScenarios = useCallback(() => {
     setSavedScenarios(listSavedScenarios());
   }, []);
@@ -268,7 +276,6 @@ export default function SimulationForm({
     }
 
     setSimulateInProgress(true);
-    setStats(null);
     setSimulationId(null);
 
     try {
@@ -584,7 +591,6 @@ export default function SimulationForm({
           simulationId={simulationId}
           onComplete={(result) => {
             const completedId = simulationId;
-            setStats(result);
             setSimulateInProgress(false);
             setSimulationId(null);
             const timeline: SimulationTimelineContext = {
@@ -596,21 +602,6 @@ export default function SimulationForm({
             onSimulationComplete?.(result, timeline, completedId ?? undefined);
           }}
         />
-      )}
-
-      {stats && (
-        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-          <button
-            type="button"
-            onClick={exportSimulationCsv}
-            style={{ flex: 1, padding: '0.75rem', fontSize: '1rem', width: '100%' }}
-          >
-            Export Simulation CSV
-          </button>
-          <div style={{ flex: 1 }}>
-            <ExportStatisticsButton data={stats} />
-          </div>
-        </div>
       )}
 
       {/* Coachmarks only when steps are provided */}

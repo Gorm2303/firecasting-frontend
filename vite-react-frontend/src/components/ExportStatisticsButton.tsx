@@ -6,8 +6,10 @@ interface ExportCSVButtonProps {
 }
 
 const ExportCSVButton: React.FC<ExportCSVButtonProps> = ({ data }) => {
+  const disabled = !data.length;
+
   const handleExportCSV = () => {
-    if (!data.length) return;
+    if (disabled) return;
     // Create header row using the keys from the first data object.
     const headers = Object.keys(data[0]);
     let csvContent = headers.join(',') + '\n';
@@ -31,12 +33,14 @@ const ExportCSVButton: React.FC<ExportCSVButtonProps> = ({ data }) => {
   };
 
   return (
-    <button type='button' onClick={handleExportCSV}                 
+    <button type='button' onClick={handleExportCSV} disabled={disabled}
       style={{
       flex: 1,
       padding: '0.75rem',
       fontSize: '1rem',
       width: '100%',
+      opacity: disabled ? 0.6 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
     }}>
       Export Statistics CSV
     </button>

@@ -1,5 +1,6 @@
 // src/api/simulation.ts
 import { SimulationRequest } from '../models/types';
+import { YearlySummary } from '../models/YearlySummary';
 import { getApiBaseUrl } from '../config/runtimeEnv';
 
 const BASE_URL = getApiBaseUrl();
@@ -23,6 +24,16 @@ export type ReplayStatusResponse = {
   maxAbsDiff?: number;
   note?: string;
 };
+
+export async function getCompletedSummaries(simulationId: string): Promise<YearlySummary[] | null> {
+  const res = await fetch(`${BASE_URL}/progress/${encodeURIComponent(simulationId)}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as YearlySummary[];
+}
 
 export async function startSimulation(req: SimulationRequest): Promise<string> {
   const res = await fetch(`${BASE_URL}/start`, {
@@ -58,8 +69,12 @@ export async function getReplayStatus(replayId: string): Promise<ReplayStatusRes
 
 
 
-export const exportSimulationCsv = async (): Promise<void> => {
-  const url = new URL('export', BASE_URL.replace(/\/+$/, '/') + '/').toString();
+export const exportSimulationCsv = async (simulationId?: string | null): Promise<void> => {
+  const base = BASE_URL.replace(/\/+$/, '');
+  const path = simulationId
+    ? `${encodeURIComponent(simulationId)}/export`
+    : 'export';
+  const url = new URL(path, base + '/').toString();
   const res = await fetch(url, { method: 'GET' }); // ← no credentials
   if (!res.ok) throw new Error(`Export failed: ${res.status} ${res.statusText}`);
 
@@ -79,12 +94,10 @@ export const exportSimulationCsv = async (): Promise<void> => {
 };
 
 export const exportRunBundle = async (
-  simulationId: string,
-  uiMode: 'normal' | 'advanced'
+  simulationId: string
 ): Promise<void> => {
   const base = BASE_URL.replace(/\/+$/, '');
   const url = new URL(`${simulationId}/bundle`, base + '/');
-  url.searchParams.set('uiMode', uiMode);
 
   const res = await fetch(url.toString(), { method: 'GET' });
   if (!res.ok) throw new Error(`Export bundle failed: ${res.status} ${res.statusText}`);
