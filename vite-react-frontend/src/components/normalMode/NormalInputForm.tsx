@@ -19,8 +19,6 @@ import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
-import { buildInitialFormState, type FormConfig } from '../advancedMode/formTypes';
-import { getApiBaseUrl } from '../../config/runtimeEnv';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
