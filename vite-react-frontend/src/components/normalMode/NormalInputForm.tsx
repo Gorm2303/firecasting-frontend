@@ -74,6 +74,12 @@ export type TutorialStep = {
 
 export type NormalInputFormMode = 'normal' | 'advanced';
 
+export type AdvancedFeatureFlags = {
+  inflation: boolean;
+  exemptions: boolean;
+  returnModel: boolean;
+};
+
 export type NormalInputFormHandle = {
   openSavedScenarios: () => void;
 };
@@ -89,6 +95,7 @@ export type NormalInputFormProps = {
   externalLoadAdvanced?: AdvancedOptionsLoad | null;
   externalLoadAdvancedNonce?: number;
   mode?: NormalInputFormMode;
+  advancedFeatureFlags?: AdvancedFeatureFlags;
 };
 
 const btn = (variant: 'primary' | 'ghost' | 'disabled'): React.CSSProperties => {
@@ -201,6 +208,7 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
   externalLoadAdvanced,
   externalLoadAdvancedNonce,
   mode = 'normal',
+  advancedFeatureFlags,
 },
 ref
 ) {
@@ -431,6 +439,15 @@ ref
   const [simulationId, setSimulationId] = useState<string | null>(null);
 
   const advancedMode = mode === 'advanced';
+
+  const effectiveAdvancedFeatureFlags = useMemo<AdvancedFeatureFlags>(
+    () => advancedFeatureFlags ?? { inflation: true, exemptions: true, returnModel: true },
+    [advancedFeatureFlags]
+  );
+
+  const inflationFeatureOn = effectiveAdvancedFeatureFlags.inflation;
+  const exemptionsFeatureOn = effectiveAdvancedFeatureFlags.exemptions;
+  const returnModelFeatureOn = effectiveAdvancedFeatureFlags.returnModel;
 
   // Mode buttons (SimulationPage) are authoritative.
   useEffect(() => {
@@ -802,8 +819,8 @@ ref
         return;
       }
 
-      const seedNum = toNumOrUndef(seed);
-      const inflationFactor = 1 + (Number(inflationAveragePct) || 0) / 100;
+      const seedNum = returnModelFeatureOn ? toNumOrUndef(seed) : undefined;
+      const inflationFactor = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : 1;
 
       const exCardLimit = toNumOrUndef(exemptionCardLimit);
       const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
@@ -812,7 +829,7 @@ ref
       const stockInc = toNumOrUndef(stockExemptionYearlyIncrease);
 
       const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
-        exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined
+        exemptionsFeatureOn && (exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined)
           ? {
               exemptionCard: {
                 limit: exCardLimit,
@@ -826,15 +843,17 @@ ref
             }
           : undefined;
 
-      const rc: AdvancedSimulationRequest['returnerConfig'] = {};
-      if (seedNum !== undefined) rc.seed = seedNum;
+      const returnTypeToSend: ReturnType = returnModelFeatureOn ? returnType : 'dataDrivenReturn';
 
-      if (returnType === 'simpleReturn') {
+      const rc: AdvancedSimulationRequest['returnerConfig'] = {};
+      if (returnModelFeatureOn && seedNum !== undefined) rc.seed = seedNum;
+
+      if (returnModelFeatureOn && returnType === 'simpleReturn') {
         const avg = toNumOrUndef(simpleAveragePercentage);
         if (avg !== undefined) rc.simpleAveragePercentage = avg;
       }
 
-      if (returnType === 'distributionReturn') {
+      if (returnModelFeatureOn && returnType === 'distributionReturn') {
         const distCfg: NonNullable<AdvancedSimulationRequest['returnerConfig']>['distribution'] = {
           type: distributionType,
         };
@@ -883,16 +902,18 @@ ref
       }
 
       const hasReturnerConfig =
-        rc.seed !== undefined ||
-        rc.simpleAveragePercentage !== undefined ||
-        rc.distribution?.type !== undefined;
+        returnModelFeatureOn && (
+          rc.seed !== undefined ||
+          rc.simpleAveragePercentage !== undefined ||
+          rc.distribution?.type !== undefined
+        );
 
       const advReq: AdvancedSimulationRequest = {
         startDate: { date: sanitized.startDate.date },
         phases: sanitized.phases,
         overallTaxRule: mapOverallTaxRuleForAdvanced(sanitized.overallTaxRule),
         taxPercentage: sanitized.taxPercentage,
-        returnType,
+        returnType: returnTypeToSend,
         seed: seedNum,
         returnerConfig: hasReturnerConfig ? rc : undefined,
         taxExemptionConfig,
@@ -907,6 +928,9 @@ ref
     }
   }, [
     advancedEnabled,
+    inflationFeatureOn,
+    exemptionsFeatureOn,
+    returnModelFeatureOn,
     inflationAveragePct,
     returnType,
     seed,
@@ -1153,7 +1177,7 @@ ref
             </div>
           </label>
 
-          {advancedEnabled && (
+          {advancedEnabled && inflationFeatureOn && (
             <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
               <span style={{ fontSize: '1.05rem' }}>Inflation (avg % / year)</span>
               <div style={rowStyle}>
@@ -1210,7 +1234,7 @@ ref
             </div>
           </label>
 
-          {advancedEnabled && (
+          {advancedEnabled && exemptionsFeatureOn && (
           <div style={{ marginTop: 12, borderTop: '1px solid var(--fc-subtle-border)', paddingTop: 12 }}>
             <div style={{ fontWeight: 750, marginBottom: 6 }}>Exemptions</div>
             <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
@@ -1297,7 +1321,7 @@ ref
           )}
         </div>
 
-        {advancedEnabled && (
+        {advancedEnabled && returnModelFeatureOn && (
         <div style={cardStyle}>
           <div style={cardTitleStyle}>Return model</div>
           <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
