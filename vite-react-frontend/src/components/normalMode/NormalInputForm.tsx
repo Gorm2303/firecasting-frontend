@@ -132,10 +132,14 @@ const formatYearsMonths = (months: number) => {
 
 export default function SimulationForm({
   onSimulationComplete,
+  rightFooterActions,
+  footerBelow,
   tutorialSteps,
   onExitTutorial, // optional
 }: {
   onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
+  rightFooterActions?: React.ReactNode;
+  footerBelow?: React.ReactNode;
   tutorialSteps?: TutorialStep[];
   onExitTutorial?: () => void;
 }) {
@@ -553,7 +557,8 @@ export default function SimulationForm({
         {simulateInProgress ? 'Running…' : 'Run Simulation'}
       </button>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, gap: 8, alignItems: 'center' }}>
+        {rightFooterActions}
         <button
           type="button"
           aria-label="Saved scenarios"
@@ -571,6 +576,8 @@ export default function SimulationForm({
           <span>Saved scenarios</span>
         </button>
       </div>
+
+      {footerBelow}
 
       {simulateInProgress && simulationId && (
         <SimulationProgress

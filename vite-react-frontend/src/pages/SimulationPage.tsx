@@ -61,8 +61,59 @@ const SimulationPage: React.FC = () => {
     }
   };
 
-  const FormComponent =
-    formMode === 'advanced' ? AdvancedInputForm : NormalInputForm;
+  const importControl = (
+    <>
+      <label
+        style={{
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: '1px solid #444',
+          cursor: importBusy ? 'not-allowed' : 'pointer',
+          fontSize: 14,
+          background: 'transparent',
+          color: '#ddd',
+          opacity: importBusy ? 0.65 : 1,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+        title="Import a previously exported run bundle (JSON)"
+      >
+        <span aria-hidden="true">📥</span>
+        Import Run Bundle
+        <input
+          type="file"
+          accept="application/json,.json"
+          disabled={importBusy}
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            setImportBusy(true);
+            setStats(null);
+            setTimeline(null);
+            setReplayReport(null);
+            try {
+              const resp = await importRunBundle(f);
+              setImportReplayId(resp.replayId);
+              setImportSimulationId(resp.simulationId);
+            } catch (err: any) {
+              console.error(err);
+              alert(err?.message ?? 'Failed to import bundle');
+            } finally {
+              setImportBusy(false);
+              e.target.value = '';
+            }
+          }}
+        />
+      </label>
+      {importReplayId && (
+        <span style={{ fontSize: 12, opacity: 0.8 }}>
+          Replay: {importReplayId.slice(0, 8)}…
+        </span>
+      )}
+    </>
+  );
 
   const segBtn = (mode: FormMode, label: string) => (
     <button
@@ -116,60 +167,50 @@ const SimulationPage: React.FC = () => {
           {segBtn('advanced', 'Advanced')}
         </div>
 
-        <div style={{
-          display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center',
-          marginBottom: 12,
-        }}>
-          <label style={{
-            padding: '0.4rem 0.8rem', border: '1px solid #444', borderRadius: 8,
-            cursor: importBusy ? 'not-allowed' : 'pointer',
-            opacity: importBusy ? 0.7 : 1,
-          }}>
-            Import Run Bundle
-            <input
-              type="file"
-              accept="application/json,.json"
-              disabled={importBusy}
-              style={{ display: 'none' }}
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                setImportBusy(true);
-                setStats(null);
-                setTimeline(null);
-                setReplayReport(null);
-                try {
-                  const resp = await importRunBundle(f);
-                  setImportReplayId(resp.replayId);
-                  setImportSimulationId(resp.simulationId);
-                } catch (err: any) {
-                  console.error(err);
-                  alert(err?.message ?? 'Failed to import bundle');
-                } finally {
-                  setImportBusy(false);
-                  e.target.value = '';
-                }
-              }}
-            />
-          </label>
-          {importReplayId && (
-            <span style={{ fontSize: 12, opacity: 0.8 }}>
-              Replay: {importReplayId.slice(0, 8)}…
-            </span>
-          )}
-        </div>
-
-        {importSimulationId && !stats && (
-          <div style={{ maxWidth: 960, margin: '0 auto' }}>
-            <SimulationProgress
-              simulationId={importSimulationId}
-              onComplete={handleImportComplete}
-            />
-          </div>
-        )}
-
         <div key={formMode}>
-          <FormComponent onSimulationComplete={handleSimulationComplete} />
+          {formMode === 'advanced' ? (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                {importControl}
+              </div>
+
+              {importSimulationId && !stats && (
+                <div style={{ maxWidth: 960, margin: '0 auto' }}>
+                  <SimulationProgress
+                    simulationId={importSimulationId}
+                    onComplete={handleImportComplete}
+                  />
+                </div>
+              )}
+
+              <AdvancedInputForm onSimulationComplete={handleSimulationComplete} />
+            </>
+          ) : (
+            <>
+              <NormalInputForm
+                onSimulationComplete={handleSimulationComplete}
+                rightFooterActions={importControl}
+                footerBelow={
+                  importSimulationId && !stats ? (
+                    <div style={{ maxWidth: 960, margin: '0.75rem auto 0' }}>
+                      <SimulationProgress
+                        simulationId={importSimulationId}
+                        onComplete={handleImportComplete}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+            </>
+          )}
         </div>
       </div>
 
