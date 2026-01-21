@@ -1,6 +1,6 @@
 // src/pages/SimulationPage.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import NormalInputForm, { type NormalInputFormHandle, type NormalInputFormMode } from '../components/normalMode/NormalInputForm';
+import NormalInputForm, { type AdvancedFeatureFlags, type NormalInputFormHandle, type NormalInputFormMode } from '../components/normalMode/NormalInputForm';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationRequest, SimulationTimelineContext } from '../models/types';
 import MultiPhaseOverview from '../MultiPhaseOverview';
@@ -11,6 +11,13 @@ import SimulationProgress from '../components/SimulationProgress';
 
 type BundleKind = 'normal' | 'advanced';
 const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
+const ADVANCED_FEATURE_FLAGS_KEY = 'firecasting:simulation:advancedFeatureFlags:v1';
+
+const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
+  inflation: true,
+  exemptions: true,
+  returnModel: true,
+};
 
 const toIsoDateString = (v: any): string | null => {
   if (!v) return null;
@@ -124,13 +131,50 @@ const SimulationPage: React.FC = () => {
     }
   });
 
+  const [advancedFeatureFlags, setAdvancedFeatureFlags] = useState<AdvancedFeatureFlags>(() => {
+    try {
+      const raw = window.localStorage.getItem(ADVANCED_FEATURE_FLAGS_KEY);
+      if (!raw) return DEFAULT_ADVANCED_FEATURE_FLAGS;
+      const parsed = JSON.parse(raw);
+      return {
+        inflation: Boolean(parsed?.inflation ?? true),
+        exemptions: Boolean(parsed?.exemptions ?? true),
+        returnModel: Boolean(parsed?.returnModel ?? true),
+      };
+    } catch {
+      return DEFAULT_ADVANCED_FEATURE_FLAGS;
+    }
+  });
+
+  const [isAdvancedPickerOpen, setIsAdvancedPickerOpen] = useState(false);
+  const [pendingAdvancedFeatureFlags, setPendingAdvancedFeatureFlags] = useState<AdvancedFeatureFlags>(advancedFeatureFlags);
+  const advancedPickerOverlayRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch {}
   }, [mode]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(ADVANCED_FEATURE_FLAGS_KEY, JSON.stringify(advancedFeatureFlags));
+    } catch {
+      // ignore
+    }
+  }, [advancedFeatureFlags]);
+
+  useEffect(() => {
     try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch {}
   }, [autoExportSimulationCsv]);
+
+  useEffect(() => {
+    if (!isAdvancedPickerOpen) return;
+    advancedPickerOverlayRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAdvancedPickerOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isAdvancedPickerOpen]);
 
   const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext, simulationId?: string) => {
     setStats(results);
@@ -349,12 +393,12 @@ const SimulationPage: React.FC = () => {
     </button>
   );
 
-  const modeButton = (label: 'Normal' | 'Advanced', value: NormalInputFormMode) => {
+  const modeButton = (label: 'Normal' | 'Advanced', value: NormalInputFormMode, onClick?: () => void) => {
     const isActive = mode === value;
     return (
       <button
         type="button"
-        onClick={() => setMode(value)}
+        onClick={onClick ?? (() => setMode(value))}
         style={{
           padding: '6px 10px',
           borderRadius: 8,
@@ -428,12 +472,154 @@ const SimulationPage: React.FC = () => {
             Tutorial
           </Link>
           <div role="group" aria-label="Mode" className="fc-sim-mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {modeButton('Normal', 'normal')}
-            {modeButton('Advanced', 'advanced')}
+            {modeButton('Normal', 'normal', () => {
+              setMode('normal');
+              setIsAdvancedPickerOpen(false);
+            })}
+            {modeButton('Advanced', 'advanced', () => {
+              setPendingAdvancedFeatureFlags(advancedFeatureFlags);
+              setIsAdvancedPickerOpen(true);
+            })}
           </div>
           {ioButton}
           {savedScenariosButton}
         </div>
+
+        {isAdvancedPickerOpen && (
+          <div
+            ref={advancedPickerOverlayRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Advanced feature selection"
+            onClick={() => setIsAdvancedPickerOpen(false)}
+            tabIndex={-1}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.35)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+              padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 'min(520px, 100%)',
+                marginTop: 72,
+                background: 'var(--fc-card-bg)',
+                border: '1px solid var(--fc-card-border)',
+                borderRadius: 12,
+                padding: 12,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+                <div style={{ fontWeight: 800 }}>Advanced options</div>
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedPickerOpen(false)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 8,
+                    border: '1px solid #444',
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
+                Choose which advanced sections are visible and included in the request.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.inflation}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, inflation: e.target.checked }))}
+                  />
+                  <span>Inflation</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.exemptions}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, exemptions: e.target.checked }))}
+                  />
+                  <span>Exemptions</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.returnModel}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, returnModel: e.target.checked }))}
+                  />
+                  <span>Return model</span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setPendingAdvancedFeatureFlags(DEFAULT_ADVANCED_FEATURE_FLAGS)}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #444',
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Enable all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdvancedPickerOpen(false);
+                    setPendingAdvancedFeatureFlags(advancedFeatureFlags);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #444',
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdvancedFeatureFlags(pendingAdvancedFeatureFlags);
+                    setMode('advanced');
+                    setIsAdvancedPickerOpen(false);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    border: '1px solid var(--fc-card-border)',
+                    background: 'var(--fc-subtle-bg)',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <NormalInputForm
           ref={formRef}
@@ -443,6 +629,7 @@ const SimulationPage: React.FC = () => {
           externalLoadAdvanced={externalAdvancedLoad}
           externalLoadAdvancedNonce={externalAdvancedLoadNonce}
           mode={mode}
+          advancedFeatureFlags={advancedFeatureFlags}
           rightFooterActions={null}
           footerBelow={
             <>
