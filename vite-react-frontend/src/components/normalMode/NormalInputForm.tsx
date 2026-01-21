@@ -908,6 +908,23 @@ ref
           rc.distribution?.type !== undefined
         );
 
+      // Backend dedup is based on the *input DTO* (normal vs advanced), so even if the
+      // internal run-spec ends up identical, calling /start-advanced will not dedup with /start.
+      // When advanced options don't change anything beyond the normal endpoint defaults,
+      // route through /start so we hit dedup.
+      const shouldUseNormalEndpointForDedup =
+        taxExemptionConfig === undefined &&
+        returnTypeToSend === 'dataDrivenReturn' &&
+        seedNum === undefined &&
+        !hasReturnerConfig &&
+        Math.abs(inflationFactor - 1.02) < 1e-12;
+
+      if (shouldUseNormalEndpointForDedup) {
+        const id = await startSimulation(sanitized);
+        setSimulationId(id);
+        return;
+      }
+
       const advReq: AdvancedSimulationRequest = {
         startDate: { date: sanitized.startDate.date },
         phases: sanitized.phases,
