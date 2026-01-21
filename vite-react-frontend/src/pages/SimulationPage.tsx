@@ -19,6 +19,33 @@ const getInitialFormMode = (): FormMode => {
   return v === 'advanced' ? 'advanced' : 'normal';
 };
 
+const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | null => {
+  try {
+    const raw = bundle?.inputs?.raw;
+    if (!raw) return null;
+
+    const startDate = raw?.startDate?.date ?? raw?.startDate;
+    const phases: any[] = Array.isArray(raw?.phases) ? raw.phases : [];
+    if (!startDate || !phases.length) return null;
+
+    const phaseTypes = phases
+      .map((p) => p?.phaseType ?? p?.type)
+      .filter(Boolean);
+    const phaseDurationsInMonths = phases
+      .map((p) => Number(p?.durationInMonths) || 0);
+
+    return {
+      startDate: String(startDate),
+      phaseTypes,
+      phaseDurationsInMonths,
+      firstPhaseInitialDeposit:
+        phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const SimulationPage: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
@@ -49,7 +76,7 @@ const SimulationPage: React.FC = () => {
 
   const handleImportComplete = async (results: YearlySummary[]) => {
     setStats(results);
-    setTimeline(null);
+    // Keep timeline derived from the uploaded bundle so visualization matches a normal run.
     setLastCompletedSimulationId(importSimulationId);
     if (importReplayId) {
       try {
@@ -89,9 +116,20 @@ const SimulationPage: React.FC = () => {
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (!f) return;
+
+            // Derive timeline locally from the bundle so MultiPhaseOverview behaves the same
+            // as a normal simulation run (calendar boundaries + phase grouping).
+            try {
+              const text = await f.text();
+              const parsed = JSON.parse(text);
+              const t = tryBuildTimelineFromBundle(parsed);
+              setTimeline(t);
+            } catch {
+              setTimeline(null);
+            }
+
             setImportBusy(true);
             setStats(null);
-            setTimeline(null);
             setReplayReport(null);
             try {
               const resp = await importRunBundle(f);
