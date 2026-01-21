@@ -1,10 +1,10 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import SimulationProgress from '../../components/SimulationProgress';
-import { startSimulation } from '../../api/simulation';
+import { startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
 import {
@@ -19,8 +19,49 @@ import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
+import { buildInitialFormState, type FormConfig } from '../advancedMode/formTypes';
+import { getApiBaseUrl } from '../../config/runtimeEnv';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
+
+type ReturnType = 'dataDrivenReturn' | 'distributionReturn' | 'simpleReturn';
+
+type DistributionType = 'normal' | 'brownianMotion' | 'studentT' | 'regimeBased';
+
+type AdvancedOptionsLoad = {
+  enabled?: boolean;
+  inflationAveragePct?: number;
+  taxExemptionConfig?: {
+    exemptionCard?: { limit?: number; yearlyIncrease?: number };
+    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
+  };
+  returnerConfig?: AdvancedSimulationRequest['returnerConfig'];
+  returnType?: ReturnType;
+  seed?: string | number;
+};
+
+const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+
+const toNumOrUndef = (v: any): number | undefined => {
+  if (v === '' || v === null || v === undefined) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule === 'NOTIONAL' ? 'notional' : 'capital');
+
+const parseReturnType = (v: any): ReturnType => {
+  const s = String(v ?? '').trim();
+  if (s === 'distributionReturn' || s === 'dataDrivenReturn' || s === 'simpleReturn') return s;
+  // Keep backward/forward compatibility (backend defaults SimpleDailyReturn for unknown).
+  return 'dataDrivenReturn';
+};
+
+const parseDistributionType = (v: any): DistributionType => {
+  const s = String(v ?? '').trim();
+  if (s === 'normal' || s === 'brownianMotion' || s === 'studentT' || s === 'regimeBased') return s;
+  return 'normal';
+};
 
 export type TutorialStep = {
   id: string;
@@ -29,6 +70,25 @@ export type TutorialStep = {
   selector?: string;
   placement?: 'top' | 'right' | 'bottom' | 'left';
   waitFor?: number;
+};
+
+export type NormalInputFormMode = 'normal' | 'advanced';
+
+export type NormalInputFormHandle = {
+  openSavedScenarios: () => void;
+};
+
+export type NormalInputFormProps = {
+  onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
+  rightFooterActions?: React.ReactNode;
+  footerBelow?: React.ReactNode;
+  tutorialSteps?: TutorialStep[];
+  onExitTutorial?: () => void;
+  externalLoadRequest?: SimulationRequest | null;
+  externalLoadNonce?: number;
+  externalLoadAdvanced?: AdvancedOptionsLoad | null;
+  externalLoadAdvancedNonce?: number;
+  mode?: NormalInputFormMode;
 };
 
 const btn = (variant: 'primary' | 'ghost' | 'disabled'): React.CSSProperties => {
@@ -129,7 +189,8 @@ const formatYearsMonths = (months: number) => {
   return `${years} year${years === 1 ? '' : 's'} ${leftoverMonths} month${leftoverMonths === 1 ? '' : 's'}`;
 };
 
-export default function SimulationForm({
+const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormProps>(function NormalInputForm(
+{
   onSimulationComplete,
   rightFooterActions,
   footerBelow,
@@ -137,21 +198,222 @@ export default function SimulationForm({
   onExitTutorial, // optional
   externalLoadRequest,
   externalLoadNonce,
-}: {
-  onSimulationComplete?: (stats: YearlySummary[], timeline?: SimulationTimelineContext, simulationId?: string) => void;
-  rightFooterActions?: React.ReactNode;
-  footerBelow?: React.ReactNode;
-  tutorialSteps?: TutorialStep[];
-  onExitTutorial?: () => void;
-  externalLoadRequest?: SimulationRequest | null;
-  externalLoadNonce?: number;
-}) {
+  externalLoadAdvanced,
+  externalLoadAdvancedNonce,
+  mode = 'normal',
+},
+ref
+) {
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
   const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>(initialDefaults.overallTaxRule);
   const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
   const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
+
+  const initialAdvancedState = useMemo<{
+    enabled: boolean;
+    inflationAveragePct: number;
+    returnType: ReturnType;
+    seed: string;
+    simpleAveragePercentage: string;
+    distributionType: DistributionType;
+    normalMean: string;
+    normalStdDev: string;
+    brownianDrift: string;
+    brownianVolatility: string;
+    studentMu: string;
+    studentSigma: string;
+    studentNu: string;
+    regimeTickMonths: string;
+    regimes: Array<{
+      distributionType: 'normal' | 'studentT';
+      expectedDurationMonths: string;
+      toRegime0: string;
+      toRegime1: string;
+      toRegime2: string;
+      normalMean: string;
+      normalStdDev: string;
+      studentMu: string;
+      studentSigma: string;
+      studentNu: string;
+    }>;
+    exemptionCardLimit: string;
+    exemptionCardYearlyIncrease: string;
+    stockExemptionTaxRate: string;
+    stockExemptionLimit: string;
+    stockExemptionYearlyIncrease: string;
+  }>(() => {
+    try {
+      const raw = window.localStorage.getItem(ADVANCED_OPTIONS_KEY);
+      if (!raw) {
+        return {
+          enabled: false,
+          inflationAveragePct: 2,
+          returnType: 'dataDrivenReturn' as ReturnType,
+          seed: '',
+          simpleAveragePercentage: '',
+          distributionType: 'normal' as DistributionType,
+          normalMean: '',
+          normalStdDev: '',
+          brownianDrift: '',
+          brownianVolatility: '',
+          studentMu: '',
+          studentSigma: '',
+          studentNu: '',
+          regimeTickMonths: '',
+          regimes: Array.from({ length: 3 }).map(() => ({
+            distributionType: 'normal' as 'normal' | 'studentT',
+            expectedDurationMonths: '',
+            toRegime0: '',
+            toRegime1: '',
+            toRegime2: '',
+            normalMean: '',
+            normalStdDev: '',
+            studentMu: '',
+            studentSigma: '',
+            studentNu: '',
+          })),
+          exemptionCardLimit: '',
+          exemptionCardYearlyIncrease: '',
+          stockExemptionTaxRate: '',
+          stockExemptionLimit: '',
+          stockExemptionYearlyIncrease: '',
+        };
+      }
+      const parsed = JSON.parse(raw);
+      const enabled = Boolean(parsed?.enabled);
+      const inflationAveragePct = Number.isFinite(Number(parsed?.inflationAveragePct)) ? Number(parsed.inflationAveragePct) : 2;
+      const returnType = parseReturnType(parsed?.returnType);
+      const distributionType = parseDistributionType(parsed?.distributionType);
+      const seed = parsed?.seed ?? '';
+      const simpleAveragePercentage = parsed?.simpleAveragePercentage ?? '';
+
+      const regimesInput: any[] = Array.isArray(parsed?.regimes) ? parsed.regimes : [];
+      const regimes: Array<{
+        distributionType: 'normal' | 'studentT';
+        expectedDurationMonths: string;
+        toRegime0: string;
+        toRegime1: string;
+        toRegime2: string;
+        normalMean: string;
+        normalStdDev: string;
+        studentMu: string;
+        studentSigma: string;
+        studentNu: string;
+      }> = Array.from({ length: 3 }).map((_, i) => {
+        const r = regimesInput[i] ?? {};
+        const dt = String(r?.distributionType ?? 'normal');
+        return {
+          distributionType: dt === 'studentT' ? 'studentT' : 'normal',
+          expectedDurationMonths: r?.expectedDurationMonths ?? '',
+          toRegime0: r?.toRegime0 ?? '',
+          toRegime1: r?.toRegime1 ?? '',
+          toRegime2: r?.toRegime2 ?? '',
+          normalMean: r?.normalMean ?? '',
+          normalStdDev: r?.normalStdDev ?? '',
+          studentMu: r?.studentMu ?? '',
+          studentSigma: r?.studentSigma ?? '',
+          studentNu: r?.studentNu ?? '',
+        };
+      });
+
+      return {
+        enabled,
+        inflationAveragePct,
+        returnType,
+        distributionType,
+        seed: String(seed),
+        simpleAveragePercentage: String(simpleAveragePercentage),
+        normalMean: parsed?.normalMean ?? '',
+        normalStdDev: parsed?.normalStdDev ?? '',
+        brownianDrift: parsed?.brownianDrift ?? '',
+        brownianVolatility: parsed?.brownianVolatility ?? '',
+        studentMu: parsed?.studentMu ?? '',
+        studentSigma: parsed?.studentSigma ?? '',
+        studentNu: parsed?.studentNu ?? '',
+        regimeTickMonths: parsed?.regimeTickMonths ?? '',
+        regimes,
+        exemptionCardLimit: parsed?.exemptionCardLimit ?? '',
+        exemptionCardYearlyIncrease: parsed?.exemptionCardYearlyIncrease ?? '',
+        stockExemptionTaxRate: parsed?.stockExemptionTaxRate ?? '',
+        stockExemptionLimit: parsed?.stockExemptionLimit ?? '',
+        stockExemptionYearlyIncrease: parsed?.stockExemptionYearlyIncrease ?? '',
+      };
+    } catch {
+      return {
+        enabled: false,
+        inflationAveragePct: 2,
+        returnType: 'dataDrivenReturn' as ReturnType,
+        seed: '',
+        simpleAveragePercentage: '',
+        distributionType: 'normal' as DistributionType,
+        normalMean: '',
+        normalStdDev: '',
+        brownianDrift: '',
+        brownianVolatility: '',
+        studentMu: '',
+        studentSigma: '',
+        studentNu: '',
+        regimeTickMonths: '',
+        regimes: Array.from({ length: 3 }).map(() => ({
+          distributionType: 'normal' as 'normal' | 'studentT',
+          expectedDurationMonths: '',
+          toRegime0: '',
+          toRegime1: '',
+          toRegime2: '',
+          normalMean: '',
+          normalStdDev: '',
+          studentMu: '',
+          studentSigma: '',
+          studentNu: '',
+        })),
+        exemptionCardLimit: '',
+        exemptionCardYearlyIncrease: '',
+        stockExemptionTaxRate: '',
+        stockExemptionLimit: '',
+        stockExemptionYearlyIncrease: '',
+      };
+    }
+  }, []);
+
+  const [advancedEnabled, setAdvancedEnabled] = useState<boolean>(initialAdvancedState.enabled);
+  const [inflationAveragePct, setInflationAveragePct] = useState<number>(initialAdvancedState.inflationAveragePct);
+
+  const [exemptionCardLimit, setExemptionCardLimit] = useState<string>(String(initialAdvancedState.exemptionCardLimit));
+  const [exemptionCardYearlyIncrease, setExemptionCardYearlyIncrease] = useState<string>(String(initialAdvancedState.exemptionCardYearlyIncrease));
+  const [stockExemptionTaxRate, setStockExemptionTaxRate] = useState<string>(String(initialAdvancedState.stockExemptionTaxRate));
+  const [stockExemptionLimit, setStockExemptionLimit] = useState<string>(String(initialAdvancedState.stockExemptionLimit));
+  const [stockExemptionYearlyIncrease, setStockExemptionYearlyIncrease] = useState<string>(String(initialAdvancedState.stockExemptionYearlyIncrease));
+
+  const [returnType, setReturnType] = useState<ReturnType>(initialAdvancedState.returnType);
+  const [seed, setSeed] = useState<string>(String(initialAdvancedState.seed ?? ''));
+  const [simpleAveragePercentage, setSimpleAveragePercentage] = useState<string>(String(initialAdvancedState.simpleAveragePercentage ?? ''));
+
+  const [distributionType, setDistributionType] = useState<DistributionType>(initialAdvancedState.distributionType);
+  const [normalMean, setNormalMean] = useState<string>(String(initialAdvancedState.normalMean ?? ''));
+  const [normalStdDev, setNormalStdDev] = useState<string>(String(initialAdvancedState.normalStdDev ?? ''));
+  const [brownianDrift, setBrownianDrift] = useState<string>(String(initialAdvancedState.brownianDrift ?? ''));
+  const [brownianVolatility, setBrownianVolatility] = useState<string>(String(initialAdvancedState.brownianVolatility ?? ''));
+  const [studentMu, setStudentMu] = useState<string>(String(initialAdvancedState.studentMu ?? ''));
+  const [studentSigma, setStudentSigma] = useState<string>(String(initialAdvancedState.studentSigma ?? ''));
+  const [studentNu, setStudentNu] = useState<string>(String(initialAdvancedState.studentNu ?? ''));
+
+  const [regimeTickMonths, setRegimeTickMonths] = useState<string>(String(initialAdvancedState.regimeTickMonths ?? ''));
+  const [regimes, setRegimes] = useState<
+    Array<{
+      distributionType: 'normal' | 'studentT';
+      expectedDurationMonths: string;
+      toRegime0: string;
+      toRegime1: string;
+      toRegime2: string;
+      normalMean: string;
+      normalStdDev: string;
+      studentMu: string;
+      studentSigma: string;
+      studentNu: string;
+    }>
+  >(initialAdvancedState.regimes);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
   const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
@@ -167,6 +429,13 @@ export default function SimulationForm({
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+
+  const advancedMode = mode === 'advanced';
+
+  // Mode buttons (SimulationPage) are authoritative.
+  useEffect(() => {
+    setAdvancedEnabled(advancedMode);
+  }, [advancedMode]);
 
   const scenarioParamOnLoad = useMemo(() => {
     try {
@@ -226,6 +495,155 @@ export default function SimulationForm({
     applyRequestToForm(externalLoadRequest);
   }, [applyRequestToForm, externalLoadNonce, externalLoadRequest]);
 
+  // External advanced-load hook (used by advanced run-bundle import).
+  useEffect(() => {
+    if (!externalLoadAdvanced) return;
+
+    // If the import doesn't specify enabled, assume advanced inputs imply enabled.
+    setAdvancedEnabled(externalLoadAdvanced.enabled ?? true);
+
+    if (externalLoadAdvanced.inflationAveragePct !== undefined) {
+      const pct = Number(externalLoadAdvanced.inflationAveragePct);
+      if (Number.isFinite(pct)) setInflationAveragePct(pct);
+    }
+
+    const taxCfg = externalLoadAdvanced.taxExemptionConfig;
+    if (taxCfg?.exemptionCard) {
+      if (taxCfg.exemptionCard.limit !== undefined) setExemptionCardLimit(String(taxCfg.exemptionCard.limit));
+      if (taxCfg.exemptionCard.yearlyIncrease !== undefined) setExemptionCardYearlyIncrease(String(taxCfg.exemptionCard.yearlyIncrease));
+    }
+    if (taxCfg?.stockExemption) {
+      if (taxCfg.stockExemption.taxRate !== undefined) setStockExemptionTaxRate(String(taxCfg.stockExemption.taxRate));
+      if (taxCfg.stockExemption.limit !== undefined) setStockExemptionLimit(String(taxCfg.stockExemption.limit));
+      if (taxCfg.stockExemption.yearlyIncrease !== undefined) setStockExemptionYearlyIncrease(String(taxCfg.stockExemption.yearlyIncrease));
+    }
+
+    const rt = externalLoadAdvanced.returnType;
+    if (rt) setReturnType(parseReturnType(rt));
+
+    if (externalLoadAdvanced.seed !== undefined) setSeed(String(externalLoadAdvanced.seed));
+
+    const rc = externalLoadAdvanced.returnerConfig;
+    if (rc?.seed !== undefined) setSeed(String(rc.seed));
+    if (rc?.simpleAveragePercentage !== undefined) setSimpleAveragePercentage(String(rc.simpleAveragePercentage));
+
+    const dist = rc?.distribution;
+    if (dist?.type) setDistributionType(parseDistributionType(dist.type));
+
+    if (dist?.normal) {
+      if (dist.normal.mean !== undefined) setNormalMean(String(dist.normal.mean));
+      if (dist.normal.standardDeviation !== undefined) setNormalStdDev(String(dist.normal.standardDeviation));
+    }
+    if (dist?.brownianMotion) {
+      if (dist.brownianMotion.drift !== undefined) setBrownianDrift(String(dist.brownianMotion.drift));
+      if (dist.brownianMotion.volatility !== undefined) setBrownianVolatility(String(dist.brownianMotion.volatility));
+    }
+    if (dist?.studentT) {
+      if (dist.studentT.mu !== undefined) setStudentMu(String(dist.studentT.mu));
+      if (dist.studentT.sigma !== undefined) setStudentSigma(String(dist.studentT.sigma));
+      if (dist.studentT.nu !== undefined) setStudentNu(String(dist.studentT.nu));
+    }
+    if (dist?.regimeBased) {
+      if (dist.regimeBased.tickMonths !== undefined) setRegimeTickMonths(String(dist.regimeBased.tickMonths));
+      const regs = Array.isArray(dist.regimeBased.regimes) ? dist.regimeBased.regimes : [];
+      setRegimes((prev) => {
+        return prev.map((p, i) => {
+          const r: any = regs[i] ?? {};
+          const dt = String(r?.distributionType ?? p.distributionType);
+          return {
+            ...p,
+            distributionType: dt === 'studentT' ? 'studentT' : 'normal',
+            expectedDurationMonths: r?.expectedDurationMonths !== undefined ? String(r.expectedDurationMonths) : p.expectedDurationMonths,
+            toRegime0: r?.switchWeights?.toRegime0 !== undefined ? String(r.switchWeights.toRegime0) : p.toRegime0,
+            toRegime1: r?.switchWeights?.toRegime1 !== undefined ? String(r.switchWeights.toRegime1) : p.toRegime1,
+            toRegime2: r?.switchWeights?.toRegime2 !== undefined ? String(r.switchWeights.toRegime2) : p.toRegime2,
+            normalMean: r?.normal?.mean !== undefined ? String(r.normal.mean) : p.normalMean,
+            normalStdDev: r?.normal?.standardDeviation !== undefined ? String(r.normal.standardDeviation) : p.normalStdDev,
+            studentMu: r?.studentT?.mu !== undefined ? String(r.studentT.mu) : p.studentMu,
+            studentSigma: r?.studentT?.sigma !== undefined ? String(r.studentT.sigma) : p.studentSigma,
+            studentNu: r?.studentT?.nu !== undefined ? String(r.studentT.nu) : p.studentNu,
+          };
+        });
+      });
+    }
+  }, [
+    externalLoadAdvanced,
+    externalLoadAdvancedNonce,
+    setAdvancedEnabled,
+    setInflationAveragePct,
+    setExemptionCardLimit,
+    setExemptionCardYearlyIncrease,
+    setStockExemptionTaxRate,
+    setStockExemptionLimit,
+    setStockExemptionYearlyIncrease,
+    setReturnType,
+    setSeed,
+    setSimpleAveragePercentage,
+    setDistributionType,
+    setNormalMean,
+    setNormalStdDev,
+    setBrownianDrift,
+    setBrownianVolatility,
+    setStudentMu,
+    setStudentSigma,
+    setStudentNu,
+    setRegimeTickMonths,
+    setRegimes,
+  ]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADVANCED_OPTIONS_KEY,
+        JSON.stringify({
+          enabled: advancedEnabled,
+          inflationAveragePct,
+          returnType,
+          seed,
+          simpleAveragePercentage,
+          distributionType,
+          normalMean,
+          normalStdDev,
+          brownianDrift,
+          brownianVolatility,
+          studentMu,
+          studentSigma,
+          studentNu,
+          regimeTickMonths,
+          regimes,
+          exemptionCardLimit,
+          exemptionCardYearlyIncrease,
+          stockExemptionTaxRate,
+          stockExemptionLimit,
+          stockExemptionYearlyIncrease,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [
+    advancedEnabled,
+    inflationAveragePct,
+    returnType,
+    seed,
+    simpleAveragePercentage,
+    distributionType,
+    normalMean,
+    normalStdDev,
+    brownianDrift,
+    brownianVolatility,
+    studentMu,
+    studentSigma,
+    studentNu,
+    regimeTickMonths,
+    regimes,
+    exemptionCardLimit,
+    exemptionCardYearlyIncrease,
+    stockExemptionTaxRate,
+    stockExemptionLimit,
+    stockExemptionYearlyIncrease,
+  ]);
+
   const refreshSavedScenarios = useCallback(() => {
     setSavedScenarios(listSavedScenarios());
   }, []);
@@ -234,6 +652,99 @@ export default function SimulationForm({
     refreshSavedScenarios();
     setIsScenarioModalOpen(true);
   }, [refreshSavedScenarios]);
+
+  useImperativeHandle(ref, () => ({
+    openSavedScenarios: openScenarioModal,
+  }), [openScenarioModal]);
+
+  const hasAppliedFetchedAdvancedDefaultsRef = useRef(false);
+  useEffect(() => {
+    if (!advancedEnabled) return;
+    if (hasAppliedFetchedAdvancedDefaultsRef.current) return;
+
+    const isBlank = (v: any) => String(v ?? '').trim() === '';
+    const setIfBlank = (current: any, setter: (v: string) => void, next: any) => {
+      if (!isBlank(next)) {
+        if (isBlank(current)) setter(String(next));
+      }
+    };
+
+    const applyDefaultsIfBlank = (data: any) => {
+      const infl = Number(data?.inflation?.averagePercentage);
+      if (Number.isFinite(infl) && !Number.isFinite(Number(inflationAveragePct))) {
+        setInflationAveragePct(infl);
+      }
+
+      if (data?.tax?.exemptionCard) {
+        setIfBlank(exemptionCardLimit, setExemptionCardLimit, data.tax.exemptionCard.limit);
+        setIfBlank(exemptionCardYearlyIncrease, setExemptionCardYearlyIncrease, data.tax.exemptionCard.increase);
+      }
+      if (data?.tax?.stockExemption) {
+        setIfBlank(stockExemptionTaxRate, setStockExemptionTaxRate, data.tax.stockExemption.taxRate);
+        setIfBlank(stockExemptionLimit, setStockExemptionLimit, data.tax.stockExemption.limit);
+        setIfBlank(stockExemptionYearlyIncrease, setStockExemptionYearlyIncrease, data.tax.stockExemption.increase);
+      }
+
+      if (data?.returner?.type && isBlank(returnType)) setReturnType(parseReturnType(data.returner.type));
+      if (data?.returner?.random?.seed !== undefined) setIfBlank(seed, setSeed, data.returner.random.seed);
+      if (data?.returner?.simpleReturn?.averagePercentage !== undefined) setIfBlank(simpleAveragePercentage, setSimpleAveragePercentage, data.returner.simpleReturn.averagePercentage);
+
+      if (data?.returner?.distribution?.type && isBlank(distributionType)) setDistributionType(parseDistributionType(data.returner.distribution.type));
+      if (data?.returner?.distribution?.normal) {
+        setIfBlank(normalMean, setNormalMean, data.returner.distribution.normal.mean);
+        setIfBlank(normalStdDev, setNormalStdDev, data.returner.distribution.normal.standardDeviation);
+      }
+      if (data?.returner?.distribution?.brownianMotion) {
+        setIfBlank(brownianDrift, setBrownianDrift, data.returner.distribution.brownianMotion.drift);
+        setIfBlank(brownianVolatility, setBrownianVolatility, data.returner.distribution.brownianMotion.volatility);
+      }
+      if (data?.returner?.distribution?.studentT) {
+        setIfBlank(studentMu, setStudentMu, data.returner.distribution.studentT.mu);
+        setIfBlank(studentSigma, setStudentSigma, data.returner.distribution.studentT.sigma);
+        setIfBlank(studentNu, setStudentNu, data.returner.distribution.studentT.nu);
+      }
+      if (data?.returner?.distribution?.regimeBased) {
+        setIfBlank(regimeTickMonths, setRegimeTickMonths, data.returner.distribution.regimeBased.tickMonths);
+        const regs = Array.isArray(data.returner.distribution.regimeBased.regimes) ? data.returner.distribution.regimeBased.regimes : [];
+        setRegimes((prev) => prev.map((p, i) => {
+          const r: any = regs[i] ?? {};
+          const dist = String(r?.distributionType ?? '');
+          return {
+            ...p,
+            distributionType: isBlank(p.distributionType) && dist ? (dist === 'studentT' ? 'studentT' : 'normal') : p.distributionType,
+            expectedDurationMonths: isBlank(p.expectedDurationMonths) && r?.expectedDurationMonths !== undefined ? String(r.expectedDurationMonths) : p.expectedDurationMonths,
+            toRegime0: isBlank(p.toRegime0) && r?.switchWeights?.toRegime0 !== undefined ? String(r.switchWeights.toRegime0) : p.toRegime0,
+            toRegime1: isBlank(p.toRegime1) && r?.switchWeights?.toRegime1 !== undefined ? String(r.switchWeights.toRegime1) : p.toRegime1,
+            toRegime2: isBlank(p.toRegime2) && r?.switchWeights?.toRegime2 !== undefined ? String(r.switchWeights.toRegime2) : p.toRegime2,
+            normalMean: isBlank(p.normalMean) && r?.normal?.mean !== undefined ? String(r.normal.mean) : p.normalMean,
+            normalStdDev: isBlank(p.normalStdDev) && r?.normal?.standardDeviation !== undefined ? String(r.normal.standardDeviation) : p.normalStdDev,
+            studentMu: isBlank(p.studentMu) && r?.studentT?.mu !== undefined ? String(r.studentT.mu) : p.studentMu,
+            studentSigma: isBlank(p.studentSigma) && r?.studentT?.sigma !== undefined ? String(r.studentT.sigma) : p.studentSigma,
+            studentNu: isBlank(p.studentNu) && r?.studentT?.nu !== undefined ? String(r.studentT.nu) : p.studentNu,
+          };
+        }));
+      }
+    };
+
+    const fetchDefaults = async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const baseForUrl = apiBase || window.location.origin;
+        const url = new URL('/forms/advanced-simulation', baseForUrl).toString();
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(String(res.status));
+        const json = (await res.json()) as FormConfig;
+        const init = buildInitialFormState(json);
+        applyDefaultsIfBlank(init);
+      } catch {
+        // best-effort
+      } finally {
+        hasAppliedFetchedAdvancedDefaultsRef.current = true;
+      }
+    };
+
+    void fetchDefaults();
+  }, [advancedEnabled]);
 
   const closeScenarioModal = useCallback(() => {
     setIsScenarioModalOpen(false);
@@ -285,13 +796,137 @@ export default function SimulationForm({
         phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
       };
 
-      const id = await startSimulation(sanitized);
+      if (!advancedEnabled) {
+        const id = await startSimulation(sanitized);
+        setSimulationId(id);
+        return;
+      }
+
+      const seedNum = toNumOrUndef(seed);
+      const inflationFactor = 1 + (Number(inflationAveragePct) || 0) / 100;
+
+      const exCardLimit = toNumOrUndef(exemptionCardLimit);
+      const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
+      const stockTaxRate = toNumOrUndef(stockExemptionTaxRate);
+      const stockLimit = toNumOrUndef(stockExemptionLimit);
+      const stockInc = toNumOrUndef(stockExemptionYearlyIncrease);
+
+      const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
+        exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined
+          ? {
+              exemptionCard: {
+                limit: exCardLimit,
+                yearlyIncrease: exCardInc,
+              },
+              stockExemption: {
+                taxRate: stockTaxRate,
+                limit: stockLimit,
+                yearlyIncrease: stockInc,
+              },
+            }
+          : undefined;
+
+      const rc: AdvancedSimulationRequest['returnerConfig'] = {};
+      if (seedNum !== undefined) rc.seed = seedNum;
+
+      if (returnType === 'simpleReturn') {
+        const avg = toNumOrUndef(simpleAveragePercentage);
+        if (avg !== undefined) rc.simpleAveragePercentage = avg;
+      }
+
+      if (returnType === 'distributionReturn') {
+        const distCfg: NonNullable<AdvancedSimulationRequest['returnerConfig']>['distribution'] = {
+          type: distributionType,
+        };
+
+        if (distributionType === 'normal') {
+          distCfg.normal = {
+            mean: toNumOrUndef(normalMean),
+            standardDeviation: toNumOrUndef(normalStdDev),
+          };
+        } else if (distributionType === 'brownianMotion') {
+          distCfg.brownianMotion = {
+            drift: toNumOrUndef(brownianDrift),
+            volatility: toNumOrUndef(brownianVolatility),
+          };
+        } else if (distributionType === 'studentT') {
+          distCfg.studentT = {
+            mu: toNumOrUndef(studentMu),
+            sigma: toNumOrUndef(studentSigma),
+            nu: toNumOrUndef(studentNu),
+          };
+        } else if (distributionType === 'regimeBased') {
+          distCfg.regimeBased = {
+            tickMonths: toNumOrUndef(regimeTickMonths),
+            regimes: regimes.map((r) => ({
+              distributionType: r.distributionType,
+              expectedDurationMonths: toNumOrUndef(r.expectedDurationMonths),
+              switchWeights: {
+                toRegime0: toNumOrUndef(r.toRegime0),
+                toRegime1: toNumOrUndef(r.toRegime1),
+                toRegime2: toNumOrUndef(r.toRegime2),
+              },
+              normal: {
+                mean: toNumOrUndef(r.normalMean),
+                standardDeviation: toNumOrUndef(r.normalStdDev),
+              },
+              studentT: {
+                mu: toNumOrUndef(r.studentMu),
+                sigma: toNumOrUndef(r.studentSigma),
+                nu: toNumOrUndef(r.studentNu),
+              },
+            })),
+          };
+        }
+
+        rc.distribution = distCfg;
+      }
+
+      const hasReturnerConfig =
+        rc.seed !== undefined ||
+        rc.simpleAveragePercentage !== undefined ||
+        rc.distribution?.type !== undefined;
+
+      const advReq: AdvancedSimulationRequest = {
+        startDate: { date: sanitized.startDate.date },
+        phases: sanitized.phases,
+        overallTaxRule: mapOverallTaxRuleForAdvanced(sanitized.overallTaxRule),
+        taxPercentage: sanitized.taxPercentage,
+        returnType,
+        seed: seedNum,
+        returnerConfig: hasReturnerConfig ? rc : undefined,
+        taxExemptionConfig,
+        inflationFactor,
+      };
+
+      const id = await startAdvancedSimulation(advReq);
       setSimulationId(id);
     } catch (err) {
       alert((err as Error).message);
       setSimulateInProgress(false);
     }
-  }, []);
+  }, [
+    advancedEnabled,
+    inflationAveragePct,
+    returnType,
+    seed,
+    simpleAveragePercentage,
+    distributionType,
+    normalMean,
+    normalStdDev,
+    brownianDrift,
+    brownianVolatility,
+    studentMu,
+    studentSigma,
+    studentNu,
+    regimeTickMonths,
+    regimes,
+    exemptionCardLimit,
+    exemptionCardYearlyIncrease,
+    stockExemptionTaxRate,
+    stockExemptionLimit,
+    stockExemptionYearlyIncrease,
+  ]);
 
   const handleLoadScenario = useCallback((scenarioId: string) => {
     if (!scenarioId) return;
@@ -448,28 +1083,51 @@ export default function SimulationForm({
   const back = () => setIdx(i => Math.max(i - 1, 0));
   const exit = () => onExitTutorial?.(); // Exit -> back to /simulation
 
-  // Optional: give stable anchors for selectors
-  // Add data attributes to key controls to avoid fragile text-based selectors
-  const inputWrapperStyle = { width: 275, display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'stretch' } as const;
+  const cardStyle: React.CSSProperties = {
+    border: '1px solid var(--fc-card-border)',
+    borderRadius: 4,
+    padding: '0.5rem 1rem',
+    background: 'var(--fc-card-bg)',
+    color: 'var(--fc-card-text)',
+  };
+
+  const cardTitleStyle: React.CSSProperties = { fontWeight: 800, marginBottom: 10, textAlign: 'center', fontSize: '1.1rem' };
+
+  const advancedFieldsetStyle = (enabled: boolean): React.CSSProperties => ({
+    border: 0,
+    padding: 0,
+    margin: 0,
+    opacity: enabled ? 1 : 0.55,
+  });
+
+  const rowStyle: React.CSSProperties = { display: 'flex', gap: 6, alignItems: 'center' };
+
+  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 };
+
+  const updateRegime = (idx: number, patch: Partial<(typeof regimes)[number]>) => {
+    setRegimes((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 450, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <div style={inputWrapperStyle}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 375, margin: '0 auto', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={cardStyle}>
+          <div style={cardTitleStyle}>General Options</div>
+
           <label style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Template:</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <div style={rowStyle}>
               <select
                 value={selectedTemplateId}
                 onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
                 disabled={simulateInProgress}
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+                style={inputStyle}
               >
-              {SIMULATION_TEMPLATES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
+                {SIMULATION_TEMPLATES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
               <InfoTooltip label="Info: Template">
                 A template fills in a complete example scenario (phases + taxes). Selecting a new template overwrites the current inputs.
@@ -480,14 +1138,14 @@ export default function SimulationForm({
             </div>
           </label>
 
-          <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column' }}>
+          <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
             <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <div style={rowStyle}>
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+                style={inputStyle}
               />
               <InfoTooltip label="Info: Start date">
                 The simulation timeline begins here. Phase durations are applied month-by-month starting from this date.
@@ -495,13 +1153,36 @@ export default function SimulationForm({
             </div>
           </label>
 
+          {advancedEnabled && (
+            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+              <span style={{ fontSize: '1.05rem' }}>Inflation (avg % / year)</span>
+              <div style={rowStyle}>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={inflationAveragePct}
+                  onChange={(e) => setInflationAveragePct(Number(e.target.value))}
+                  disabled={simulateInProgress}
+                  style={inputStyle}
+                />
+                <InfoTooltip label="(i)">
+                  Average annual inflation used to scale spending year-to-year.
+                </InfoTooltip>
+              </div>
+            </label>
+          )}
+        </div>
+
+        <div style={cardStyle}>
+          <div style={cardTitleStyle}>Tax rules</div>
+
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <div style={rowStyle}>
               <select
                 value={overallTaxRule}
                 onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+                style={inputStyle}
               >
                 <option value="CAPITAL">Capital Gains</option>
                 <option value="NOTIONAL">Notional Gains</option>
@@ -512,22 +1193,307 @@ export default function SimulationForm({
             </div>
           </label>
 
-          <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column' }}>
+          <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
             <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <div style={rowStyle}>
               <input
                 type="number"
                 step="0.01"
                 value={taxPercentage}
                 onChange={e => setTaxPercentage(+e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.3rem', flex: 1 }}
+                style={inputStyle}
               />
               <InfoTooltip label="Info: Tax percentage">
                 The tax rate applied by the selected tax rule. Phase exemptions (e.g. exemption card / stock exemption) reduce what gets taxed.
               </InfoTooltip>
             </div>
           </label>
+
+          {advancedEnabled && (
+          <div style={{ marginTop: 12, borderTop: '1px solid var(--fc-subtle-border)', paddingTop: 12 }}>
+            <div style={{ fontWeight: 750, marginBottom: 6 }}>Exemptions</div>
+            <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
+              <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
+                Configure exemption limits and yearly increases. Enable per-phase exemptions inside each phase.
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Exemption card</div>
+                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, opacity: 0.95 }}>Limit</span>
+                    <div style={rowStyle}>
+                      <input type="number" value={exemptionCardLimit} onChange={(e) => setExemptionCardLimit(e.target.value)} style={inputStyle} />
+                      <InfoTooltip label="(i)">Max tax-free amount per year (card).</InfoTooltip>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 13, opacity: 0.95 }}>Yearly increase</span>
+                    <div style={rowStyle}>
+                      <input type="number" value={exemptionCardYearlyIncrease} onChange={(e) => setExemptionCardYearlyIncrease(e.target.value)} style={inputStyle} />
+                      <InfoTooltip label="(i)">How the limit grows each year.</InfoTooltip>
+                    </div>
+                  </label>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Stock exemption</div>
+                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, opacity: 0.95 }}>Tax rate %</span>
+                    <div style={rowStyle}>
+                      <input type="number" step="0.01" value={stockExemptionTaxRate} onChange={(e) => setStockExemptionTaxRate(e.target.value)} style={inputStyle} />
+                      <InfoTooltip label="(i)">Reduced tax rate applied to stock exemption withdrawals.</InfoTooltip>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, opacity: 0.95 }}>Limit</span>
+                    <div style={rowStyle}>
+                      <input type="number" value={stockExemptionLimit} onChange={(e) => setStockExemptionLimit(e.target.value)} style={inputStyle} />
+                      <InfoTooltip label="(i)">Max eligible amount per year (stock).</InfoTooltip>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 13, opacity: 0.95 }}>Yearly increase</span>
+                    <div style={rowStyle}>
+                      <input type="number" value={stockExemptionYearlyIncrease} onChange={(e) => setStockExemptionYearlyIncrease(e.target.value)} style={inputStyle} />
+                      <InfoTooltip label="(i)">How the limit grows each year.</InfoTooltip>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+          )}
         </div>
+
+        {advancedEnabled && (
+        <div style={cardStyle}>
+          <div style={cardTitleStyle}>Return model</div>
+          <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
+            <label style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '1.05rem' }}>Return type</span>
+              <div style={rowStyle}>
+                <select value={returnType} onChange={(e) => setReturnType(parseReturnType(e.target.value))} style={inputStyle}>
+                  <option value="dataDrivenReturn">Data-driven (historical)</option>
+                  <option value="distributionReturn">Distribution-based</option>
+                  <option value="simpleReturn">Simple average</option>
+                </select>
+                <InfoTooltip label="(i)">How yearly returns are generated.</InfoTooltip>
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+              <span style={{ fontSize: 13, opacity: 0.95 }}>RNG seed (optional)</span>
+              <div style={rowStyle}>
+                <input type="number" step="1" value={seed} onChange={(e) => setSeed(e.target.value)} style={inputStyle} />
+                <InfoTooltip label="(i)">Non-negative = deterministic; negative = always stochastic.</InfoTooltip>
+              </div>
+            </label>
+
+            {returnType === 'simpleReturn' && (
+              <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+                <span style={{ fontSize: 13, opacity: 0.95 }}>Average % / year</span>
+                <div style={rowStyle}>
+                  <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => setSimpleAveragePercentage(e.target.value)} style={inputStyle} />
+                  <InfoTooltip label="(i)">Constant yearly return (before taxes).</InfoTooltip>
+                </div>
+              </label>
+            )}
+
+            {returnType === 'distributionReturn' && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, opacity: 0.95 }}>Distribution</span>
+                  <div style={rowStyle}>
+                    <select value={distributionType} onChange={(e) => setDistributionType(parseDistributionType(e.target.value))} style={inputStyle}>
+                      <option value="normal">Normal</option>
+                      <option value="brownianMotion">Brownian motion</option>
+                      <option value="studentT">Student t</option>
+                      <option value="regimeBased">Regime-based</option>
+                    </select>
+                    <InfoTooltip label="(i)">Parametric model used to draw returns.</InfoTooltip>
+                  </div>
+                </label>
+
+                {distributionType === 'normal' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Mean</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={normalMean} onChange={(e) => setNormalMean(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Expected return per year.</InfoTooltip>
+                      </div>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Std dev</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={normalStdDev} onChange={(e) => setNormalStdDev(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Volatility per year.</InfoTooltip>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {distributionType === 'brownianMotion' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Drift</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={brownianDrift} onChange={(e) => setBrownianDrift(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Expected growth component.</InfoTooltip>
+                      </div>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Volatility</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={brownianVolatility} onChange={(e) => setBrownianVolatility(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Randomness strength.</InfoTooltip>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {distributionType === 'studentT' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Mu</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={studentMu} onChange={(e) => setStudentMu(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Location (center).</InfoTooltip>
+                      </div>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Sigma</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={studentSigma} onChange={(e) => setStudentSigma(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Scale (spread).</InfoTooltip>
+                      </div>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Nu</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="0.0001" value={studentNu} onChange={(e) => setStudentNu(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">Degrees of freedom (tails).</InfoTooltip>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {distributionType === 'regimeBased' && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', marginBottom: 10 }}>
+                      <span style={{ fontSize: 13, opacity: 0.95 }}>Tick months</span>
+                      <div style={rowStyle}>
+                        <input type="number" step="1" value={regimeTickMonths} onChange={(e) => setRegimeTickMonths(e.target.value)} style={inputStyle} />
+                        <InfoTooltip label="(i)">How often switching is evaluated.</InfoTooltip>
+                      </div>
+                    </label>
+
+                    <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 8 }}>
+                      Regime-based defaults to 3 regimes (0..2). You can leave fields blank to use backend defaults.
+                    </div>
+
+                    {regimes.map((r, i) => (
+                      <details key={i} open={i === 0} style={{ border: '1px solid var(--fc-subtle-border)', borderRadius: 10, padding: 10, marginBottom: 10, background: 'var(--fc-subtle-bg)' }}>
+                        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Regime {i}</summary>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                          <label style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 12, opacity: 0.9 }}>Distribution</span>
+                            <div style={rowStyle}>
+                              <select
+                                value={r.distributionType}
+                                onChange={(e) => updateRegime(i, { distributionType: e.target.value === 'studentT' ? 'studentT' : 'normal' })}
+                                style={inputStyle}
+                              >
+                                <option value="normal">Normal</option>
+                                <option value="studentT">Student t</option>
+                              </select>
+                              <InfoTooltip label="(i)">Normal vs Student-t for this regime.</InfoTooltip>
+                            </div>
+                          </label>
+
+                          <label style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 12, opacity: 0.9 }}>Expected duration (months)</span>
+                            <div style={rowStyle}>
+                              <input type="number" step="1" value={r.expectedDurationMonths} onChange={(e) => updateRegime(i, { expectedDurationMonths: e.target.value })} style={inputStyle} />
+                              <InfoTooltip label="(i)">Average time spent in this regime.</InfoTooltip>
+                            </div>
+                          </label>
+
+                          <label style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 0</span>
+                            <div style={rowStyle}>
+                              <input type="number" step="0.01" value={r.toRegime0} onChange={(e) => updateRegime(i, { toRegime0: e.target.value })} style={inputStyle} />
+                              <InfoTooltip label="(i)">Relative weight to move to regime 0.</InfoTooltip>
+                            </div>
+                          </label>
+                          <label style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 1</span>
+                            <div style={rowStyle}>
+                              <input type="number" step="0.01" value={r.toRegime1} onChange={(e) => updateRegime(i, { toRegime1: e.target.value })} style={inputStyle} />
+                              <InfoTooltip label="(i)">Relative weight to move to regime 1.</InfoTooltip>
+                            </div>
+                          </label>
+                          <label style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 12, opacity: 0.9 }}>Switch to 2</span>
+                            <div style={rowStyle}>
+                              <input type="number" step="0.01" value={r.toRegime2} onChange={(e) => updateRegime(i, { toRegime2: e.target.value })} style={inputStyle} />
+                              <InfoTooltip label="(i)">Relative weight to move to regime 2.</InfoTooltip>
+                            </div>
+                          </label>
+                        </div>
+
+                        {r.distributionType === 'normal' ? (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 12, opacity: 0.9 }}>Mean</span>
+                              <div style={rowStyle}>
+                                <input type="number" step="0.0001" value={r.normalMean} onChange={(e) => updateRegime(i, { normalMean: e.target.value })} style={inputStyle} />
+                                <InfoTooltip label="(i)">Expected return in this regime.</InfoTooltip>
+                              </div>
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 12, opacity: 0.9 }}>Std dev</span>
+                              <div style={rowStyle}>
+                                <input type="number" step="0.0001" value={r.normalStdDev} onChange={(e) => updateRegime(i, { normalStdDev: e.target.value })} style={inputStyle} />
+                                <InfoTooltip label="(i)">Volatility in this regime.</InfoTooltip>
+                              </div>
+                            </label>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 12, opacity: 0.9 }}>Mu</span>
+                              <div style={rowStyle}>
+                                <input type="number" step="0.0001" value={r.studentMu} onChange={(e) => updateRegime(i, { studentMu: e.target.value })} style={inputStyle} />
+                                <InfoTooltip label="(i)">Location (center).</InfoTooltip>
+                              </div>
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 12, opacity: 0.9 }}>Sigma</span>
+                              <div style={rowStyle}>
+                                <input type="number" step="0.0001" value={r.studentSigma} onChange={(e) => updateRegime(i, { studentSigma: e.target.value })} style={inputStyle} />
+                                <InfoTooltip label="(i)">Scale (spread).</InfoTooltip>
+                              </div>
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 12, opacity: 0.9 }}>Nu</span>
+                              <div style={rowStyle}>
+                                <input type="number" step="0.0001" value={r.studentNu} onChange={(e) => updateRegime(i, { studentNu: e.target.value })} style={inputStyle} />
+                                <InfoTooltip label="(i)">Degrees of freedom (tails).</InfoTooltip>
+                              </div>
+                            </label>
+                          </div>
+                        )}
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </fieldset>
+        </div>
+        )}
       </div>
 
       <div data-tour="phase-list">
@@ -566,22 +1532,6 @@ export default function SimulationForm({
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, gap: 8, alignItems: 'center' }}>
         {rightFooterActions}
-        <button
-          type="button"
-          aria-label="Saved scenarios"
-          title="Saved scenarios"
-          onClick={openScenarioModal}
-          disabled={simulateInProgress}
-          style={{
-            ...btn(simulateInProgress ? 'disabled' : 'ghost'),
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <span aria-hidden="true">🗂</span>
-          <span>Saved scenarios</span>
-        </button>
       </div>
 
       {footerBelow}
@@ -782,4 +1732,6 @@ export default function SimulationForm({
       )}
     </form>
   );
-}
+});
+
+export default NormalInputForm;
