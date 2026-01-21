@@ -64,11 +64,11 @@ button:focus-visible {
     color: #213547;
     background-color: #ffffff;
 
-    --fc-card-bg: #ffffff;
-    --fc-card-border: #e5e7eb;
+    --fc-card-bg: #fdfdfd;
+    --fc-card-border: #cccccc;
     --fc-card-text: #111827;
     --fc-card-muted: #475569;
-    --fc-subtle-bg: #f8fafc;
+    --fc-subtle-bg: #f8f8f8;
     --fc-subtle-border: #e5e7eb;
   }
   a:hover {
@@ -178,7 +178,7 @@ button:focus-visible {
 }
 
 .fc-field-label {
-  font-size: 13px;
+  font-size: 0.95rem;
   opacity: 0.95;
 }
 

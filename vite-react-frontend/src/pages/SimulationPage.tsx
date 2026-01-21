@@ -380,7 +380,7 @@ const SimulationPage: React.FC = () => {
         cursor: importBusy ? 'not-allowed' : 'pointer',
         fontSize: 14,
         background: 'transparent',
-        color: '#ddd',
+        color: 'inherit',
         opacity: importBusy ? 0.65 : 1,
         display: 'inline-flex',
         alignItems: 'center',
@@ -427,7 +427,7 @@ const SimulationPage: React.FC = () => {
         cursor: 'pointer',
         fontSize: 14,
         background: 'transparent',
-        color: '#ddd',
+        color: 'inherit',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
@@ -435,7 +435,7 @@ const SimulationPage: React.FC = () => {
       title="Saved scenarios"
       aria-label="Saved scenarios"
     >
-      <span aria-hidden="true">🗂</span>
+      <span aria-hidden="true">📂</span>
       Saved scenarios
     </button>
   );

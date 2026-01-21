@@ -12,7 +12,9 @@ export type AdvancedSimulationRequest = {
   phases: SimulationRequest['phases'];
   overallTaxRule: string;
   taxPercentage: number;
-  returnType: string;
+  // Optional to allow clients to omit when UI sections are disabled/hidden.
+  // Backend defaults to dataDrivenReturn when missing/blank.
+  returnType?: string;
   seed?: number;
   returnerConfig?: {
     seed?: number;
@@ -38,7 +40,9 @@ export type AdvancedSimulationRequest = {
     exemptionCard?: { limit?: number; yearlyIncrease?: number };
     stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
   };
-  inflationFactor: number;
+  // Optional to allow omitting when UI sections are disabled/hidden.
+  // Backend defaults to 1.02 when missing/<=0.
+  inflationFactor?: number;
 };
 
 type ImportReplayResponse = {
