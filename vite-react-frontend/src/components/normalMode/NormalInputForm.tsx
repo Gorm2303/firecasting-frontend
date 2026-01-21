@@ -252,50 +252,63 @@ ref
     stockExemptionLimit: string;
     stockExemptionYearlyIncrease: string;
   }>(() => {
+    const fallbackDefaults = {
+      enabled: false,
+      inflationAveragePct: 2,
+
+      // Returner
+      returnType: 'dataDrivenReturn' as ReturnType,
+      seed: '1',
+      simpleAveragePercentage: '7',
+      distributionType: 'normal' as DistributionType,
+      normalMean: '0.07',
+      normalStdDev: '0.20',
+      brownianDrift: '0.07',
+      brownianVolatility: '0.20',
+      studentMu: '0.042',
+      studentSigma: '0.609',
+      studentNu: '3.60',
+
+      // Regime-based
+      regimeTickMonths: '1',
+      regimes: Array.from({ length: 3 }).map((_, i) => {
+        // Switch weights are relative weights (normalized by backend). Provide a sensible default.
+        const weights = i === 0 ? { toRegime0: '0', toRegime1: '1', toRegime2: '1' }
+          : i === 1 ? { toRegime0: '1', toRegime1: '0', toRegime2: '1' }
+          : { toRegime0: '1', toRegime1: '1', toRegime2: '0' };
+
+        return {
+          distributionType: 'normal' as 'normal' | 'studentT',
+          expectedDurationMonths: '12',
+          ...weights,
+          normalMean: '0.07',
+          normalStdDev: '0.20',
+          studentMu: '0.042',
+          studentSigma: '0.609',
+          studentNu: '3.60',
+        };
+      }),
+
+      // Tax (defaults only; exemptions must still be enabled per-phase)
+      exemptionCardLimit: '51600',
+      exemptionCardYearlyIncrease: '1000',
+      stockExemptionTaxRate: '27',
+      stockExemptionLimit: '67500',
+      stockExemptionYearlyIncrease: '1000',
+    };
+
     try {
       const raw = window.localStorage.getItem(ADVANCED_OPTIONS_KEY);
       if (!raw) {
-        return {
-          enabled: false,
-          inflationAveragePct: 2,
-          returnType: 'dataDrivenReturn' as ReturnType,
-          seed: '',
-          simpleAveragePercentage: '',
-          distributionType: 'normal' as DistributionType,
-          normalMean: '',
-          normalStdDev: '',
-          brownianDrift: '',
-          brownianVolatility: '',
-          studentMu: '',
-          studentSigma: '',
-          studentNu: '',
-          regimeTickMonths: '',
-          regimes: Array.from({ length: 3 }).map(() => ({
-            distributionType: 'normal' as 'normal' | 'studentT',
-            expectedDurationMonths: '',
-            toRegime0: '',
-            toRegime1: '',
-            toRegime2: '',
-            normalMean: '',
-            normalStdDev: '',
-            studentMu: '',
-            studentSigma: '',
-            studentNu: '',
-          })),
-          exemptionCardLimit: '',
-          exemptionCardYearlyIncrease: '',
-          stockExemptionTaxRate: '',
-          stockExemptionLimit: '',
-          stockExemptionYearlyIncrease: '',
-        };
+        return fallbackDefaults;
       }
       const parsed = JSON.parse(raw);
       const enabled = Boolean(parsed?.enabled);
       const inflationAveragePct = Number.isFinite(Number(parsed?.inflationAveragePct)) ? Number(parsed.inflationAveragePct) : 2;
       const returnType = parseReturnType(parsed?.returnType);
       const distributionType = parseDistributionType(parsed?.distributionType);
-      const seed = parsed?.seed ?? '';
-      const simpleAveragePercentage = parsed?.simpleAveragePercentage ?? '';
+      const seed = parsed?.seed ?? fallbackDefaults.seed;
+      const simpleAveragePercentage = parsed?.simpleAveragePercentage ?? fallbackDefaults.simpleAveragePercentage;
 
       const regimesInput: any[] = Array.isArray(parsed?.regimes) ? parsed.regimes : [];
       const regimes: Array<{
@@ -312,17 +325,18 @@ ref
       }> = Array.from({ length: 3 }).map((_, i) => {
         const r = regimesInput[i] ?? {};
         const dt = String(r?.distributionType ?? 'normal');
+        const fallbackReg = (fallbackDefaults.regimes as any[])[i] ?? (fallbackDefaults.regimes as any[])[0];
         return {
           distributionType: dt === 'studentT' ? 'studentT' : 'normal',
-          expectedDurationMonths: r?.expectedDurationMonths ?? '',
-          toRegime0: r?.toRegime0 ?? '',
-          toRegime1: r?.toRegime1 ?? '',
-          toRegime2: r?.toRegime2 ?? '',
-          normalMean: r?.normalMean ?? '',
-          normalStdDev: r?.normalStdDev ?? '',
-          studentMu: r?.studentMu ?? '',
-          studentSigma: r?.studentSigma ?? '',
-          studentNu: r?.studentNu ?? '',
+          expectedDurationMonths: r?.expectedDurationMonths ?? fallbackReg.expectedDurationMonths,
+          toRegime0: r?.toRegime0 ?? fallbackReg.toRegime0,
+          toRegime1: r?.toRegime1 ?? fallbackReg.toRegime1,
+          toRegime2: r?.toRegime2 ?? fallbackReg.toRegime2,
+          normalMean: r?.normalMean ?? fallbackReg.normalMean,
+          normalStdDev: r?.normalStdDev ?? fallbackReg.normalStdDev,
+          studentMu: r?.studentMu ?? fallbackReg.studentMu,
+          studentSigma: r?.studentSigma ?? fallbackReg.studentSigma,
+          studentNu: r?.studentNu ?? fallbackReg.studentNu,
         };
       });
 
@@ -333,55 +347,23 @@ ref
         distributionType,
         seed: String(seed),
         simpleAveragePercentage: String(simpleAveragePercentage),
-        normalMean: parsed?.normalMean ?? '',
-        normalStdDev: parsed?.normalStdDev ?? '',
-        brownianDrift: parsed?.brownianDrift ?? '',
-        brownianVolatility: parsed?.brownianVolatility ?? '',
-        studentMu: parsed?.studentMu ?? '',
-        studentSigma: parsed?.studentSigma ?? '',
-        studentNu: parsed?.studentNu ?? '',
-        regimeTickMonths: parsed?.regimeTickMonths ?? '',
+        normalMean: parsed?.normalMean ?? fallbackDefaults.normalMean,
+        normalStdDev: parsed?.normalStdDev ?? fallbackDefaults.normalStdDev,
+        brownianDrift: parsed?.brownianDrift ?? fallbackDefaults.brownianDrift,
+        brownianVolatility: parsed?.brownianVolatility ?? fallbackDefaults.brownianVolatility,
+        studentMu: parsed?.studentMu ?? fallbackDefaults.studentMu,
+        studentSigma: parsed?.studentSigma ?? fallbackDefaults.studentSigma,
+        studentNu: parsed?.studentNu ?? fallbackDefaults.studentNu,
+        regimeTickMonths: parsed?.regimeTickMonths ?? fallbackDefaults.regimeTickMonths,
         regimes,
-        exemptionCardLimit: parsed?.exemptionCardLimit ?? '',
-        exemptionCardYearlyIncrease: parsed?.exemptionCardYearlyIncrease ?? '',
-        stockExemptionTaxRate: parsed?.stockExemptionTaxRate ?? '',
-        stockExemptionLimit: parsed?.stockExemptionLimit ?? '',
-        stockExemptionYearlyIncrease: parsed?.stockExemptionYearlyIncrease ?? '',
+        exemptionCardLimit: parsed?.exemptionCardLimit ?? fallbackDefaults.exemptionCardLimit,
+        exemptionCardYearlyIncrease: parsed?.exemptionCardYearlyIncrease ?? fallbackDefaults.exemptionCardYearlyIncrease,
+        stockExemptionTaxRate: parsed?.stockExemptionTaxRate ?? fallbackDefaults.stockExemptionTaxRate,
+        stockExemptionLimit: parsed?.stockExemptionLimit ?? fallbackDefaults.stockExemptionLimit,
+        stockExemptionYearlyIncrease: parsed?.stockExemptionYearlyIncrease ?? fallbackDefaults.stockExemptionYearlyIncrease,
       };
     } catch {
-      return {
-        enabled: false,
-        inflationAveragePct: 2,
-        returnType: 'dataDrivenReturn' as ReturnType,
-        seed: '',
-        simpleAveragePercentage: '',
-        distributionType: 'normal' as DistributionType,
-        normalMean: '',
-        normalStdDev: '',
-        brownianDrift: '',
-        brownianVolatility: '',
-        studentMu: '',
-        studentSigma: '',
-        studentNu: '',
-        regimeTickMonths: '',
-        regimes: Array.from({ length: 3 }).map(() => ({
-          distributionType: 'normal' as 'normal' | 'studentT',
-          expectedDurationMonths: '',
-          toRegime0: '',
-          toRegime1: '',
-          toRegime2: '',
-          normalMean: '',
-          normalStdDev: '',
-          studentMu: '',
-          studentSigma: '',
-          studentNu: '',
-        })),
-        exemptionCardLimit: '',
-        exemptionCardYearlyIncrease: '',
-        stockExemptionTaxRate: '',
-        stockExemptionLimit: '',
-        stockExemptionYearlyIncrease: '',
-      };
+      return fallbackDefaults;
     }
   }, []);
 
@@ -743,24 +725,54 @@ ref
       }
     };
 
-    const fetchDefaults = async () => {
-      try {
-        const apiBase = getApiBaseUrl();
-        const baseForUrl = apiBase || window.location.origin;
-        const url = new URL('/forms/advanced-simulation', baseForUrl).toString();
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(String(res.status));
-        const json = (await res.json()) as FormConfig;
-        const init = buildInitialFormState(json);
-        applyDefaultsIfBlank(init);
-      } catch {
-        // best-effort
-      } finally {
-        hasAppliedFetchedAdvancedDefaultsRef.current = true;
-      }
-    };
-
-    void fetchDefaults();
+    // Apply frontend defaults (best-effort) so advanced fields are prefilled.
+    // We still omit the corresponding properties from the request payload when the
+    // UI section is disabled/hidden.
+    applyDefaultsIfBlank({
+      tax: {
+        exemptionCard: { limit: 51600, increase: 1000 },
+        stockExemption: { taxRate: 27, limit: 67500, increase: 1000 },
+      },
+      inflation: { averagePercentage: 2 },
+      returner: {
+        type: 'dataDrivenReturn',
+        simpleReturn: { averagePercentage: 7 },
+        random: { seed: 1 },
+        distribution: {
+          type: 'normal',
+          brownianMotion: { drift: 0.07, volatility: 0.2 },
+          normal: { mean: 0.07, standardDeviation: 0.2 },
+          studentT: { mu: 0.042, sigma: 0.609, nu: 3.6 },
+          regimeBased: {
+            tickMonths: 1,
+            regimes: [
+              {
+                distributionType: 'normal',
+                expectedDurationMonths: 12,
+                switchWeights: { toRegime0: 0, toRegime1: 1, toRegime2: 1 },
+                normal: { mean: 0.07, standardDeviation: 0.2 },
+                studentT: { mu: 0.042, sigma: 0.609, nu: 3.6 },
+              },
+              {
+                distributionType: 'normal',
+                expectedDurationMonths: 12,
+                switchWeights: { toRegime0: 1, toRegime1: 0, toRegime2: 1 },
+                normal: { mean: 0.07, standardDeviation: 0.2 },
+                studentT: { mu: 0.042, sigma: 0.609, nu: 3.6 },
+              },
+              {
+                distributionType: 'normal',
+                expectedDurationMonths: 12,
+                switchWeights: { toRegime0: 1, toRegime1: 1, toRegime2: 0 },
+                normal: { mean: 0.07, standardDeviation: 0.2 },
+                studentT: { mu: 0.042, sigma: 0.609, nu: 3.6 },
+              },
+            ],
+          },
+        },
+      },
+    });
+    hasAppliedFetchedAdvancedDefaultsRef.current = true;
   }, [advancedEnabled]);
 
   const closeScenarioModal = useCallback(() => {
@@ -820,7 +832,7 @@ ref
       }
 
       const seedNum = returnModelFeatureOn ? toNumOrUndef(seed) : undefined;
-      const inflationFactor = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : 1;
+      const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
 
       const exCardLimit = toNumOrUndef(exemptionCardLimit);
       const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
@@ -908,16 +920,23 @@ ref
           rc.distribution?.type !== undefined
         );
 
+      const inflationEquivalentToNormal = !inflationFeatureOn || (inflationFactorToSend !== undefined && Math.abs(inflationFactorToSend - 1.02) < 1e-12);
+      const returnerEquivalentToNormal =
+        !returnModelFeatureOn || (
+          returnTypeToSend === 'dataDrivenReturn' &&
+          seedNum === undefined &&
+          !hasReturnerConfig
+        );
+      const taxEquivalentToNormal = !exemptionsFeatureOn || taxExemptionConfig === undefined;
+
       // Backend dedup is based on the *input DTO* (normal vs advanced), so even if the
       // internal run-spec ends up identical, calling /start-advanced will not dedup with /start.
       // When advanced options don't change anything beyond the normal endpoint defaults,
       // route through /start so we hit dedup.
       const shouldUseNormalEndpointForDedup =
-        taxExemptionConfig === undefined &&
-        returnTypeToSend === 'dataDrivenReturn' &&
-        seedNum === undefined &&
-        !hasReturnerConfig &&
-        Math.abs(inflationFactor - 1.02) < 1e-12;
+        taxEquivalentToNormal &&
+        returnerEquivalentToNormal &&
+        inflationEquivalentToNormal;
 
       if (shouldUseNormalEndpointForDedup) {
         const id = await startSimulation(sanitized);
@@ -930,11 +949,15 @@ ref
         phases: sanitized.phases,
         overallTaxRule: mapOverallTaxRuleForAdvanced(sanitized.overallTaxRule),
         taxPercentage: sanitized.taxPercentage,
-        returnType: returnTypeToSend,
-        seed: seedNum,
-        returnerConfig: hasReturnerConfig ? rc : undefined,
-        taxExemptionConfig,
-        inflationFactor,
+        ...(returnModelFeatureOn
+          ? {
+              returnType: returnTypeToSend,
+              seed: seedNum,
+              returnerConfig: hasReturnerConfig ? rc : undefined,
+            }
+          : {}),
+        ...(exemptionsFeatureOn ? { taxExemptionConfig } : {}),
+        ...(inflationFeatureOn ? { inflationFactor: inflationFactorToSend } : {}),
       };
 
       const id = await startAdvancedSimulation(advReq);
@@ -1156,7 +1179,7 @@ ref
           <div style={cardTitleStyle}>General Options</div>
 
           <label style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '1.1rem' }}>Template:</span>
+            <span className="fc-field-label">Template:</span>
             <div style={rowStyle}>
               <select
                 value={selectedTemplateId}
@@ -1180,7 +1203,7 @@ ref
           </label>
 
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-            <span style={{ fontSize: '1.1rem' }}>Start Date:</span>
+            <span className="fc-field-label">Start Date:</span>
             <div style={rowStyle}>
               <input
                 type="date"
@@ -1196,7 +1219,7 @@ ref
 
           {advancedEnabled && inflationFeatureOn && (
             <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-              <span style={{ fontSize: '1.05rem' }}>Inflation (avg % / year)</span>
+              <span className="fc-field-label">Inflation (avg % / year)</span>
               <div style={rowStyle}>
                 <input
                   type="number"
@@ -1219,7 +1242,7 @@ ref
           <div style={cardTitleStyle}>Tax rules</div>
 
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '1.1rem' }}>Tax Rule:</span>
+            <span className="fc-field-label">Tax Rule:</span>
             <div style={rowStyle}>
               <select
                 value={overallTaxRule}
@@ -1236,7 +1259,7 @@ ref
           </label>
 
           <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-            <span style={{ fontSize: '1.1rem' }}>Tax %:</span>
+            <span className="fc-field-label">Tax %:</span>
             <div style={rowStyle}>
               <input
                 type="number"
@@ -1343,7 +1366,7 @@ ref
           <div style={cardTitleStyle}>Return model</div>
           <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
             <label className="fc-field-row" style={{ marginBottom: 10 }}>
-              <span className="fc-field-label" style={{ fontSize: '1.05rem', opacity: 1 }}>Return type</span>
+              <span className="fc-field-label">Return type</span>
               <div className="fc-field-control">
                 <select value={returnType} onChange={(e) => setReturnType(parseReturnType(e.target.value))} style={inputStyle}>
                   <option value="dataDrivenReturn">Data-driven (historical)</option>
@@ -1532,7 +1555,7 @@ ref
                         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Regime {i}</summary>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
                           <label className="fc-field-row">
-                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Distribution</span>
+                            <span className="fc-field-label">Distribution</span>
                             <div className="fc-field-control">
                               <select
                                 value={r.distributionType}
@@ -1552,7 +1575,7 @@ ref
                           </label>
 
                           <label className="fc-field-row">
-                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Expected duration (months)</span>
+                            <span className="fc-field-label">Expected duration (months)</span>
                             <div className="fc-field-control">
                               <input type="number" step="1" value={r.expectedDurationMonths} onChange={(e) => updateRegime(i, { expectedDurationMonths: e.target.value })} style={inputStyle} />
                             </div>
@@ -1565,7 +1588,7 @@ ref
                           </label>
 
                           <label className="fc-field-row">
-                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 0</span>
+                            <span className="fc-field-label">Switch to 0</span>
                             <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime0} onChange={(e) => updateRegime(i, { toRegime0: e.target.value })} style={inputStyle} />
                             </div>
@@ -1578,7 +1601,7 @@ ref
                           </label>
 
                           <label className="fc-field-row">
-                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 1</span>
+                            <span className="fc-field-label">Switch to 1</span>
                             <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime1} onChange={(e) => updateRegime(i, { toRegime1: e.target.value })} style={inputStyle} />
                             </div>
@@ -1591,7 +1614,7 @@ ref
                           </label>
 
                           <label className="fc-field-row">
-                            <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Switch to 2</span>
+                            <span className="fc-field-label">Switch to 2</span>
                             <div className="fc-field-control">
                               <input type="number" step="0.01" value={r.toRegime2} onChange={(e) => updateRegime(i, { toRegime2: e.target.value })} style={inputStyle} />
                             </div>
@@ -1607,7 +1630,7 @@ ref
                         {r.distributionType === 'normal' ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
                             <label className="fc-field-row">
-                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Mean</span>
+                              <span className="fc-field-label">Mean</span>
                               <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.normalMean} onChange={(e) => updateRegime(i, { normalMean: e.target.value })} style={inputStyle} />
                               </div>
@@ -1620,7 +1643,7 @@ ref
                             </label>
 
                             <label className="fc-field-row">
-                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Std dev</span>
+                              <span className="fc-field-label">Std dev</span>
                               <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.normalStdDev} onChange={(e) => updateRegime(i, { normalStdDev: e.target.value })} style={inputStyle} />
                               </div>
@@ -1635,7 +1658,7 @@ ref
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
                             <label className="fc-field-row">
-                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Mu</span>
+                              <span className="fc-field-label">Mu</span>
                               <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentMu} onChange={(e) => updateRegime(i, { studentMu: e.target.value })} style={inputStyle} />
                               </div>
@@ -1648,7 +1671,7 @@ ref
                             </label>
 
                             <label className="fc-field-row">
-                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Sigma</span>
+                              <span className="fc-field-label">Sigma</span>
                               <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentSigma} onChange={(e) => updateRegime(i, { studentSigma: e.target.value })} style={inputStyle} />
                               </div>
@@ -1661,7 +1684,7 @@ ref
                             </label>
 
                             <label className="fc-field-row">
-                              <span className="fc-field-label" style={{ fontSize: 12, opacity: 0.9 }}>Nu</span>
+                              <span className="fc-field-label">Nu</span>
                               <div className="fc-field-control">
                                 <input type="number" step="0.0001" value={r.studentNu} onChange={(e) => updateRegime(i, { studentNu: e.target.value })} style={inputStyle} />
                               </div>
