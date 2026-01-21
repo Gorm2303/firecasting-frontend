@@ -7,6 +7,14 @@
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
+  /* Firecasting UI tokens (used by inline-styled components) */
+  --fc-card-bg: #2a2a2a;
+  --fc-card-border: #aaaaaa33;
+  --fc-card-text: rgba(255, 255, 255, 0.92);
+  --fc-card-muted: rgba(255, 255, 255, 0.78);
+  --fc-subtle-bg: #2e2e2e;
+  --fc-subtle-border: #2e2e2e;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -55,6 +63,13 @@ button:focus-visible {
   :root {
     color: #213547;
     background-color: #ffffff;
+
+    --fc-card-bg: #fdfdfd;
+    --fc-card-border: #cccccc;
+    --fc-card-text: #111827;
+    --fc-card-muted: #475569;
+    --fc-subtle-bg: #f8f8f8;
+    --fc-subtle-border: #e5e7eb;
   }
   a:hover {
     color: #747bff;
@@ -125,6 +140,75 @@ button:focus-visible {
     background: #111827;   /* keep strong contrast */
     color: #fff;
     border-color: #111827;
+  }
+}
+
+/* Simulation page toolbar: avoid overflow on narrow screens (e.g. 375px wide). */
+.fc-sim-tools {
+  box-sizing: border-box;
+}
+
+@media (max-width: 375px) {
+  .fc-sim-tools {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc-sim-tools > * {
+    width: 100%;
+  }
+
+  .fc-sim-mode {
+    width: 100%;
+  }
+
+  .fc-sim-mode button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/* Form field row helper: label | control | info button. */
+.fc-field-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(0, 1.4fr) auto;
+  column-gap: 5px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.fc-field-label {
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+.fc-field-control {
+  min-width: 0;
+}
+
+.fc-field-info {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 375px) {
+  .fc-field-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label label"
+      "control info";
+  }
+
+  .fc-field-label {
+    grid-area: label;
+  }
+
+  .fc-field-control {
+    grid-area: control;
+  }
+
+  .fc-field-info {
+    grid-area: info;
   }
 }
 
