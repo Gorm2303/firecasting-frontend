@@ -7,6 +7,14 @@
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
+  /* Firecasting UI tokens (used by inline-styled components) */
+  --fc-card-bg: #1a1d1f;
+  --fc-card-border: #343a40;
+  --fc-card-text: rgba(255, 255, 255, 0.92);
+  --fc-card-muted: rgba(255, 255, 255, 0.78);
+  --fc-subtle-bg: #23272b;
+  --fc-subtle-border: #3b4147;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -55,6 +63,13 @@ button:focus-visible {
   :root {
     color: #213547;
     background-color: #ffffff;
+
+    --fc-card-bg: #f8fafc;
+    --fc-card-border: #d1d5db;
+    --fc-card-text: #111827;
+    --fc-card-muted: #475569;
+    --fc-subtle-bg: #eef2f7;
+    --fc-subtle-border: #d1d5db;
   }
   a:hover {
     color: #747bff;
