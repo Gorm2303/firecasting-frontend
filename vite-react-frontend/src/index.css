@@ -8,12 +8,12 @@
   background-color: #242424;
 
   /* Firecasting UI tokens (used by inline-styled components) */
-  --fc-card-bg: #1a1d1f;
-  --fc-card-border: #343a40;
+  --fc-card-bg: #0f0f0f;
+  --fc-card-border: #2a2a2a;
   --fc-card-text: rgba(255, 255, 255, 0.92);
   --fc-card-muted: rgba(255, 255, 255, 0.78);
-  --fc-subtle-bg: #23272b;
-  --fc-subtle-border: #3b4147;
+  --fc-subtle-bg: #141414;
+  --fc-subtle-border: #2a2a2a;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -64,12 +64,12 @@ button:focus-visible {
     color: #213547;
     background-color: #ffffff;
 
-    --fc-card-bg: #f8fafc;
-    --fc-card-border: #d1d5db;
+    --fc-card-bg: #ffffff;
+    --fc-card-border: #e5e7eb;
     --fc-card-text: #111827;
     --fc-card-muted: #475569;
-    --fc-subtle-bg: #eef2f7;
-    --fc-subtle-border: #d1d5db;
+    --fc-subtle-bg: #f8fafc;
+    --fc-subtle-border: #e5e7eb;
   }
   a:hover {
     color: #747bff;

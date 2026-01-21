@@ -153,11 +153,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
               <div
                 key={idx}
                 style={{
-                  border: '1px solid var(--fc-card-border)',
-                  borderRadius: 4,
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
                   padding: '0.5rem 1rem',
-                  background: 'var(--fc-card-bg)',
-                  color: 'var(--fc-card-text)',
                   position: 'relative',
                 }}
               >
@@ -455,7 +453,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
 
                 <fieldset
                   style={{
-                    border: '1px solid var(--fc-subtle-border)',
+                    border: '1px solid #ddd',
                     padding: '0.2rem',
                     marginTop: '0.3rem',
                   }}
