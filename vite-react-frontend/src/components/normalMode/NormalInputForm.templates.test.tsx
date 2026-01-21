@@ -17,7 +17,7 @@ describe('NormalInputForm templates', () => {
     const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
     expect(startDate.value).toBe(expected.startDate.date);
 
-    expect(screen.getByRole('note')).toHaveTextContent(getTemplateById('starter').description);
+    expect(screen.getByText(getTemplateById('starter').description)).toBeInTheDocument();
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 

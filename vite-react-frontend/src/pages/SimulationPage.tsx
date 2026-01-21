@@ -1,7 +1,6 @@
 // src/pages/SimulationPage.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import NormalInputForm from '../components/normalMode/NormalInputForm';
-import AdvancedInputForm from '../components/advancedMode/AdvancedInputForm';
+import NormalInputForm, { type NormalInputFormHandle, type NormalInputFormMode } from '../components/normalMode/NormalInputForm';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationRequest, SimulationTimelineContext } from '../models/types';
 import MultiPhaseOverview from '../MultiPhaseOverview';
@@ -10,9 +9,7 @@ import ExportStatisticsButton from '../components/ExportStatisticsButton';
 import { exportRunBundle, exportSimulationCsv, getCompletedSummaries, getReplayStatus, importRunBundle, ReplayStatusResponse } from '../api/simulation';
 import SimulationProgress from '../components/SimulationProgress';
 
-type FormMode = 'normal' | 'advanced';
-
-const FORM_MODE_KEY = 'firecasting:formMode';
+type BundleKind = 'normal' | 'advanced';
 const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
 
 const toIsoDateString = (v: any): string | null => {
@@ -37,10 +34,13 @@ const toIsoDateString = (v: any): string | null => {
   return null;
 };
 
-const getInitialFormMode = (): FormMode => {
-  if (typeof window === 'undefined') return 'normal';
-  const v = window.localStorage.getItem(FORM_MODE_KEY);
-  return v === 'advanced' ? 'advanced' : 'normal';
+type ExternalAdvancedLoad = {
+  enabled?: boolean;
+  inflationAveragePct?: number;
+  taxExemptionConfig?: any;
+  returnType?: any;
+  seed?: any;
+  returnerConfig?: any;
 };
 
 const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | null => {
@@ -93,11 +93,10 @@ const SimulationPage: React.FC = () => {
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
   const [lastCompletedSimulationId, setLastCompletedSimulationId] = useState<string | null>(null);
   const [ackSim, setAckSim] = useState(false);
-  const [formMode, setFormMode] = useState<FormMode>(getInitialFormMode);
 
   const [externalNormalLoad, setExternalNormalLoad] = useState<SimulationRequest | null>(null);
   const [externalNormalLoadNonce, setExternalNormalLoadNonce] = useState(0);
-  const [externalAdvancedLoad, setExternalAdvancedLoad] = useState<any | null>(null);
+  const [externalAdvancedLoad, setExternalAdvancedLoad] = useState<ExternalAdvancedLoad | null>(null);
   const [externalAdvancedLoadNonce, setExternalAdvancedLoadNonce] = useState(0);
 
   const [isIoModalOpen, setIsIoModalOpen] = useState(false);
@@ -115,23 +114,23 @@ const SimulationPage: React.FC = () => {
   const [importBusy, setImportBusy] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const formRef = useRef<NormalInputFormHandle | null>(null);
+  const [mode, setMode] = useState<NormalInputFormMode>(() => {
+    try {
+      const raw = window.localStorage.getItem('firecasting:simulation:mode');
+      return raw === 'advanced' ? 'advanced' : 'normal';
+    } catch {
+      return 'normal';
+    }
+  });
+
   useEffect(() => {
-    try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
-  }, [formMode]);
+    try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch {}
+  }, [mode]);
 
   useEffect(() => {
     try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch {}
   }, [autoExportSimulationCsv]);
-
-  const setFormModeByUser = (mode: FormMode) => {
-    setStats(null);
-    setTimeline(null);
-    setLastCompletedSimulationId(null);
-    setImportSimulationId(null);
-    setImportReplayId(null);
-    setReplayReport(null);
-    setFormMode(mode);
-  };
 
   const handleSimulationComplete = (results: YearlySummary[], ctx?: SimulationTimelineContext, simulationId?: string) => {
     setStats(results);
@@ -209,16 +208,19 @@ const SimulationPage: React.FC = () => {
 
             // Load imported inputs back into the forms (including phases list).
             const kindRaw = String(parsed?.inputs?.kind ?? parsed?.meta?.inputKind ?? parsed?.meta?.uiMode ?? '').toLowerCase();
-            const kind: FormMode = kindRaw === 'advanced' ? 'advanced' : 'normal';
-            setFormMode(kind);
+            const kind: BundleKind = kindRaw === 'advanced' ? 'advanced' : 'normal';
+
+            setMode(kind === 'advanced' ? 'advanced' : 'normal');
 
             const raw = parsed?.inputs?.raw ?? parsed?.inputs?.[kind] ?? null;
-            if (raw && kind === 'normal') {
+            if (raw) {
               const start = toIsoDateString(raw?.startDate) ?? '';
+              const ruleStr = String(raw?.overallTaxRule ?? raw?.taxRule ?? 'CAPITAL');
+              const isNotional = ruleStr.toUpperCase() === 'NOTIONAL' || ruleStr.toLowerCase() === 'notional';
               const req: SimulationRequest = {
                 startDate: { date: start },
-                overallTaxRule: String(raw?.overallTaxRule ?? 'CAPITAL').toUpperCase() === 'NOTIONAL' ? 'NOTIONAL' : 'CAPITAL',
-                taxPercentage: Number(raw?.taxPercentage ?? 0),
+                overallTaxRule: isNotional ? 'NOTIONAL' : 'CAPITAL',
+                taxPercentage: Number(raw?.taxPercentage ?? raw?.tax?.percentage ?? 0),
                 phases: Array.isArray(raw?.phases)
                   ? raw.phases.map((p: any) => ({
                       phaseType: String(p?.phaseType ?? 'DEPOSIT').toUpperCase(),
@@ -230,17 +232,32 @@ const SimulationPage: React.FC = () => {
                       withdrawAmount: p?.withdrawAmount,
                       lowerVariationPercentage: p?.lowerVariationPercentage,
                       upperVariationPercentage: p?.upperVariationPercentage,
-                      taxRules: Array.isArray(p?.taxRules) ? p.taxRules : [],
+                      taxRules: Array.isArray(p?.taxRules)
+                        ? p.taxRules
+                        : Array.isArray(p?.taxExemptions)
+                          ? p.taxExemptions
+                          : [],
                     }))
                   : [],
               };
               setExternalNormalLoad(req);
               setExternalNormalLoadNonce((n) => n + 1);
-            }
 
-            if (raw && kind === 'advanced') {
-              setExternalAdvancedLoad(raw);
-              setExternalAdvancedLoadNonce((n) => n + 1);
+              if (kind === 'advanced') {
+                const inflationFactor = Number(raw?.inflationFactor);
+                const inflationAveragePct = Number.isFinite(inflationFactor) ? (inflationFactor - 1) * 100 : undefined;
+                setExternalAdvancedLoad({
+                  enabled: true,
+                  inflationAveragePct,
+                  taxExemptionConfig: raw?.taxExemptionConfig,
+                  returnType: raw?.returnType,
+                  seed: raw?.seed,
+                  returnerConfig: raw?.returnerConfig,
+                });
+                setExternalAdvancedLoadNonce((n) => n + 1);
+              } else {
+                setExternalAdvancedLoad(null);
+              }
             }
           } catch {
             setTimeline(null);
@@ -332,21 +349,50 @@ const SimulationPage: React.FC = () => {
     </button>
   );
 
-  const segBtn = (mode: FormMode, label: string) => (
+  const modeButton = (label: 'Normal' | 'Advanced', value: NormalInputFormMode) => {
+    const isActive = mode === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setMode(value)}
+        style={{
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: `1px solid ${isActive ? 'var(--fc-card-border)' : '#444'}`,
+          cursor: 'pointer',
+          fontSize: 14,
+          background: isActive ? 'var(--fc-subtle-bg)' : 'transparent',
+          color: 'inherit',
+          fontWeight: isActive ? 700 : 500,
+        }}
+        aria-pressed={isActive}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const savedScenariosButton = (
     <button
-      key={mode}
-      onClick={() => setFormModeByUser(mode)}
-      aria-pressed={formMode === mode}
+      type="button"
+      onClick={() => formRef.current?.openSavedScenarios()}
       style={{
-        padding: '0.4rem 0.8rem',
-        border: '1px solid #444',
-        backgroundColor: formMode === mode ? '#2e2e2e' : 'transparent',
-        color: formMode === mode ? 'white' : 'inherit',
-        cursor: 'pointer',
+        padding: '6px 10px',
         borderRadius: 8,
+        border: '1px solid #444',
+        cursor: 'pointer',
+        fontSize: 14,
+        background: 'transparent',
+        color: '#ddd',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
       }}
+      title="Saved scenarios"
+      aria-label="Saved scenarios"
     >
-      {label}
+      <span aria-hidden="true">🗂</span>
+      Saved scenarios
     </button>
   );
 
@@ -367,90 +413,54 @@ const SimulationPage: React.FC = () => {
         </div>
       )}
 
-      <div style={{ maxWidth: formMode === 'advanced' ? 960 : 450, margin: '0 auto' }}>
+      <div style={{ maxWidth: 980, margin: '0 auto' }}>
         <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
 
-        <div role="group" aria-label="Form mode" style={{
+        <div role="group" aria-label="Simulation tools" style={{
           display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center',
           marginBottom: 12, border: '1px solid #444', borderRadius: 12, padding: 6,
         }}>
           <Link to="/simulation/tutorial" style={{
-            padding:'0.4rem 0.8rem', border:'1px solid #444', borderRadius:8,
+            padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
             textDecoration:'none', color:'inherit',
           }}>
             Tutorial
           </Link>
-          {segBtn('normal', 'Normal')}
-          {segBtn('advanced', 'Advanced')}
+          <div role="group" aria-label="Mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {modeButton('Normal', 'normal')}
+            {modeButton('Advanced', 'advanced')}
+          </div>
+          {ioButton}
+          {savedScenariosButton}
         </div>
 
-        <div key={formMode}>
-          {formMode === 'advanced' ? (
+        <NormalInputForm
+          ref={formRef}
+          onSimulationComplete={handleSimulationComplete}
+          externalLoadRequest={externalNormalLoad}
+          externalLoadNonce={externalNormalLoadNonce}
+          externalLoadAdvanced={externalAdvancedLoad}
+          externalLoadAdvancedNonce={externalAdvancedLoadNonce}
+          mode={mode}
+          rightFooterActions={null}
+          footerBelow={
             <>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 10,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                {ioButton}
-                {importReplayId && (
-                  <span style={{ fontSize: 12, opacity: 0.8 }}>
-                    Replay: {importReplayId.slice(0, 8)}…
-                  </span>
-                )}
-              </div>
-
-              {importSimulationId && !stats && (
-                <div style={{ maxWidth: 960, margin: '0 auto' }}>
+              {importReplayId && (
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
+                  Replay: {importReplayId.slice(0, 8)}…
+                </div>
+              )}
+              {importSimulationId && !stats ? (
+                <div style={{ maxWidth: 980, margin: '0.75rem auto 0' }}>
                   <SimulationProgress
                     simulationId={importSimulationId}
                     onComplete={(results) => handleImportComplete(results, importSimulationId, importReplayId)}
                   />
                 </div>
-              )}
-
-              <AdvancedInputForm
-                onSimulationComplete={handleSimulationComplete}
-                externalLoadRequest={externalAdvancedLoad}
-                externalLoadNonce={externalAdvancedLoadNonce}
-              />
+              ) : null}
             </>
-          ) : (
-            <>
-              <NormalInputForm
-                onSimulationComplete={handleSimulationComplete}
-                externalLoadRequest={externalNormalLoad}
-                externalLoadNonce={externalNormalLoadNonce}
-                rightFooterActions={
-                  <>
-                    {ioButton}
-                  </>
-                }
-                footerBelow={
-                  <>
-                    {importReplayId && (
-                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
-                        Replay: {importReplayId.slice(0, 8)}…
-                      </div>
-                    )}
-                    {importSimulationId && !stats ? (
-                      <div style={{ maxWidth: 960, margin: '0.75rem auto 0' }}>
-                        <SimulationProgress
-                          simulationId={importSimulationId}
-                          onComplete={(results) => handleImportComplete(results, importSimulationId, importReplayId)}
-                        />
-                      </div>
-                    ) : null}
-                  </>
-                }
-              />
-            </>
-          )}
-        </div>
+          }
+        />
       </div>
 
       {isIoModalOpen && (

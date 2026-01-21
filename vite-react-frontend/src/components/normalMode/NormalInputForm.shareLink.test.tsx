@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
+    startAdvancedSimulation: vi.fn().mockResolvedValue('test-sim-id'),
     exportSimulationCsv: vi.fn(),
   };
 });
 
 import { startSimulation } from '../../api/simulation';
-import SimulationForm from './NormalInputForm';
+import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 
 describe('NormalInputForm share links', () => {
@@ -20,9 +22,12 @@ describe('NormalInputForm share links', () => {
 
     window.localStorage.clear();
 
-    render(<SimulationForm />);
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(<SimulationForm ref={ref} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Saved scenarios/i }));
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
     // 1st prompt call: scenario name
     fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
 

@@ -7,6 +7,40 @@ const BASE_URL = getApiBaseUrl();
 
 type StartResponse = { id: string };
 
+export type AdvancedSimulationRequest = {
+  startDate: { date: string };
+  phases: SimulationRequest['phases'];
+  overallTaxRule: string;
+  taxPercentage: number;
+  returnType: string;
+  seed?: number;
+  returnerConfig?: {
+    seed?: number;
+    simpleAveragePercentage?: number;
+    distribution?: {
+      type?: string;
+      normal?: { mean?: number; standardDeviation?: number };
+      brownianMotion?: { drift?: number; volatility?: number };
+      studentT?: { mu?: number; sigma?: number; nu?: number };
+      regimeBased?: {
+        tickMonths?: number;
+        regimes?: Array<{
+          distributionType?: string;
+          expectedDurationMonths?: number;
+          switchWeights?: { toRegime0?: number; toRegime1?: number; toRegime2?: number };
+          normal?: { mean?: number; standardDeviation?: number };
+          studentT?: { mu?: number; sigma?: number; nu?: number };
+        }>;
+      };
+    };
+  };
+  taxExemptionConfig?: {
+    exemptionCard?: { limit?: number; yearlyIncrease?: number };
+    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
+  };
+  inflationFactor: number;
+};
+
 type ImportReplayResponse = {
   replayId: string;
   simulationId: string;
@@ -37,6 +71,18 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
 
 export async function startSimulation(req: SimulationRequest): Promise<string> {
   const res = await fetch(`${BASE_URL}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data: StartResponse = await res.json();
+  if (!data?.id) throw new Error('No simulation id returned');
+  return data.id;
+}
+
+export async function startAdvancedSimulation(req: AdvancedSimulationRequest): Promise<string> {
+  const res = await fetch(`${BASE_URL}/start-advanced`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
