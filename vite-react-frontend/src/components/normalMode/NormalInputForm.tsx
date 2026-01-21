@@ -1317,23 +1317,25 @@ ref
                 </InfoTooltip>
               </div>
             </label>
-
-            <label className="fc-field-row" style={{ marginBottom: 10 }}>
-              <span className="fc-field-label">RNG seed (optional)</span>
-              <div className="fc-field-control">
-                <input type="number" step="1" value={seed} onChange={(e) => setSeed(e.target.value)} style={inputStyle} />
-              </div>
-              <div className="fc-field-info">
-                <InfoTooltip label="(i)">
-                  Optional random seed for return generation.
-                  Non-negative values make results deterministic for the same inputs; negative forces a fresh random stream each run.
-                </InfoTooltip>
-              </div>
-            </label>
+            
+            {returnType != 'simpleReturn' && (
+              <label className="fc-field-row" style={{ marginBottom: 10 }}>
+                <span className="fc-field-label">RNG seed (optional)</span>
+                <div className="fc-field-control">
+                  <input type="number" step="1" value={seed} onChange={(e) => setSeed(e.target.value)} style={inputStyle} />
+                </div>
+                <div className="fc-field-info">
+                  <InfoTooltip label="(i)">
+                    Optional random seed for return generation.
+                    Non-negative values make results deterministic for the same inputs; negative forces a fresh random stream each run.
+                  </InfoTooltip>
+                </div>
+              </label>
+            )}
 
             {returnType === 'simpleReturn' && (
               <label className="fc-field-row" style={{ marginBottom: 10 }}>
-                <span className="fc-field-label">Average % / year</span>
+                <span className="fc-field-label">Return % / year</span>
                 <div className="fc-field-control">
                   <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => setSimpleAveragePercentage(e.target.value)} style={inputStyle} />
                 </div>
