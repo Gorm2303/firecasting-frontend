@@ -1,5 +1,5 @@
 // src/pages/SimulationPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import NormalInputForm from '../components/normalMode/NormalInputForm';
 import AdvancedInputForm from '../components/advancedMode/AdvancedInputForm';
 import { YearlySummary } from '../models/YearlySummary';
@@ -113,6 +113,7 @@ const SimulationPage: React.FC = () => {
   const [importReplayId, setImportReplayId] = useState<string | null>(null);
   const [replayReport, setReplayReport] = useState<ReplayStatusResponse | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     try { window.localStorage.setItem(FORM_MODE_KEY, formMode); } catch {}
@@ -138,7 +139,11 @@ const SimulationPage: React.FC = () => {
     setLastCompletedSimulationId(simulationId ?? null);
 
     if (autoExportSimulationCsv) {
-      exportSimulationCsv(simulationId ?? null).catch((e) => {
+      if (!simulationId) {
+        console.warn('Auto-export CSV skipped: missing simulationId');
+        return;
+      }
+      exportSimulationCsv(simulationId).catch((e) => {
         console.error(e);
         alert(e?.message ?? 'Failed to export full simulation CSV');
       });
@@ -164,144 +169,141 @@ const SimulationPage: React.FC = () => {
   };
 
   const importControl = (
-    <>
-      <label
+    <div style={{ flex: '1 1 220px' }}>
+      <button
+        type="button"
+        disabled={importBusy}
         style={{
-          padding: '6px 10px',
-          borderRadius: 8,
-          border: '1px solid #444',
+          flex: 1,
+          padding: '0.75rem',
+          fontSize: '1rem',
+          width: '100%',
+          opacity: importBusy ? 0.6 : 1,
           cursor: importBusy ? 'not-allowed' : 'pointer',
-          fontSize: 14,
-          background: 'transparent',
-          color: '#ddd',
-          opacity: importBusy ? 0.65 : 1,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
         }}
         title="Import a previously exported run bundle (JSON)"
+        onClick={() => {
+          if (importBusy) return;
+          importFileInputRef.current?.click();
+        }}
       >
-        <span aria-hidden="true">📥</span>
         Import Run Bundle
-        <input
-          type="file"
-          accept="application/json,.json"
-          disabled={importBusy}
-          style={{ display: 'none' }}
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
+      </button>
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        disabled={importBusy}
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
 
-            // Derive timeline locally from the bundle so MultiPhaseOverview behaves the same
-            // as a normal simulation run (calendar boundaries + phase grouping).
-            try {
-              const text = await f.text();
-              const parsed = JSON.parse(text);
-              const t = tryBuildTimelineFromBundle(parsed);
-              setTimeline(t);
+          // Derive timeline locally from the bundle so MultiPhaseOverview behaves the same
+          // as a normal simulation run (calendar boundaries + phase grouping).
+          try {
+            const text = await f.text();
+            const parsed = JSON.parse(text);
+            const t = tryBuildTimelineFromBundle(parsed);
+            setTimeline(t);
 
-              // Load imported inputs back into the forms (including phases list).
-              const kindRaw = String(parsed?.inputs?.kind ?? parsed?.meta?.inputKind ?? parsed?.meta?.uiMode ?? '').toLowerCase();
-              const kind: FormMode = kindRaw === 'advanced' ? 'advanced' : 'normal';
-              setFormMode(kind);
+            // Load imported inputs back into the forms (including phases list).
+            const kindRaw = String(parsed?.inputs?.kind ?? parsed?.meta?.inputKind ?? parsed?.meta?.uiMode ?? '').toLowerCase();
+            const kind: FormMode = kindRaw === 'advanced' ? 'advanced' : 'normal';
+            setFormMode(kind);
 
-              const raw = parsed?.inputs?.raw ?? parsed?.inputs?.[kind] ?? null;
-              if (raw && kind === 'normal') {
-                const start = toIsoDateString(raw?.startDate) ?? '';
-                const req: SimulationRequest = {
-                  startDate: { date: start },
-                  overallTaxRule: String(raw?.overallTaxRule ?? 'CAPITAL').toUpperCase() === 'NOTIONAL' ? 'NOTIONAL' : 'CAPITAL',
-                  taxPercentage: Number(raw?.taxPercentage ?? 0),
-                  phases: Array.isArray(raw?.phases)
-                    ? raw.phases.map((p: any) => ({
-                        phaseType: String(p?.phaseType ?? 'DEPOSIT').toUpperCase(),
-                        durationInMonths: Number(p?.durationInMonths ?? 0),
-                        initialDeposit: p?.initialDeposit,
-                        monthlyDeposit: p?.monthlyDeposit,
-                        yearlyIncreaseInPercentage: p?.yearlyIncreaseInPercentage,
-                        withdrawRate: p?.withdrawRate,
-                        withdrawAmount: p?.withdrawAmount,
-                        lowerVariationPercentage: p?.lowerVariationPercentage,
-                        upperVariationPercentage: p?.upperVariationPercentage,
-                        taxRules: Array.isArray(p?.taxRules) ? p.taxRules : [],
-                      }))
-                    : [],
-                };
-                setExternalNormalLoad(req);
-                setExternalNormalLoadNonce((n) => n + 1);
-              }
-
-              if (raw && kind === 'advanced') {
-                setExternalAdvancedLoad(raw);
-                setExternalAdvancedLoadNonce((n) => n + 1);
-              }
-            } catch {
-              setTimeline(null);
+            const raw = parsed?.inputs?.raw ?? parsed?.inputs?.[kind] ?? null;
+            if (raw && kind === 'normal') {
+              const start = toIsoDateString(raw?.startDate) ?? '';
+              const req: SimulationRequest = {
+                startDate: { date: start },
+                overallTaxRule: String(raw?.overallTaxRule ?? 'CAPITAL').toUpperCase() === 'NOTIONAL' ? 'NOTIONAL' : 'CAPITAL',
+                taxPercentage: Number(raw?.taxPercentage ?? 0),
+                phases: Array.isArray(raw?.phases)
+                  ? raw.phases.map((p: any) => ({
+                      phaseType: String(p?.phaseType ?? 'DEPOSIT').toUpperCase(),
+                      durationInMonths: Number(p?.durationInMonths ?? 0),
+                      initialDeposit: p?.initialDeposit,
+                      monthlyDeposit: p?.monthlyDeposit,
+                      yearlyIncreaseInPercentage: p?.yearlyIncreaseInPercentage,
+                      withdrawRate: p?.withdrawRate,
+                      withdrawAmount: p?.withdrawAmount,
+                      lowerVariationPercentage: p?.lowerVariationPercentage,
+                      upperVariationPercentage: p?.upperVariationPercentage,
+                      taxRules: Array.isArray(p?.taxRules) ? p.taxRules : [],
+                    }))
+                  : [],
+              };
+              setExternalNormalLoad(req);
+              setExternalNormalLoadNonce((n) => n + 1);
             }
 
-            setImportBusy(true);
-            setStats(null);
-            setReplayReport(null);
-            try {
-              const resp = await importRunBundle(f);
-              setImportReplayId(resp.replayId);
-              setImportSimulationId(resp.simulationId);
-
-              // If the backend returns an already-complete simulationId (dedupe), or the run
-              // finishes extremely fast, the SSE 'completed' event might not be observed.
-              // Opportunistically fetch the JSON summaries to populate the UI.
-              try {
-                const maybeSummaries = await getCompletedSummaries(resp.simulationId);
-                if (maybeSummaries && maybeSummaries.length > 0) {
-                  await handleImportComplete(maybeSummaries, resp.simulationId, resp.replayId);
-                }
-              } catch (err) {
-                console.warn('Import: failed to eagerly fetch completed summaries', err);
-              }
-            } catch (err: any) {
-              console.error(err);
-              alert(err?.message ?? 'Failed to import bundle');
-            } finally {
-              setImportBusy(false);
-              e.target.value = '';
-              setIsIoModalOpen(false);
+            if (raw && kind === 'advanced') {
+              setExternalAdvancedLoad(raw);
+              setExternalAdvancedLoadNonce((n) => n + 1);
             }
-          }}
-        />
-      </label>
-    </>
+          } catch {
+            setTimeline(null);
+          }
+
+          setImportBusy(true);
+          setStats(null);
+          setReplayReport(null);
+          try {
+            const resp = await importRunBundle(f);
+            setImportReplayId(resp.replayId);
+            setImportSimulationId(resp.simulationId);
+
+            // If the backend returns an already-complete simulationId (dedupe), or the run
+            // finishes extremely fast, the SSE 'completed' event might not be observed.
+            // Opportunistically fetch the JSON summaries to populate the UI.
+            try {
+              const maybeSummaries = await getCompletedSummaries(resp.simulationId);
+              if (maybeSummaries && maybeSummaries.length > 0) {
+                await handleImportComplete(maybeSummaries, resp.simulationId, resp.replayId);
+              }
+            } catch (err) {
+              console.warn('Import: failed to eagerly fetch completed summaries', err);
+            }
+          } catch (err: any) {
+            console.error(err);
+            alert(err?.message ?? 'Failed to import bundle');
+          } finally {
+            setImportBusy(false);
+            e.target.value = '';
+            setIsIoModalOpen(false);
+          }
+        }}
+      />
+    </div>
   );
 
   const exportControl = (
-    <button
-      type="button"
-      onClick={() => {
-        if (!lastCompletedSimulationId) return;
-        exportRunBundle(lastCompletedSimulationId).catch((e) => {
-          console.error(e);
-          alert(e?.message ?? 'Failed to export run bundle');
-        });
-        setIsIoModalOpen(false);
-      }}
-      disabled={!lastCompletedSimulationId}
-      style={{
-        padding: '6px 10px',
-        borderRadius: 8,
-        border: '1px solid #444',
-        cursor: !lastCompletedSimulationId ? 'not-allowed' : 'pointer',
-        fontSize: 14,
-        background: 'transparent',
-        color: '#ddd',
-        opacity: !lastCompletedSimulationId ? 0.5 : 1,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-      }}
-      title={lastCompletedSimulationId ? 'Download a reproducibility bundle (JSON)' : 'No completed run id available'}
-    >
-      <span aria-hidden="true">⬇️</span>
-      Export Run Bundle
-    </button>
+    <div style={{ flex: '1 1 220px' }}>
+      <button
+        type="button"
+        onClick={() => {
+          if (!lastCompletedSimulationId) return;
+          exportRunBundle(lastCompletedSimulationId).catch((e) => {
+            console.error(e);
+            alert(e?.message ?? 'Failed to export run bundle');
+          });
+          setIsIoModalOpen(false);
+        }}
+        disabled={!lastCompletedSimulationId}
+        style={{
+          flex: 1,
+          padding: '0.75rem',
+          fontSize: '1rem',
+          width: '100%',
+          opacity: !lastCompletedSimulationId ? 0.6 : 1,
+          cursor: !lastCompletedSimulationId ? 'not-allowed' : 'pointer',
+        }}
+        title={lastCompletedSimulationId ? 'Download a reproducibility bundle (JSON)' : 'No completed run id available'}
+      >
+        Export Run Bundle
+      </button>
+    </div>
   );
 
 

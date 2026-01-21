@@ -76,9 +76,15 @@ export const exportSimulationCsv = async (simulationId?: string | null): Promise
     : 'export';
   const url = new URL(path, base + '/').toString();
   const res = await fetch(url, { method: 'GET' }); // ← no credentials
+  if (res.status === 204) {
+    throw new Error('Simulation CSV not available (backend has no cached results for this run).');
+  }
   if (!res.ok) throw new Error(`Export failed: ${res.status} ${res.statusText}`);
 
   const blob = await res.blob();
+  if (blob.size === 0) {
+    throw new Error('Received an empty simulation CSV from the backend.');
+  }
   const cd = res.headers.get('content-disposition') || '';
   const m = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(cd);
   const filename = m ? decodeURIComponent(m[1]) : 'simulation.csv';
