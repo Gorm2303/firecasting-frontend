@@ -100,6 +100,31 @@ export type ReplayStatusResponse = {
   note?: string;
 };
 
+export type RunListItem = {
+  id: string;
+  createdAt?: string;
+  rngSeed?: number | null;
+  modelAppVersion?: string | null;
+  inputHash?: string | null;
+};
+
+export type RunDiffResponse = {
+  a: RunListItem;
+  b: RunListItem;
+  attribution?: {
+    inputsChanged?: boolean;
+    randomnessChanged?: boolean;
+    modelVersionChanged?: boolean;
+    summary?: string;
+  };
+  output?: {
+    exactMatch?: boolean;
+    withinTolerance?: boolean;
+    mismatches?: number;
+    maxAbsDiff?: number;
+  };
+};
+
 export async function getCompletedSummaries(simulationId: string): Promise<YearlySummary[] | null> {
   const res = await fetch(`${BASE_URL}/progress/${encodeURIComponent(simulationId)}`, {
     method: 'GET',
@@ -152,6 +177,25 @@ export async function getReplayStatus(replayId: string): Promise<ReplayStatusRes
   const res = await fetch(`${BASE_URL}/replay/${encodeURIComponent(replayId)}`, { method: 'GET' });
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as ReplayStatusResponse;
+}
+
+export async function listRuns(limit = 50): Promise<RunListItem[]> {
+  const res = await fetch(`${BASE_URL}/runs?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as RunListItem[];
+}
+
+export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffResponse> {
+  const res = await fetch(
+    `${BASE_URL}/diff/${encodeURIComponent(runAId)}/${encodeURIComponent(runBId)}`,
+    { method: 'GET', headers: { Accept: 'application/json' } }
+  );
+  if (res.status === 404) throw new Error('One or both runs were not found (or not persisted).');
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as RunDiffResponse;
 }
 
 

@@ -5,6 +5,7 @@ import InfoPage from './pages/InfoPage';
 import ExplorePage from './pages/ExplorePage';
 import SimulationPage from './pages/SimulationPage';
 import TutorialPage from './pages/TutorialPage';
+import RunDiffPage from './pages/RunDiffPage';
 
 const TAB_BAR_RESERVED_HEIGHT = 80;
 
@@ -53,6 +54,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Navigate to="/simulation" replace />} />
           <Route path="/simulation" element={<SimulationPage />} />
           <Route path="/simulation/tutorial" element={<TutorialPage />} />
+          <Route path="/simulation/diff" element={<RunDiffPage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/info" element={<InfoPage />} />
           <Route path="*" element={<Navigate to="/simulation" replace />} />
