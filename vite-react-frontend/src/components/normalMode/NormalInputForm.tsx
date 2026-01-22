@@ -17,6 +17,7 @@ import {
 } from '../../config/savedScenarios';
 import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeScenario';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
 
@@ -419,6 +420,8 @@ ref
 
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
+  const [compareScenarioId, setCompareScenarioId] = useState<string>('');
+  const [showScenarioCompare, setShowScenarioCompare] = useState(false);
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
@@ -663,6 +666,10 @@ ref
 
   const openScenarioModal = useCallback(() => {
     refreshSavedScenarios();
+    setShareUrl('');
+    setDidCopyShareUrl(false);
+    setCompareScenarioId('');
+    setShowScenarioCompare(false);
     setIsScenarioModalOpen(true);
   }, [refreshSavedScenarios]);
 
@@ -792,7 +799,24 @@ ref
   const closeScenarioModal = useCallback(() => {
     setIsScenarioModalOpen(false);
     setShareUrl('');
+    setDidCopyShareUrl(false);
+    setCompareScenarioId('');
+    setShowScenarioCompare(false);
   }, []);
+
+  const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === selectedScenarioId), [savedScenarios, selectedScenarioId]);
+  const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === compareScenarioId), [savedScenarios, compareScenarioId]);
+  const scenarioASummary = useMemo(() => (scenarioA ? summarizeScenario(scenarioA.request) : null), [scenarioA]);
+  const scenarioBSummary = useMemo(() => (scenarioB ? summarizeScenario(scenarioB.request) : null), [scenarioB]);
+
+  const fmtNumber = useMemo(
+    () => new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }),
+    []
+  );
+  const fmtInt = useMemo(
+    () => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }),
+    []
+  );
 
   useEffect(() => {
     if (!isScenarioModalOpen) return;
@@ -1871,8 +1895,33 @@ ref
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Scenario</span>
               <select
+                aria-label="Scenario"
                 value={selectedScenarioId}
-                onChange={(e) => setSelectedScenarioId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedScenarioId(e.target.value);
+                  setShowScenarioCompare(false);
+                }}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
+              >
+                <option value="">— Select —</option>
+                {savedScenarios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Compare to</span>
+              <select
+                aria-label="Compare to scenario"
+                value={compareScenarioId}
+                onChange={(e) => {
+                  setCompareScenarioId(e.target.value);
+                  setShowScenarioCompare(false);
+                }}
                 disabled={simulateInProgress}
                 style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
               >
@@ -1886,6 +1935,20 @@ ref
             </label>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                aria-label="Compare scenarios"
+                title="Compare the two selected scenarios"
+                onClick={() => {
+                  setShowScenarioCompare(true);
+                  setShareUrl('');
+                  setDidCopyShareUrl(false);
+                }}
+                disabled={!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress}
+                style={btn(!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
+              >
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>⇄</span>
+              </button>
               <button
                 type="button"
                 aria-label="Share scenario"
@@ -1935,6 +1998,170 @@ ref
                 <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, display: 'inline-block' }}>🗑</span>
               </button>
             </div>
+
+            {showScenarioCompare && (
+              <div
+                style={{
+                  marginTop: 6,
+                  borderTop: '1px solid #2a2a2a',
+                  paddingTop: 10,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>Comparison</div>
+
+                {(!scenarioA || !scenarioB || !scenarioASummary || !scenarioBSummary) && (
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    Select two different scenarios to compare.
+                  </div>
+                )}
+
+                {scenarioA && scenarioB && scenarioASummary && scenarioBSummary && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, opacity: 0.9 }}>{scenarioA.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: 12, opacity: 0.9 }}>{scenarioB.name}</div>
+                    </div>
+
+                    {(
+                      [
+                        {
+                          id: 'startDate',
+                          label: 'Start date',
+                          a: scenarioASummary.startDate,
+                          b: scenarioBSummary.startDate,
+                        },
+                        {
+                          id: 'overallTaxRule',
+                          label: 'Overall tax rule',
+                          a: scenarioASummary.overallTaxRule,
+                          b: scenarioBSummary.overallTaxRule,
+                        },
+                        {
+                          id: 'taxPercentage',
+                          label: 'Tax %',
+                          a: `${fmtNumber.format(scenarioASummary.taxPercentage)}`,
+                          b: `${fmtNumber.format(scenarioBSummary.taxPercentage)}`,
+                        },
+                        {
+                          id: 'totalDuration',
+                          label: 'Total duration',
+                          a: formatYearsMonths(scenarioASummary.totalMonths),
+                          b: formatYearsMonths(scenarioBSummary.totalMonths),
+                        },
+                        {
+                          id: 'phaseCount',
+                          label: 'Phase count',
+                          a: `${scenarioASummary.phaseCount}`,
+                          b: `${scenarioBSummary.phaseCount}`,
+                        },
+                        {
+                          id: 'phasePattern',
+                          label: 'Phase pattern',
+                          a: scenarioASummary.phasePattern,
+                          b: scenarioBSummary.phasePattern,
+                        },
+                        {
+                          id: 'totalInitialDeposit',
+                          label: 'Initial deposits (sum)',
+                          a: fmtInt.format(scenarioASummary.totalInitialDeposit),
+                          b: fmtInt.format(scenarioBSummary.totalInitialDeposit),
+                        },
+                        {
+                          id: 'totalMonthlyDeposits',
+                          label: 'Monthly deposits total (best-effort)',
+                          a: fmtInt.format(scenarioASummary.totalMonthlyDeposits),
+                          b: fmtInt.format(scenarioBSummary.totalMonthlyDeposits),
+                        },
+                        {
+                          id: 'totalWithdrawAmount',
+                          label: 'Withdraw amount total (best-effort)',
+                          a: fmtInt.format(scenarioASummary.totalWithdrawAmount),
+                          b: fmtInt.format(scenarioBSummary.totalWithdrawAmount),
+                        },
+                        {
+                          id: 'withdrawRatePhaseCount',
+                          label: 'Phases using withdraw rate',
+                          a: `${scenarioASummary.withdrawRatePhaseCount}`,
+                          b: `${scenarioBSummary.withdrawRatePhaseCount}`,
+                        },
+                      ] as const
+                    ).map((row) => {
+                      const different = String(row.a) !== String(row.b);
+                      const cellStyle: React.CSSProperties = {
+                        padding: '6px 8px',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: 8,
+                        background: different ? 'rgba(255, 200, 0, 0.10)' : 'transparent',
+                      };
+                      return (
+                        <div
+                          key={row.id}
+                          data-testid={`compare-row-${row.id}`}
+                          data-different={different ? 'true' : 'false'}
+                          style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr', gap: 8, alignItems: 'center' }}
+                        >
+                          <div style={{ fontSize: 12, opacity: 0.9 }}>{row.label}</div>
+                          <div data-testid={`compare-${row.id}-a`} style={cellStyle}>{row.a}</div>
+                          <div data-testid={`compare-${row.id}-b`} style={cellStyle}>{row.b}</div>
+                        </div>
+                      );
+                    })}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {(
+                        [
+                          { id: 'a', req: scenarioA.request, label: scenarioA.name },
+                          { id: 'b', req: scenarioB.request, label: scenarioB.name },
+                        ] as const
+                      ).map((x) => {
+                        const segments = getTimelineSegments(x.req);
+                        const total = segments.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
+                        const colorFor = (t: any) => (t === 'DEPOSIT' ? '#2ecc71' : t === 'WITHDRAW' ? '#e67e22' : '#7f8c8d');
+                        return (
+                          <div key={x.id}>
+                            <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Phase timeline</div>
+                            <div
+                              data-testid={`compare-timeline-${x.id}`}
+                              aria-label={`Phase timeline ${x.label}`}
+                              style={{
+                                display: 'flex',
+                                height: 14,
+                                borderRadius: 10,
+                                overflow: 'hidden',
+                                border: '1px solid #2a2a2a',
+                                background: '#0b0b0b',
+                              }}
+                            >
+                              {segments.map((s, i) => {
+                                const months = Number(s.durationInMonths) || 0;
+                                const grow = months > 0 ? months : 1;
+                                return (
+                                  <div
+                                    key={i}
+                                    title={`#${i + 1} ${s.phaseType} ${months} months`}
+                                    style={{
+                                      flexGrow: grow,
+                                      background: colorFor(s.phaseType),
+                                      opacity: months > 0 ? 1 : 0.35,
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6 }}>
+                              Total: {formatYearsMonths(total)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {shareUrl && (
               <div style={{ marginTop: 6, borderTop: '1px solid #2a2a2a', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
