@@ -11,6 +11,12 @@ vi.mock('../../api/simulation', () => {
   };
 });
 
+vi.mock('qrcode.react', () => {
+  return {
+    QRCodeSVG: ({ value }: { value: string }) => <div data-testid="qr" data-value={value} />,
+  };
+});
+
 import { startSimulation } from '../../api/simulation';
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
@@ -54,6 +60,10 @@ describe('NormalInputForm share links', () => {
     const shareLinkInput = within(dialog).getByRole('textbox', { name: /Share link/i }) as HTMLInputElement;
     expect(shareLinkInput.value).toContain('/simulation');
     expect(shareLinkInput.value).toMatch(/\bscenario=/);
+
+    // QR should encode the exact same URL.
+    const qr = within(dialog).getByTestId('qr');
+    expect(qr.getAttribute('data-value')).toBe(shareLinkInput.value);
 
     const scenarioParam = new URL(shareLinkInput.value).searchParams.get('scenario');
     expect(scenarioParam).toMatch(/^z:/);
