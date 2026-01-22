@@ -12,6 +12,8 @@ vi.mock('../../api/simulation', () => {
 });
 
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
+import { saveScenario } from '../../config/savedScenarios';
+import { startSimulation } from '../../api/simulation';
 
 describe('NormalInputForm scenarios', () => {
   it('saves and reloads a scenario with identical inputs', async () => {
@@ -53,5 +55,66 @@ describe('NormalInputForm scenarios', () => {
 
     promptSpy.mockRestore();
     alertSpy.mockRestore();
+  });
+
+  it('loads a maximal saved scenario and runs with identical payload (contract test)', async () => {
+    window.localStorage.clear();
+
+    const request = {
+      startDate: { date: '2033-02-03' },
+      overallTaxRule: 'NOTIONAL' as const,
+      taxPercentage: 25,
+      phases: [
+        {
+          phaseType: 'DEPOSIT' as const,
+          durationInMonths: 12,
+          initialDeposit: 500,
+          monthlyDeposit: 50,
+          yearlyIncreaseInPercentage: 3,
+          taxRules: ['EXEMPTIONCARD'] as const,
+        },
+        {
+          phaseType: 'WITHDRAW' as const,
+          durationInMonths: 6,
+          withdrawRate: 0.04,
+          withdrawAmount: 1234,
+          lowerVariationPercentage: 2,
+          upperVariationPercentage: 3,
+          taxRules: ['STOCKEXEMPTION'] as const,
+        },
+        {
+          phaseType: 'PASSIVE' as const,
+          durationInMonths: 3,
+          taxRules: [] as const,
+        },
+      ],
+    };
+
+    saveScenario('Maximal scenario', request as any);
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(<SimulationForm ref={ref} />);
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
+    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    await waitFor(() => {
+      expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
+    });
+
+    const id = scenarioSelect.querySelectorAll('option')[1].getAttribute('value');
+    fireEvent.change(scenarioSelect, { target: { value: id } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Load scenario/i }));
+
+    // Loading a scenario auto-runs the simulation; assert payload equality — this is the core "all fields" contract.
+    await waitFor(() => {
+      expect(startSimulation).toHaveBeenCalled();
+    });
+
+    const lastCallArg = (startSimulation as any).mock.calls.at(-1)[0];
+    expect(lastCallArg).toEqual(request);
   });
 });
