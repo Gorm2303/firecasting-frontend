@@ -5,6 +5,13 @@ import { getApiBaseUrl } from '../config/runtimeEnv';
 
 const BASE_URL = getApiBaseUrl();
 
+const joinUrl = (base: string, path: string): string => {
+  const b = String(base ?? '').replace(/\/+$/, '');
+  const p = String(path ?? '').replace(/^\/+/, '');
+  if (!b) return `/${p}`;
+  return `${b}/${p}`;
+};
+
 type ApiError = {
   message?: string;
   details?: string[];
@@ -154,7 +161,7 @@ export const exportSimulationCsv = async (simulationId?: string | null): Promise
   const path = simulationId
     ? `${encodeURIComponent(simulationId)}/export`
     : 'export';
-  const url = new URL(path, base + '/').toString();
+  const url = joinUrl(base, path);
   const res = await fetch(url, { method: 'GET' }); // ← no credentials
   if (res.status === 204) {
     throw new Error('Simulation CSV not available (backend has no cached results for this run).');
@@ -183,9 +190,9 @@ export const exportRunBundle = async (
   simulationId: string
 ): Promise<void> => {
   const base = BASE_URL.replace(/\/+$/, '');
-  const url = new URL(`${simulationId}/bundle`, base + '/');
+  const url = joinUrl(base, `${encodeURIComponent(simulationId)}/bundle`);
 
-  const res = await fetch(url.toString(), { method: 'GET' });
+  const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`Export bundle failed: ${res.status} ${res.statusText}`);
 
   const blob = await res.blob();
