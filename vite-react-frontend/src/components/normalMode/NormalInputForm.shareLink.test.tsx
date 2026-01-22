@@ -97,7 +97,7 @@ describe('NormalInputForm share links', () => {
     );
 
     // It should have populated the form as well
-    expect((screen.getByLabelText(/Start Date:/i) as HTMLInputElement).value).toBe('2033-02-03');
+    expect((screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement).value).toBe('2033-02-03');
 
     confirmSpy.mockRestore();
   });

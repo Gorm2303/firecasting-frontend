@@ -24,7 +24,7 @@ describe('NormalInputForm scenarios', () => {
     const ref = React.createRef<NormalInputFormHandle>();
     render(<SimulationForm ref={ref} />);
 
-    const startDate = screen.getByLabelText(/Start Date:/i) as HTMLInputElement;
+    const startDate = screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2033-02-03' } });
 
     act(() => {

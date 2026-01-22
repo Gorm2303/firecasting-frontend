@@ -1171,13 +1171,13 @@ ref
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 375, margin: '0 auto', gap: 12 }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 400, margin: '0 auto', gap: 12 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={cardStyle}>
           <div style={cardTitleStyle}>General Options</div>
 
           <label style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="fc-field-label">Template:</span>
+            <span className="fc-field-label">Template</span>
             <div style={rowStyle}>
               <select
                 value={selectedTemplateId}
@@ -1201,7 +1201,7 @@ ref
           </label>
 
           <label data-tour="start-date" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-            <span className="fc-field-label">Start Date:</span>
+            <span className="fc-field-label">Start Date</span>
             <div style={rowStyle}>
               <input
                 type="date"
@@ -1240,7 +1240,7 @@ ref
           <div style={cardTitleStyle}>Tax rules</div>
 
           <label data-tour="tax-rule" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="fc-field-label">Tax Rule:</span>
+            <span className="fc-field-label">Tax Rule</span>
             <div style={rowStyle}>
               <select
                 value={overallTaxRule}
@@ -1257,7 +1257,7 @@ ref
           </label>
 
           <label data-tour="tax-percent" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
-            <span className="fc-field-label">Tax %:</span>
+            <span className="fc-field-label">Tax %</span>
             <div style={rowStyle}>
               <input
                 type="number"
