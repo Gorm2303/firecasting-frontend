@@ -5,6 +5,32 @@ import { getApiBaseUrl } from '../config/runtimeEnv';
 
 const BASE_URL = getApiBaseUrl();
 
+type ApiError = {
+  message?: string;
+  details?: string[];
+};
+
+async function readApiError(res: Response): Promise<string> {
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    try {
+      const data = (await res.json()) as ApiError;
+      const msg = String(data?.message ?? `Request failed (${res.status})`);
+      const details = Array.isArray(data?.details) ? data.details : [];
+      if (details.length === 0) return msg;
+      return [msg, ...details.map((d) => `- ${d}`)].join('\n');
+    } catch {
+      // fall through
+    }
+  }
+  try {
+    const text = await res.text();
+    return text || `Request failed (${res.status})`;
+  } catch {
+    return `Request failed (${res.status})`;
+  }
+}
+
 type StartResponse = { id: string };
 
 export type AdvancedSimulationRequest = {
@@ -105,7 +131,7 @@ export async function importRunBundle(file: File): Promise<ImportReplayResponse>
     method: 'POST',
     body: fd,
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as ImportReplayResponse;
   if (!data?.replayId || !data?.simulationId) throw new Error('Invalid import response');
   return data;
