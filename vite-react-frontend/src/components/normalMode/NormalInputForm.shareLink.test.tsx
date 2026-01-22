@@ -43,7 +43,7 @@ describe('NormalInputForm share links', () => {
     const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
 
     // pick the first saved scenario option
-    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
     await waitFor(() => {
       expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
     });

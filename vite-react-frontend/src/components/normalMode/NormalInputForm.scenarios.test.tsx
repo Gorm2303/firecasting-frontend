@@ -39,7 +39,7 @@ describe('NormalInputForm scenarios', () => {
 
     // Select saved scenario
     const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
-    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
     await waitFor(() => {
       expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
     });
@@ -100,7 +100,7 @@ describe('NormalInputForm scenarios', () => {
     });
 
     const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
-    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
     await waitFor(() => {
       expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
     });
@@ -116,5 +116,77 @@ describe('NormalInputForm scenarios', () => {
 
     const lastCallArg = (startSimulation as any).mock.calls.at(-1)[0];
     expect(lastCallArg).toEqual(request);
+  });
+
+  it('compares two saved scenarios and highlights differences', async () => {
+    window.localStorage.clear();
+
+    saveScenario(
+      'Scenario A',
+      {
+        startDate: { date: '2033-02-03' },
+        overallTaxRule: 'NOTIONAL',
+        taxPercentage: 25,
+        phases: [
+          { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 500, monthlyDeposit: 50 },
+          { phaseType: 'PASSIVE', durationInMonths: 6 },
+        ],
+      } as any
+    );
+    saveScenario(
+      'Scenario B',
+      {
+        startDate: { date: '2034-03-04' },
+        overallTaxRule: 'CAPITAL',
+        taxPercentage: 30,
+        phases: [
+          { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 700, monthlyDeposit: 40 },
+          { phaseType: 'WITHDRAW', durationInMonths: 12, withdrawAmount: 1000 },
+        ],
+      } as any
+    );
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(<SimulationForm ref={ref} />);
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
+    const selects = within(dialog).getAllByRole('combobox') as HTMLSelectElement[];
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+
+    const primarySelect = selects[0];
+    const compareSelect = selects[1];
+
+    await waitFor(() => {
+      expect(primarySelect.querySelectorAll('option').length).toBeGreaterThan(2);
+    });
+
+    const getOptionValue = (select: HTMLSelectElement, optionText: string) => {
+      const opt = Array.from(select.options).find((o) => o.text === optionText);
+      return opt?.value ?? '';
+    };
+
+    const aId = getOptionValue(primarySelect, 'Scenario A');
+    const bId = getOptionValue(primarySelect, 'Scenario B');
+    expect(aId).not.toBe('');
+    expect(bId).not.toBe('');
+
+    fireEvent.change(primarySelect, { target: { value: aId } });
+    fireEvent.change(compareSelect, { target: { value: bId } });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Compare scenarios/i }));
+
+    const taxRow = within(dialog).getByTestId('compare-row-taxPercentage');
+    expect(taxRow).toHaveAttribute('data-different', 'true');
+
+    expect(within(dialog).getByTestId('compare-taxPercentage-a')).toHaveTextContent('25');
+    expect(within(dialog).getByTestId('compare-taxPercentage-b')).toHaveTextContent('30');
+
+    // Timeline should render for both sides.
+    expect(within(dialog).getByTestId('compare-timeline-a')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('compare-timeline-b')).toBeInTheDocument();
   });
 });
