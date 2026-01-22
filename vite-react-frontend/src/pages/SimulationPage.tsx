@@ -119,6 +119,7 @@ const SimulationPage: React.FC = () => {
   const [importReplayId, setImportReplayId] = useState<string | null>(null);
   const [replayReport, setReplayReport] = useState<ReplayStatusResponse | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formRef = useRef<NormalInputFormHandle | null>(null);
@@ -242,6 +243,8 @@ const SimulationPage: React.FC = () => {
           const f = e.target.files?.[0];
           if (!f) return;
 
+          setImportError(null);
+
           // Derive timeline locally from the bundle so MultiPhaseOverview behaves the same
           // as a normal simulation run (calendar boundaries + phase grouping).
           try {
@@ -310,10 +313,12 @@ const SimulationPage: React.FC = () => {
           setImportBusy(true);
           setStats(null);
           setReplayReport(null);
+          let ok = false;
           try {
             const resp = await importRunBundle(f);
             setImportReplayId(resp.replayId);
             setImportSimulationId(resp.simulationId);
+            ok = true;
 
             // If the backend returns an already-complete simulationId (dedupe), or the run
             // finishes extremely fast, the SSE 'completed' event might not be observed.
@@ -328,11 +333,11 @@ const SimulationPage: React.FC = () => {
             }
           } catch (err: any) {
             console.error(err);
-            alert(err?.message ?? 'Failed to import bundle');
+            setImportError(String(err?.message ?? err ?? 'Failed to import bundle'));
           } finally {
             setImportBusy(false);
             e.target.value = '';
-            setIsIoModalOpen(false);
+            if (ok) setIsIoModalOpen(false);
           }
         }}
       />
@@ -710,6 +715,22 @@ const SimulationPage: React.FC = () => {
                 {importControl}
                 {exportControl}
               </div>
+              {importError && (
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    fontSize: 12,
+                    padding: 10,
+                    borderRadius: 8,
+                    border: '1px solid rgba(255,80,80,0.45)',
+                    background: 'rgba(255,80,80,0.08)',
+                    color: '#ffd2d2',
+                  }}
+                >
+                  {importError}
+                </pre>
+              )}
               {importReplayId && (
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
                   Latest replay: {importReplayId.slice(0, 8)}…
