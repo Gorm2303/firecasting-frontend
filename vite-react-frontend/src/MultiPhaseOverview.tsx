@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { YearlySummary } from './models/YearlySummary';
 import { SimulationTimelineContext } from './models/types';
 import YearlySummaryOverview from './YearlySummaryOverview';
@@ -9,8 +9,22 @@ interface MultiPhaseOverviewProps {
   timeline?: SimulationTimelineContext | null;
 }
 
+type CapitalView = 'nominal' | 'real';
+
 const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline }) => {
   const normalized = data.map((s) => ({ ...s, phaseName: (s.phaseName ?? '').toUpperCase() }));
+
+  const canShowReal = useMemo(() => {
+    const f = Number(timeline?.inflationFactorPerYear);
+    return Number.isFinite(f) && f > 0 && Math.abs(f - 1) > 1e-12;
+  }, [timeline?.inflationFactorPerYear]);
+
+  const [capitalView, setCapitalView] = useState<CapitalView>('nominal');
+
+  // If a bundle/run without inflation is loaded, ensure we don't get stuck in "real" view.
+  useEffect(() => {
+    if (!canShowReal) setCapitalView('nominal');
+  }, [canShowReal]);
 
   // Preferred grouping: use the request phase sequence (timeline) and merge consecutive same-type phases.
   type PhaseBlock = {
@@ -70,6 +84,62 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
 
   return (
     <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+          margin: '6px 0 14px 0',
+        }}
+      >
+        <span style={{ fontSize: 13, opacity: 0.85 }}>Capital view:</span>
+
+        <button
+          type="button"
+          onClick={() => setCapitalView('nominal')}
+          style={{
+            padding: '6px 10px',
+            borderRadius: 999,
+            border: '1px solid #444',
+            background: capitalView === 'nominal' ? '#2e2e2e' : 'transparent',
+            color: '#ddd',
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 650,
+          }}
+          aria-pressed={capitalView === 'nominal'}
+        >
+          Nominal
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCapitalView('real')}
+          disabled={!canShowReal}
+          title={canShowReal ? 'Show inflation-adjusted (real) capital' : 'Real view requires inflation to be enabled'}
+          style={{
+            padding: '6px 10px',
+            borderRadius: 999,
+            border: '1px solid #444',
+            background: capitalView === 'real' ? '#2e2e2e' : 'transparent',
+            color: '#ddd',
+            cursor: canShowReal ? 'pointer' : 'not-allowed',
+            fontSize: 13,
+            fontWeight: 650,
+            opacity: canShowReal ? 1 : 0.5,
+          }}
+          aria-pressed={capitalView === 'real'}
+        >
+          Real
+        </button>
+
+        <span style={{ fontSize: 12, opacity: 0.75 }}>
+          {capitalView === 'real' ? 'Inflation-adjusted (start-date currency)' : 'As-of-that-time currency'}
+        </span>
+      </div>
+
       {blocks.length
         ? (() => {
             const start = parseIsoDateLocal(timeline!.startDate);
@@ -135,6 +205,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                     data={groupData}
                     simulationStartDateIso={timeline!.startDate}
                     inflationFactorPerYear={timeline!.inflationFactorPerYear}
+                    capitalView={capitalView}
                     firstYearStartMonth={startMonth}
                     phaseStartDateIso={toIsoDateLocal(startDate)}
                     phaseEndDateIso={toIsoDateLocal(endDate)}
@@ -151,6 +222,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                 data={g.data}
                 simulationStartDateIso={timeline?.startDate}
                 inflationFactorPerYear={timeline?.inflationFactorPerYear}
+                capitalView={capitalView}
               />
             </div>
           ))}
