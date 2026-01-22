@@ -11,6 +11,12 @@ vi.mock('../../api/simulation', () => {
   };
 });
 
+vi.mock('qrcode.react', () => {
+  return {
+    QRCodeSVG: ({ value }: { value: string }) => <div data-testid="qr" data-value={value} />,
+  };
+});
+
 import { startSimulation } from '../../api/simulation';
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
@@ -37,7 +43,7 @@ describe('NormalInputForm share links', () => {
     const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
 
     // pick the first saved scenario option
-    const scenarioSelect = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
     await waitFor(() => {
       expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
     });
@@ -54,6 +60,10 @@ describe('NormalInputForm share links', () => {
     const shareLinkInput = within(dialog).getByRole('textbox', { name: /Share link/i }) as HTMLInputElement;
     expect(shareLinkInput.value).toContain('/simulation');
     expect(shareLinkInput.value).toMatch(/\bscenario=/);
+
+    // QR should encode the exact same URL.
+    const qr = within(dialog).getByTestId('qr');
+    expect(qr.getAttribute('data-value')).toBe(shareLinkInput.value);
 
     const scenarioParam = new URL(shareLinkInput.value).searchParams.get('scenario');
     expect(scenarioParam).toMatch(/^z:/);
@@ -97,7 +107,7 @@ describe('NormalInputForm share links', () => {
     );
 
     // It should have populated the form as well
-    expect((screen.getByLabelText(/Start Date:/i) as HTMLInputElement).value).toBe('2033-02-03');
+    expect((screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement).value).toBe('2033-02-03');
 
     confirmSpy.mockRestore();
   });

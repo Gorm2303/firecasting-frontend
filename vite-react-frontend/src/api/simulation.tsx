@@ -5,6 +5,39 @@ import { getApiBaseUrl } from '../config/runtimeEnv';
 
 const BASE_URL = getApiBaseUrl();
 
+const joinUrl = (base: string, path: string): string => {
+  const b = String(base ?? '').replace(/\/+$/, '');
+  const p = String(path ?? '').replace(/^\/+/, '');
+  if (!b) return `/${p}`;
+  return `${b}/${p}`;
+};
+
+type ApiError = {
+  message?: string;
+  details?: string[];
+};
+
+async function readApiError(res: Response): Promise<string> {
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    try {
+      const data = (await res.json()) as ApiError;
+      const msg = String(data?.message ?? `Request failed (${res.status})`);
+      const details = Array.isArray(data?.details) ? data.details : [];
+      if (details.length === 0) return msg;
+      return [msg, ...details.map((d) => `- ${d}`)].join('\n');
+    } catch {
+      // fall through
+    }
+  }
+  try {
+    const text = await res.text();
+    return text || `Request failed (${res.status})`;
+  } catch {
+    return `Request failed (${res.status})`;
+  }
+}
+
 type StartResponse = { id: string };
 
 export type AdvancedSimulationRequest = {
@@ -43,6 +76,10 @@ export type AdvancedSimulationRequest = {
   // Optional to allow omitting when UI sections are disabled/hidden.
   // Backend defaults to 1.02 when missing/<=0.
   inflationFactor?: number;
+
+  // Optional: yearly fee percent charged on capital at year-end (e.g. 0.5 = 0.5% per year).
+  // Backend defaults to 0 when missing/invalid.
+  yearlyFeePercentage?: number;
 };
 
 type ImportReplayResponse = {
@@ -69,7 +106,7 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
     headers: { Accept: 'application/json' },
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as YearlySummary[];
 }
 
@@ -79,7 +116,7 @@ export async function startSimulation(req: SimulationRequest): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data: StartResponse = await res.json();
   if (!data?.id) throw new Error('No simulation id returned');
   return data.id;
@@ -91,7 +128,7 @@ export async function startAdvancedSimulation(req: AdvancedSimulationRequest): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data: StartResponse = await res.json();
   if (!data?.id) throw new Error('No simulation id returned');
   return data.id;
@@ -105,7 +142,7 @@ export async function importRunBundle(file: File): Promise<ImportReplayResponse>
     method: 'POST',
     body: fd,
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as ImportReplayResponse;
   if (!data?.replayId || !data?.simulationId) throw new Error('Invalid import response');
   return data;
@@ -113,7 +150,7 @@ export async function importRunBundle(file: File): Promise<ImportReplayResponse>
 
 export async function getReplayStatus(replayId: string): Promise<ReplayStatusResponse> {
   const res = await fetch(`${BASE_URL}/replay/${encodeURIComponent(replayId)}`, { method: 'GET' });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as ReplayStatusResponse;
 }
 
@@ -124,7 +161,7 @@ export const exportSimulationCsv = async (simulationId?: string | null): Promise
   const path = simulationId
     ? `${encodeURIComponent(simulationId)}/export`
     : 'export';
-  const url = new URL(path, base + '/').toString();
+  const url = joinUrl(base, path);
   const res = await fetch(url, { method: 'GET' }); // ← no credentials
   if (res.status === 204) {
     throw new Error('Simulation CSV not available (backend has no cached results for this run).');
@@ -153,9 +190,9 @@ export const exportRunBundle = async (
   simulationId: string
 ): Promise<void> => {
   const base = BASE_URL.replace(/\/+$/, '');
-  const url = new URL(`${simulationId}/bundle`, base + '/');
+  const url = joinUrl(base, `${encodeURIComponent(simulationId)}/bundle`);
 
-  const res = await fetch(url.toString(), { method: 'GET' });
+  const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`Export bundle failed: ${res.status} ${res.statusText}`);
 
   const blob = await res.blob();

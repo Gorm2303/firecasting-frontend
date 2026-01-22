@@ -13,7 +13,8 @@
   --fc-card-text: rgba(255, 255, 255, 0.92);
   --fc-card-muted: rgba(255, 255, 255, 0.78);
   --fc-subtle-bg: #2e2e2e;
-  --fc-subtle-border: #2e2e2e;
+  --fc-subtle-border: #6e6e6e;
+  --fc-phase-border: #ccc;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -69,7 +70,8 @@ button:focus-visible {
     --fc-card-text: #111827;
     --fc-card-muted: #475569;
     --fc-subtle-bg: #f8f8f8;
-    --fc-subtle-border: #e5e7eb;
+    --fc-subtle-border: #c5c7cb;
+    --fc-phase-border: #333;
   }
   a:hover {
     color: #747bff;

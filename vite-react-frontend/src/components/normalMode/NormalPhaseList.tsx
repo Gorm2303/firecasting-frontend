@@ -132,7 +132,8 @@ const PhaseList: React.FC<PhaseListProps> = ({
     <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
       <div
         style={{
-          width: '375px',
+          width: '100%',
+          maxWidth: 400,
           display: 'flex',
           flexDirection: 'column',
           fontSize: '0.95rem',
@@ -153,7 +154,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
               <div
                 key={idx}
                 style={{
-                  border: '1px solid #ccc',
+                  border: '1px solid var(--fc-phase-border)',
                   borderRadius: '4px',
                   padding: '0.5rem 1rem',
                   position: 'relative',
@@ -195,49 +196,63 @@ const PhaseList: React.FC<PhaseListProps> = ({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '160px auto',
+                    gridTemplateColumns: '160px minmax(0, 1fr)',
                     columnGap: '0.3rem',
                     rowGap: '0.3rem',
                     alignItems: 'center',
                   }}
                 >
-                  <span style={{ fontSize: '0.95rem' }}>Type:</span>
-                  <select
-                    value={p.phaseType}
-                    onChange={handlePhaseTypeChange(idx)}
-                    style={{
-                      width: '100%',
-                      padding: '0.15rem 0.3rem',
-                      boxSizing: 'border-box',
-                      fontSize: '0.95rem',
-                    }}
-                  >
-                    <option value="DEPOSIT">DEPOSIT</option>
-                    <option value="PASSIVE">PASSIVE</option>
-                    <option value="WITHDRAW">WITHDRAW</option>
-                  </select>
-
-                  <span style={{ fontSize: '0.95rem' }}>
-                    Duration:
-                    <InfoTooltip label="Info: Phase duration">
-                      How long this phase lasts. The simulation advances month-by-month.
-                    </InfoTooltip>
-                  </span>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.25rem',
-                    }}
-                  >
-                    <div
+                  <span style={{ fontSize: '0.95rem' }}>Type</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <select
+                      value={p.phaseType}
+                      onChange={handlePhaseTypeChange(idx)}
                       style={{
-                        display: 'flex',
-                        gap: '0.4rem',
-                        alignItems: 'center',
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '0.15rem 0.3rem',
+                        boxSizing: 'border-box',
+                        fontSize: '0.95rem',
                       }}
                     >
-                      <div style={{ flex: 1 }}>
+                      <option value="DEPOSIT">DEPOSIT</option>
+                      <option value="PASSIVE">PASSIVE</option>
+                      <option value="WITHDRAW">WITHDRAW</option>
+                    </select>
+                    <InfoTooltip label="Info: Phase type">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div>
+                          <strong>DEPOSIT</strong>: Adds money to the portfolio (one-time + monthly, optional yearly increase).
+                        </div>
+                        <div>
+                          <strong>PASSIVE</strong>: No deposits/withdrawals; the portfolio just grows/shrinks with returns.
+                        </div>
+                        <div>
+                          <strong>WITHDRAW</strong>: Takes money out (fixed amount or percentage rate) with optional variation rules.
+                        </div>
+                      </div>
+                    </InfoTooltip>
+                  </div>
+
+                  <span style={{ fontSize: '0.95rem' }}>Duration</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem',
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '0.4rem',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
                         <input
                           type="number"
                           min={0}
@@ -285,175 +300,187 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       </div>
                     </div>
                   </div>
+                    <InfoTooltip label="Info: Phase duration">
+                      How long this phase lasts. The simulation advances month-by-month.
+                    </InfoTooltip>
+                  </div>
 
                   {p.phaseType === 'DEPOSIT' && (
                     <>
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Initial Deposit:
+                      <span style={{ fontSize: '0.95rem' }}>Initial Deposit</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          value={p.initialDeposit ?? ''}
+                          onChange={handleChange(idx, 'initialDeposit')}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
                         <InfoTooltip label="Info: Initial deposit">
                           A one-time deposit at the beginning of this phase.
                         </InfoTooltip>
-                      </span>
-                      <input
-                        type="number"
-                        value={p.initialDeposit ?? ''}
-                        onChange={handleChange(idx, 'initialDeposit')}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      />
+                      </div>
 
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Monthly Deposit:
+                      <span style={{ fontSize: '0.95rem' }}>Monthly Deposit</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          value={p.monthlyDeposit ?? ''}
+                          onChange={handleChange(idx, 'monthlyDeposit')}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
                         <InfoTooltip label="Info: Monthly deposit">
                           Added at each month-end during this phase.
                         </InfoTooltip>
-                      </span>
-                      <input
-                        type="number"
-                        value={p.monthlyDeposit ?? ''}
-                        onChange={handleChange(idx, 'monthlyDeposit')}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      />
+                      </div>
 
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Yearly Increase %:
+                      <span style={{ fontSize: '0.95rem' }}>Yearly Increase %</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={p.yearlyIncreaseInPercentage ?? ''}
+                          onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
                         <InfoTooltip label="Info: Yearly deposit increase">
                           Increases the monthly deposit once per year by this percentage.
                         </InfoTooltip>
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={p.yearlyIncreaseInPercentage ?? ''}
-                        onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      />
+                      </div>
                     </>
                   )}
 
                   {p.phaseType === 'WITHDRAW' && (
                     <>
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Withdraw Type:
+                      <span style={{ fontSize: '0.95rem' }}>Withdraw Type</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <select
+                          value={withdrawMode}
+                          onChange={handleWithdrawModeChange(idx)}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        >
+                          <option value="RATE">Withdraw Rate</option>
+                          <option value="AMOUNT">Withdraw Amount</option>
+                        </select>
                         <InfoTooltip label="Info: Withdraw type">
                           Choose whether you specify a fixed monthly amount, or a yearly withdrawal rate (as % of current portfolio).
                         </InfoTooltip>
-                      </span>
-                      <select
-                        value={withdrawMode}
-                        onChange={handleWithdrawModeChange(idx)}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      >
-                        <option value="RATE">Withdraw Rate</option>
-                        <option value="AMOUNT">Withdraw Amount</option>
-                      </select>
+                      </div>
 
                       {withdrawMode === 'RATE' ? (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Withdraw Rate %:
+                          <span style={{ fontSize: '0.95rem' }}>Withdraw Rate %</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={p.withdrawRate ?? ''}
+                              onChange={handleChange(idx, 'withdrawRate')}
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: '0.15rem 0.3rem',
+                                boxSizing: 'border-box',
+                                fontSize: '0.95rem',
+                              }}
+                            />
                             <InfoTooltip label="Info: Withdraw rate">
                               A yearly % of the current portfolio, converted to a monthly withdrawal.
                             </InfoTooltip>
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={p.withdrawRate ?? ''}
-                            onChange={handleChange(idx, 'withdrawRate')}
-                            style={{
-                              width: '100%',
-                              padding: '0.15rem 0.3rem',
-                              boxSizing: 'border-box',
-                              fontSize: '0.95rem',
-                            }}
-                          />
+                          </div>
                         </>
                       ) : (
                         <>
-                          <span style={{ fontSize: '0.95rem' }}>
-                            Withdraw Amount:
+                          <span style={{ fontSize: '0.95rem' }}>Withdraw Amount</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input
+                              type="number"
+                              value={p.withdrawAmount ?? ''}
+                              onChange={handleChange(idx, 'withdrawAmount')}
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: '0.15rem 0.3rem',
+                                boxSizing: 'border-box',
+                                fontSize: '0.95rem',
+                              }}
+                            />
                             <InfoTooltip label="Info: Withdraw amount">
                               A fixed monthly withdrawal amount. The engine inflation-adjusts this over time.
                             </InfoTooltip>
-                          </span>
-                          <input
-                            type="number"
-                            value={p.withdrawAmount ?? ''}
-                            onChange={handleChange(idx, 'withdrawAmount')}
-                            style={{
-                              width: '100%',
-                              padding: '0.15rem 0.3rem',
-                              boxSizing: 'border-box',
-                              fontSize: '0.95rem',
-                            }}
-                          />
+                          </div>
                         </>
                       )}
 
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Lower Variation %:
+                      <span style={{ fontSize: '0.95rem' }}>Lower Variation %</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={p.lowerVariationPercentage ?? ''}
+                          onChange={handleChange(idx, 'lowerVariationPercentage')}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
                         <InfoTooltip label="Info: Lower variation">
                           If the last month return is negative, withdrawals can be reduced by up to this %.
                         </InfoTooltip>
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={p.lowerVariationPercentage ?? ''}
-                        onChange={handleChange(idx, 'lowerVariationPercentage')}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      />
+                      </div>
 
-                      <span style={{ fontSize: '0.95rem' }}>
-                        Upper Variation %:
+                      <span style={{ fontSize: '0.95rem' }}>Upper Variation %</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={p.upperVariationPercentage ?? ''}
+                          onChange={handleChange(idx, 'upperVariationPercentage')}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '0.15rem 0.3rem',
+                            boxSizing: 'border-box',
+                            fontSize: '0.95rem',
+                          }}
+                        />
                         <InfoTooltip label="Info: Upper variation">
                           If the last month return is positive, withdrawals can be increased by up to this %.
                         </InfoTooltip>
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={p.upperVariationPercentage ?? ''}
-                        onChange={handleChange(idx, 'upperVariationPercentage')}
-                        style={{
-                          width: '100%',
-                          padding: '0.15rem 0.3rem',
-                          boxSizing: 'border-box',
-                          fontSize: '0.95rem',
-                        }}
-                      />
+                      </div>
                     </>
                   )}
                 </div>
 
                 <fieldset
                   style={{
-                    border: '1px solid #ddd',
+                    border: '1px solid var(--fc-phase-border)',
                     padding: '0.2rem',
                     marginTop: '0.3rem',
                   }}

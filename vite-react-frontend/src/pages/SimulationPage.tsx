@@ -15,6 +15,7 @@ const ADVANCED_FEATURE_FLAGS_KEY = 'firecasting:simulation:advancedFeatureFlags:
 
 const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
   inflation: true,
+  fee: true,
   exemptions: true,
   returnModel: true,
 };
@@ -44,6 +45,7 @@ const toIsoDateString = (v: any): string | null => {
 type ExternalAdvancedLoad = {
   enabled?: boolean;
   inflationAveragePct?: number;
+  yearlyFeePercentage?: number;
   taxExemptionConfig?: any;
   returnType?: any;
   seed?: any;
@@ -66,6 +68,10 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
           phaseDurationsInMonths,
           firstPhaseInitialDeposit:
             explicit?.firstPhaseInitialDeposit !== undefined ? Number(explicit.firstPhaseInitialDeposit) : undefined,
+          inflationFactorPerYear:
+            explicit?.inflationFactorPerYear !== undefined
+              ? Number(explicit.inflationFactorPerYear)
+              : undefined,
         };
       }
     }
@@ -89,6 +95,10 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
       phaseDurationsInMonths,
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
+      inflationFactorPerYear:
+        raw?.inflationFactor !== undefined
+          ? Number(raw.inflationFactor)
+          : undefined,
     };
   } catch {
     return null;
@@ -119,6 +129,7 @@ const SimulationPage: React.FC = () => {
   const [importReplayId, setImportReplayId] = useState<string | null>(null);
   const [replayReport, setReplayReport] = useState<ReplayStatusResponse | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formRef = useRef<NormalInputFormHandle | null>(null);
@@ -138,6 +149,7 @@ const SimulationPage: React.FC = () => {
       const parsed = JSON.parse(raw);
       return {
         inflation: Boolean(parsed?.inflation ?? true),
+        fee: Boolean(parsed?.fee ?? true),
         exemptions: Boolean(parsed?.exemptions ?? true),
         returnModel: Boolean(parsed?.returnModel ?? true),
       };
@@ -242,6 +254,8 @@ const SimulationPage: React.FC = () => {
           const f = e.target.files?.[0];
           if (!f) return;
 
+          setImportError(null);
+
           // Derive timeline locally from the bundle so MultiPhaseOverview behaves the same
           // as a normal simulation run (calendar boundaries + phase grouping).
           try {
@@ -290,9 +304,11 @@ const SimulationPage: React.FC = () => {
               if (kind === 'advanced') {
                 const inflationFactor = Number(raw?.inflationFactor);
                 const inflationAveragePct = Number.isFinite(inflationFactor) ? (inflationFactor - 1) * 100 : undefined;
+                const yearlyFeePercentage = Number(raw?.yearlyFeePercentage);
                 setExternalAdvancedLoad({
                   enabled: true,
                   inflationAveragePct,
+                  yearlyFeePercentage: Number.isFinite(yearlyFeePercentage) ? yearlyFeePercentage : undefined,
                   taxExemptionConfig: raw?.taxExemptionConfig,
                   returnType: raw?.returnType,
                   seed: raw?.seed,
@@ -310,10 +326,12 @@ const SimulationPage: React.FC = () => {
           setImportBusy(true);
           setStats(null);
           setReplayReport(null);
+          let ok = false;
           try {
             const resp = await importRunBundle(f);
             setImportReplayId(resp.replayId);
             setImportSimulationId(resp.simulationId);
+            ok = true;
 
             // If the backend returns an already-complete simulationId (dedupe), or the run
             // finishes extremely fast, the SSE 'completed' event might not be observed.
@@ -328,11 +346,11 @@ const SimulationPage: React.FC = () => {
             }
           } catch (err: any) {
             console.error(err);
-            alert(err?.message ?? 'Failed to import bundle');
+            setImportError(String(err?.message ?? err ?? 'Failed to import bundle'));
           } finally {
             setImportBusy(false);
             e.target.value = '';
-            setIsIoModalOpen(false);
+            if (ok) setIsIoModalOpen(false);
           }
         }}
       />
@@ -550,6 +568,14 @@ const SimulationPage: React.FC = () => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input
                     type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.fee}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, fee: e.target.checked }))}
+                  />
+                  <span>Fee</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
                     checked={pendingAdvancedFeatureFlags.exemptions}
                     onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, exemptions: e.target.checked }))}
                   />
@@ -710,6 +736,22 @@ const SimulationPage: React.FC = () => {
                 {importControl}
                 {exportControl}
               </div>
+              {importError && (
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    fontSize: 12,
+                    padding: 10,
+                    borderRadius: 8,
+                    border: '1px solid rgba(255,80,80,0.45)',
+                    background: 'rgba(255,80,80,0.08)',
+                    color: '#ffd2d2',
+                  }}
+                >
+                  {importError}
+                </pre>
+              )}
               {importReplayId && (
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
                   Latest replay: {importReplayId.slice(0, 8)}…

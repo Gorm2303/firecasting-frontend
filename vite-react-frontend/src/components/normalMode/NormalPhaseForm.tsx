@@ -200,7 +200,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
 
           {phaseType === 'DEPOSIT' && (
             <>
-              <span style={{ fontSize: '1.1rem' }}>Initial Deposit:</span>
+              <span style={{ fontSize: '1.1rem' }}>Initial Deposit</span>
               <input
                 type="number"
                 value={initialDeposit}
@@ -213,7 +213,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
                 }}
               />
 
-              <span style={{ fontSize: '1.1rem' }}>Monthly Deposit:</span>
+              <span style={{ fontSize: '1.1rem' }}>Monthly Deposit</span>
               <input
                 type="number"
                 value={monthlyDeposit}
@@ -226,7 +226,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
                 }}
               />
 
-              <span style={{ fontSize: '1.1rem' }}>Yearly Increase %:</span>
+              <span style={{ fontSize: '1.1rem' }}>Yearly Increase %</span>
               <input
                 type="number"
                 step="0.01"
@@ -246,7 +246,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
 
           {phaseType === 'WITHDRAW' && (
             <>
-              <span style={{ fontSize: '1.1rem' }}>Withdraw Type:</span>
+              <span style={{ fontSize: '1.1rem' }}>Withdraw Type</span>
               <select
                 value={withdrawMode}
                 onChange={e =>
@@ -265,7 +265,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
 
               {withdrawMode === 'RATE' ? (
                 <>
-                  <span style={{ fontSize: '1.1rem' }}>Withdraw %:</span>
+                  <span style={{ fontSize: '1.1rem' }}>Withdraw %</span>
                   <input
                     type="number"
                     step="0.01"
@@ -281,7 +281,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: '1.1rem' }}>Withdraw Amount:</span>
+                  <span style={{ fontSize: '1.1rem' }}>Withdraw Amount</span>
                   <input
                     type="number"
                     value={withdrawAmount}
@@ -296,7 +296,7 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
                 </>
               )}
 
-              <span style={{ fontSize: '1.1rem' }}>Lower Variation %:</span>
+              <span style={{ fontSize: '1.1rem' }}>Lower Variation %</span>
               <input
                 type="number"
                 step="0.01"
