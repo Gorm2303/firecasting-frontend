@@ -29,6 +29,7 @@ type DistributionType = 'normal' | 'brownianMotion' | 'studentT' | 'regimeBased'
 type AdvancedOptionsLoad = {
   enabled?: boolean;
   inflationAveragePct?: number;
+  yearlyFeePercentage?: number;
   taxExemptionConfig?: {
     exemptionCard?: { limit?: number; yearlyIncrease?: number };
     stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
@@ -74,6 +75,7 @@ export type NormalInputFormMode = 'normal' | 'advanced';
 
 export type AdvancedFeatureFlags = {
   inflation: boolean;
+  fee: boolean;
   exemptions: boolean;
   returnModel: boolean;
 };
@@ -220,6 +222,7 @@ ref
   const initialAdvancedState = useMemo<{
     enabled: boolean;
     inflationAveragePct: number;
+    yearlyFeePercentage: number;
     returnType: ReturnType;
     seed: string;
     simpleAveragePercentage: string;
@@ -253,6 +256,7 @@ ref
     const fallbackDefaults = {
       enabled: false,
       inflationAveragePct: 2,
+      yearlyFeePercentage: 0.5,
 
       // Returner
       returnType: 'dataDrivenReturn' as ReturnType,
@@ -303,6 +307,7 @@ ref
       const parsed = JSON.parse(raw);
       const enabled = Boolean(parsed?.enabled);
       const inflationAveragePct = Number.isFinite(Number(parsed?.inflationAveragePct)) ? Number(parsed.inflationAveragePct) : 2;
+      const yearlyFeePercentage = Number.isFinite(Number(parsed?.yearlyFeePercentage)) ? Number(parsed.yearlyFeePercentage) : 0.5;
       const returnType = parseReturnType(parsed?.returnType);
       const distributionType = parseDistributionType(parsed?.distributionType);
       const seed = parsed?.seed ?? fallbackDefaults.seed;
@@ -341,6 +346,7 @@ ref
       return {
         enabled,
         inflationAveragePct,
+        yearlyFeePercentage,
         returnType,
         distributionType,
         seed: String(seed),
@@ -367,6 +373,7 @@ ref
 
   const [advancedEnabled, setAdvancedEnabled] = useState<boolean>(initialAdvancedState.enabled);
   const [inflationAveragePct, setInflationAveragePct] = useState<number>(initialAdvancedState.inflationAveragePct);
+  const [yearlyFeePercentage, setYearlyFeePercentage] = useState<number>(initialAdvancedState.yearlyFeePercentage);
 
   const [exemptionCardLimit, setExemptionCardLimit] = useState<string>(String(initialAdvancedState.exemptionCardLimit));
   const [exemptionCardYearlyIncrease, setExemptionCardYearlyIncrease] = useState<string>(String(initialAdvancedState.exemptionCardYearlyIncrease));
@@ -421,11 +428,12 @@ ref
   const advancedMode = mode === 'advanced';
 
   const effectiveAdvancedFeatureFlags = useMemo<AdvancedFeatureFlags>(
-    () => advancedFeatureFlags ?? { inflation: true, exemptions: true, returnModel: true },
+    () => advancedFeatureFlags ?? { inflation: true, exemptions: true, returnModel: true, fee: true },
     [advancedFeatureFlags]
   );
 
   const inflationFeatureOn = effectiveAdvancedFeatureFlags.inflation;
+  const feeFeatureOn = effectiveAdvancedFeatureFlags.fee;
   const exemptionsFeatureOn = effectiveAdvancedFeatureFlags.exemptions;
   const returnModelFeatureOn = effectiveAdvancedFeatureFlags.returnModel;
 
@@ -504,6 +512,11 @@ ref
       if (Number.isFinite(pct)) setInflationAveragePct(pct);
     }
 
+    if (externalLoadAdvanced.yearlyFeePercentage !== undefined) {
+      const pct = Number(externalLoadAdvanced.yearlyFeePercentage);
+      if (Number.isFinite(pct)) setYearlyFeePercentage(pct);
+    }
+
     const taxCfg = externalLoadAdvanced.taxExemptionConfig;
     if (taxCfg?.exemptionCard) {
       if (taxCfg.exemptionCard.limit !== undefined) setExemptionCardLimit(String(taxCfg.exemptionCard.limit));
@@ -568,6 +581,7 @@ ref
     externalLoadAdvancedNonce,
     setAdvancedEnabled,
     setInflationAveragePct,
+    setYearlyFeePercentage,
     setExemptionCardLimit,
     setExemptionCardYearlyIncrease,
     setStockExemptionTaxRate,
@@ -595,6 +609,7 @@ ref
         JSON.stringify({
           enabled: advancedEnabled,
           inflationAveragePct,
+          yearlyFeePercentage,
           returnType,
           seed,
           simpleAveragePercentage,
@@ -621,6 +636,7 @@ ref
   }, [
     advancedEnabled,
     inflationAveragePct,
+    yearlyFeePercentage,
     returnType,
     seed,
     simpleAveragePercentage,
@@ -831,6 +847,7 @@ ref
 
       const seedNum = returnModelFeatureOn ? toNumOrUndef(seed) : undefined;
       const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
+      const yearlyFeePercentageToSend = feeFeatureOn ? (Number(yearlyFeePercentage) || 0) : undefined;
 
       const exCardLimit = toNumOrUndef(exemptionCardLimit);
       const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
@@ -919,6 +936,7 @@ ref
         );
 
       const inflationEquivalentToNormal = !inflationFeatureOn || (inflationFactorToSend !== undefined && Math.abs(inflationFactorToSend - 1.02) < 1e-12);
+      const yearlyFeeEquivalentToNormal = !feeFeatureOn || (yearlyFeePercentageToSend !== undefined && Math.abs(yearlyFeePercentageToSend) < 1e-12);
       const returnerEquivalentToNormal =
         !returnModelFeatureOn || (
           returnTypeToSend === 'dataDrivenReturn' &&
@@ -934,7 +952,8 @@ ref
       const shouldUseNormalEndpointForDedup =
         taxEquivalentToNormal &&
         returnerEquivalentToNormal &&
-        inflationEquivalentToNormal;
+        inflationEquivalentToNormal &&
+        yearlyFeeEquivalentToNormal;
 
       if (shouldUseNormalEndpointForDedup) {
         const id = await startSimulation(sanitized);
@@ -956,6 +975,7 @@ ref
           : {}),
         ...(exemptionsFeatureOn ? { taxExemptionConfig } : {}),
         ...(inflationFeatureOn ? { inflationFactor: inflationFactorToSend } : {}),
+        ...(feeFeatureOn ? { yearlyFeePercentage: yearlyFeePercentageToSend } : {}),
       };
 
       const id = await startAdvancedSimulation(advReq);
@@ -967,9 +987,11 @@ ref
   }, [
     advancedEnabled,
     inflationFeatureOn,
+    feeFeatureOn,
     exemptionsFeatureOn,
     returnModelFeatureOn,
     inflationAveragePct,
+    yearlyFeePercentage,
     returnType,
     seed,
     simpleAveragePercentage,
@@ -1230,6 +1252,25 @@ ref
                 <InfoTooltip label="(i)">
                   Average annual inflation (in %) used to inflation-adjust withdrawals/spending over time.
                   This affects how your “real” spending power changes from year to year.
+                </InfoTooltip>
+              </div>
+            </label>
+          )}
+
+          {advancedEnabled && feeFeatureOn && (
+            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+              <span className="fc-field-label">Fee (avg % / year)</span>
+              <div style={rowStyle}>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={yearlyFeePercentage}
+                  onChange={(e) => setYearlyFeePercentage(Number(e.target.value))}
+                  disabled={simulateInProgress}
+                  style={inputStyle}
+                />
+                <InfoTooltip label="(i)">
+                  Annual fee charged on current capital at year-end (in %). For example, 0.5 means 0.5% of capital is deducted each year.
                 </InfoTooltip>
               </div>
             </label>

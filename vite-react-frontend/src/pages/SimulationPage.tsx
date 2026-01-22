@@ -15,6 +15,7 @@ const ADVANCED_FEATURE_FLAGS_KEY = 'firecasting:simulation:advancedFeatureFlags:
 
 const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
   inflation: true,
+  fee: true,
   exemptions: true,
   returnModel: true,
 };
@@ -44,6 +45,7 @@ const toIsoDateString = (v: any): string | null => {
 type ExternalAdvancedLoad = {
   enabled?: boolean;
   inflationAveragePct?: number;
+  yearlyFeePercentage?: number;
   taxExemptionConfig?: any;
   returnType?: any;
   seed?: any;
@@ -147,6 +149,7 @@ const SimulationPage: React.FC = () => {
       const parsed = JSON.parse(raw);
       return {
         inflation: Boolean(parsed?.inflation ?? true),
+        fee: Boolean(parsed?.fee ?? true),
         exemptions: Boolean(parsed?.exemptions ?? true),
         returnModel: Boolean(parsed?.returnModel ?? true),
       };
@@ -301,9 +304,11 @@ const SimulationPage: React.FC = () => {
               if (kind === 'advanced') {
                 const inflationFactor = Number(raw?.inflationFactor);
                 const inflationAveragePct = Number.isFinite(inflationFactor) ? (inflationFactor - 1) * 100 : undefined;
+                const yearlyFeePercentage = Number(raw?.yearlyFeePercentage);
                 setExternalAdvancedLoad({
                   enabled: true,
                   inflationAveragePct,
+                  yearlyFeePercentage: Number.isFinite(yearlyFeePercentage) ? yearlyFeePercentage : undefined,
                   taxExemptionConfig: raw?.taxExemptionConfig,
                   returnType: raw?.returnType,
                   seed: raw?.seed,
@@ -559,6 +564,14 @@ const SimulationPage: React.FC = () => {
                     onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, inflation: e.target.checked }))}
                   />
                   <span>Inflation</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.fee}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, fee: e.target.checked }))}
+                  />
+                  <span>Fee</span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input

@@ -69,6 +69,10 @@ export type AdvancedSimulationRequest = {
   // Optional to allow omitting when UI sections are disabled/hidden.
   // Backend defaults to 1.02 when missing/<=0.
   inflationFactor?: number;
+
+  // Optional: yearly fee percent charged on capital at year-end (e.g. 0.5 = 0.5% per year).
+  // Backend defaults to 0 when missing/invalid.
+  yearlyFeePercentage?: number;
 };
 
 type ImportReplayResponse = {
