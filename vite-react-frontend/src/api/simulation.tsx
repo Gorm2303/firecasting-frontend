@@ -95,7 +95,7 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
     headers: { Accept: 'application/json' },
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as YearlySummary[];
 }
 
@@ -105,7 +105,7 @@ export async function startSimulation(req: SimulationRequest): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data: StartResponse = await res.json();
   if (!data?.id) throw new Error('No simulation id returned');
   return data.id;
@@ -117,7 +117,7 @@ export async function startAdvancedSimulation(req: AdvancedSimulationRequest): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   const data: StartResponse = await res.json();
   if (!data?.id) throw new Error('No simulation id returned');
   return data.id;
@@ -139,7 +139,7 @@ export async function importRunBundle(file: File): Promise<ImportReplayResponse>
 
 export async function getReplayStatus(replayId: string): Promise<ReplayStatusResponse> {
   const res = await fetch(`${BASE_URL}/replay/${encodeURIComponent(replayId)}`, { method: 'GET' });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as ReplayStatusResponse;
 }
 
