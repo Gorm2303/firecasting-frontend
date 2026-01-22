@@ -66,6 +66,10 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
           phaseDurationsInMonths,
           firstPhaseInitialDeposit:
             explicit?.firstPhaseInitialDeposit !== undefined ? Number(explicit.firstPhaseInitialDeposit) : undefined,
+          inflationFactorPerYear:
+            explicit?.inflationFactorPerYear !== undefined
+              ? Number(explicit.inflationFactorPerYear)
+              : undefined,
         };
       }
     }
@@ -89,6 +93,10 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
       phaseDurationsInMonths,
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
+      inflationFactorPerYear:
+        raw?.inflationFactor !== undefined
+          ? Number(raw.inflationFactor)
+          : undefined,
     };
   } catch {
     return null;

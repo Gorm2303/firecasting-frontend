@@ -28,4 +28,6 @@ export interface SimulationTimelineContext {
   phaseDurationsInMonths: number[];
   /** Used as the start anchor for Phase #1 interpolation when no previous year exists. */
   firstPhaseInitialDeposit?: number;
+  /** UI-only: yearly inflation factor used for this run (e.g. 1.02). */
+  inflationFactorPerYear?: number;
 }

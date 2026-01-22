@@ -133,6 +133,8 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                   </h2>
                   <YearlySummaryOverview
                     data={groupData}
+                    simulationStartDateIso={timeline!.startDate}
+                    inflationFactorPerYear={timeline!.inflationFactorPerYear}
                     firstYearStartMonth={startMonth}
                     phaseStartDateIso={toIsoDateLocal(startDate)}
                     phaseEndDateIso={toIsoDateLocal(endDate)}
@@ -145,7 +147,11 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
         : fallbackGrouped.map((g, idx) => (
             <div key={idx}>
               <h2 style={{ textAlign: 'center' }}>{g.title.charAt(0) + g.title.slice(1).toLowerCase()}</h2>
-              <YearlySummaryOverview data={g.data} />
+              <YearlySummaryOverview
+                data={g.data}
+                simulationStartDateIso={timeline?.startDate}
+                inflationFactorPerYear={timeline?.inflationFactorPerYear}
+              />
             </div>
           ))}
     </div>

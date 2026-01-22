@@ -1753,11 +1753,16 @@ ref
             const completedId = simulationId;
             setSimulateInProgress(false);
             setSimulationId(null);
+
+            const inflationFactorPerYear = inflationFeatureOn
+              ? 1 + (Number(inflationAveragePct) || 0) / 100
+              : 1.02;
             const timeline: SimulationTimelineContext = {
               startDate,
               phaseTypes: phases.map((p) => p.phaseType),
               phaseDurationsInMonths: phases.map((p) => Number(p.durationInMonths) || 0),
               firstPhaseInitialDeposit: phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
+              inflationFactorPerYear,
             };
             onSimulationComplete?.(result, timeline, completedId ?? undefined);
           }}
