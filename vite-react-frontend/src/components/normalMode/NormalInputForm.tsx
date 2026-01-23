@@ -1,5 +1,6 @@
 // src/features/simulation/SimulationForm.tsx
 import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
@@ -213,6 +214,7 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
 },
 ref
 ) {
+  const navigate = useNavigate();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
@@ -1940,9 +1942,12 @@ ref
                 aria-label="Compare scenarios"
                 title="Compare the two selected scenarios"
                 onClick={() => {
-                  setShowScenarioCompare(true);
-                  setShareUrl('');
-                  setDidCopyShareUrl(false);
+                  if (!scenarioA || !scenarioB) return;
+
+                  // Keep ids in the URL so /simulation/diff can recover on reload (from localStorage).
+                  const q = new URLSearchParams({ scenarioA: scenarioA.id, scenarioB: scenarioB.id }).toString();
+                  closeScenarioModal();
+                  navigate(`/simulation/diff?${q}`, { state: { scenarioA, scenarioB } });
                 }}
                 disabled={!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress}
                 style={btn(!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress ? 'disabled' : 'ghost')}

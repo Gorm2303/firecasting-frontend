@@ -3,6 +3,16 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
@@ -121,6 +131,8 @@ describe('NormalInputForm scenarios', () => {
   it('compares two saved scenarios and highlights differences', async () => {
     window.localStorage.clear();
 
+    navigateMock.mockClear();
+
     saveScenario(
       'Scenario A',
       {
@@ -179,14 +191,19 @@ describe('NormalInputForm scenarios', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: /Compare scenarios/i }));
 
-    const taxRow = within(dialog).getByTestId('compare-row-taxPercentage');
-    expect(taxRow).toHaveAttribute('data-different', 'true');
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalled();
+    });
 
-    expect(within(dialog).getByTestId('compare-taxPercentage-a')).toHaveTextContent('25');
-    expect(within(dialog).getByTestId('compare-taxPercentage-b')).toHaveTextContent('30');
-
-    // Timeline should render for both sides.
-    expect(within(dialog).getByTestId('compare-timeline-a')).toBeInTheDocument();
-    expect(within(dialog).getByTestId('compare-timeline-b')).toBeInTheDocument();
+    const [path, opts] = navigateMock.mock.calls.at(-1) ?? [];
+    expect(String(path)).toContain('/simulation/diff');
+    expect(String(path)).toContain(`scenarioA=${encodeURIComponent(aId)}`);
+    expect(String(path)).toContain(`scenarioB=${encodeURIComponent(bId)}`);
+    expect(opts).toMatchObject({
+      state: {
+        scenarioA: expect.any(Object),
+        scenarioB: expect.any(Object),
+      },
+    });
   });
 });
