@@ -22,6 +22,16 @@ vi.mock('../../api/simulation', () => {
   };
 });
 
+vi.mock('../SimulationProgress', () => {
+  return {
+    __esModule: true,
+    default: ({ onComplete }: any) => {
+      if (typeof onComplete === 'function') Promise.resolve().then(() => onComplete([]));
+      return null;
+    },
+  };
+});
+
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { saveScenario } from '../../config/savedScenarios';
 import { startSimulation } from '../../api/simulation';
@@ -197,5 +207,31 @@ describe('NormalInputForm scenarios', () => {
     expect(String(path)).toContain('/simulation/diff');
     expect(String(path)).toContain(`scenarioA=${encodeURIComponent(aId)}`);
     expect(String(path)).toContain(`scenarioB=${encodeURIComponent(bId)}`);
+  });
+
+  it('stores runId when saving after a run', async () => {
+    window.localStorage.clear();
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(<SimulationForm ref={ref} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+
+    await waitFor(() => {
+      expect(startSimulation).toHaveBeenCalled();
+    });
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Scenario With Run');
+    fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
+    promptSpy.mockRestore();
+
+    const raw = window.localStorage.getItem('firecasting:savedScenarios:v1');
+    expect(raw).toBeTruthy();
+    const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>
+    expect(scenarios[0]?.runId).toBe('test-sim-id');
   });
 });

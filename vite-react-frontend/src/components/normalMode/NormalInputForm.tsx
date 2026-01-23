@@ -453,6 +453,9 @@ ref
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [lastCompletedRun, setLastCompletedRun] = useState<{ id: string; request: SimulationRequest } | null>(null);
+  const lastRunRequestRef = useRef<SimulationRequest | null>(null);
+  const lastRunWasNormalRef = useRef<boolean>(false);
 
   const advancedMode = mode === 'advanced';
 
@@ -857,9 +860,14 @@ ref
     const name = window.prompt('Scenario name?');
     if (!name) return;
 
-    const resolvedRunId = simulationId
-      ? simulationId
-      : await findRunForInput(currentRequest).catch(() => null);
+    const matchingLastRunId = lastCompletedRun && deepEqual(lastCompletedRun.request, currentRequest)
+      ? lastCompletedRun.id
+      : undefined;
+
+    const resolvedRunId = matchingLastRunId
+      ?? (simulationId
+        ? simulationId
+        : await findRunForInput(currentRequest).catch(() => null));
 
     const existing = findScenarioByName(name);
     if (existing) {
@@ -874,7 +882,7 @@ ref
     const saved = saveScenario(name, currentRequest, undefined, resolvedRunId ?? undefined);
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
-  }, [currentRequest, refreshSavedScenarios, simulationId]);
+  }, [currentRequest, refreshSavedScenarios, simulationId, lastCompletedRun]);
 
   const runSimulationWithRequest = useCallback(async (req: SimulationRequest) => {
     const total = (req.phases ?? []).reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
@@ -892,9 +900,11 @@ ref
         startDate: { date: req.startDate.date },
         phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
       };
+      lastRunRequestRef.current = sanitized;
 
       if (!advancedEnabled) {
         const id = await startSimulation(sanitized);
+        lastRunWasNormalRef.current = true;
         setSimulationId(id);
         return;
       }
@@ -1011,6 +1021,7 @@ ref
 
       if (shouldUseNormalEndpointForDedup) {
         const id = await startSimulation(sanitized);
+        lastRunWasNormalRef.current = true;
         setSimulationId(id);
         return;
       }
@@ -1033,6 +1044,7 @@ ref
       };
 
       const id = await startAdvancedSimulation(advReq);
+      lastRunWasNormalRef.current = false;
       setSimulationId(id);
     } catch (err) {
       alert((err as Error).message);
@@ -1848,6 +1860,10 @@ ref
             const completedId = simulationId;
             setSimulateInProgress(false);
             setSimulationId(null);
+
+            if (completedId && lastRunWasNormalRef.current && lastRunRequestRef.current) {
+              setLastCompletedRun({ id: completedId, request: lastRunRequestRef.current });
+            }
 
             const inflationFactorPerYear = inflationFeatureOn
               ? 1 + (Number(inflationAveragePct) || 0) / 100
