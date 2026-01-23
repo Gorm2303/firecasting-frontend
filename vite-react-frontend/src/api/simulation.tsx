@@ -139,10 +139,13 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
 }
 
 export async function startSimulation(req: SimulationRequest): Promise<string> {
-  const res = await fetch(`${BASE_URL}/start`, {
+  // For normal mode: convert to advanced request with defaults and
+  // call the unified advanced endpoint. Keep legacy input for dedup/lookups.
+  const advanced = toAdvancedWithDefaults(req);
+  const res = await fetch(`${BASE_URL}/start-advanced`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify(advanced),
   });
   if (!res.ok) throw new Error(await readApiError(res));
   const data: StartResponse = await res.json();
@@ -231,6 +234,30 @@ export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffR
   if (res.status === 404) throw new Error('One or both runs were not found (or not persisted).');
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as RunDiffResponse;
+}
+
+export function toAdvancedWithDefaults(req: SimulationRequest): AdvancedSimulationRequest {
+  // Tax exemption frontend defaults (mirror backend defaults)
+  const taxExemptionConfig = {
+    exemptionCard: { limit: 51600, yearlyIncrease: 1000 },
+    stockExemption: { taxRate: 27, limit: 67500, yearlyIncrease: 1000 },
+  };
+
+  const seed = req.seed;
+  const returnerConfig = seed !== undefined ? { seed } : undefined;
+
+  return {
+    startDate: req.startDate,
+    phases: req.phases,
+    overallTaxRule: req.overallTaxRule,
+    taxPercentage: req.taxPercentage,
+    returnType: 'dataDrivenReturn',
+    ...(seed !== undefined ? { seed } : {}),
+    ...(returnerConfig ? { returnerConfig } : {}),
+    taxExemptionConfig,
+    inflationFactor: 1.02,
+    yearlyFeePercentage: 0.5,
+  };
 }
 
 
