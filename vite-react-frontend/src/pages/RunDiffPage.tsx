@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import { diffRuns, findRunForInput, getRunSummaries, type RunDiffResponse } from '../api/simulation';
+import { diffRuns, findRunForInput, getRunSummaries, getRunInput, type RunDiffResponse } from '../api/simulation';
 import { listSavedScenarios, type SavedScenario } from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
@@ -77,6 +77,45 @@ const formatDeltaPct2 = (v: number | null | undefined): string => {
   if (v === null || v === undefined) return '';
   const prefix = v >= 0 ? '+' : '';
   return `${prefix}${Number(v).toFixed(2)}%`;
+};
+
+const formatDateTime = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+      timeZoneName: 'short',
+      timeZone: 'UTC',
+    }).format(d);
+  } catch {
+    // Fallback for environments with limited Intl options.
+    return d.toISOString().replace('T', ' ').replace('Z', ' UTC');
+  }
+};
+
+const formatDurationYM = (months: number | null | undefined): string => {
+  if (months === null || months === undefined) return '—';
+  const total = Math.max(0, Math.floor(months));
+  const years = Math.floor(total / 12);
+  const rem = total % 12;
+  return `${years}y ${rem}m`;
+};
+
+const formatDeltaMonths = (months: number | null | undefined): string => {
+  if (months === null || months === undefined) return '';
+  const prefix = months >= 0 ? '+' : '';
+  return `${prefix}${months}m`;
+};
+
+const formatTaxExemptionsActive = (phase?: ScenarioSummary['phases'][number]): string => {
+  if (!phase?.taxExemptionsActive) return '—';
+  const parts: string[] = [];
+  if (phase.taxExemptionsActive.card) parts.push('Card');
+  if (phase.taxExemptionsActive.stock) parts.push('Stock');
+  return parts.length ? parts.join(', ') : 'None';
 };
 
 const toScenarioSummary = (scenario: SavedScenario | null): ScenarioSummary | null => {
@@ -202,17 +241,20 @@ const RunDiffPage: React.FC = () => {
                 return;
               }
 
-              const [d, sa, sb] = await Promise.all([
+              const [d, sa, sb, inputA, inputB] = await Promise.all([
                 diffRuns(runA, runB),
                 getRunSummaries(runA),
                 getRunSummaries(runB),
+                getRunInput(runA),
+                getRunInput(runB),
               ]);
               setDiff(d);
               setRunSummariesA(sa);
               setRunSummariesB(sb);
 
-              setInputSummaryA(toScenarioSummary(scenarioA));
-              setInputSummaryB(toScenarioSummary(scenarioB));
+              // Use the persisted input from runs, falling back to saved scenario
+              setInputSummaryA(inputA ? summarizeScenario(inputA) : toScenarioSummary(scenarioA));
+              setInputSummaryB(inputB ? summarizeScenario(inputB) : toScenarioSummary(scenarioB));
             } catch (e: any) {
               setDiffErr(e?.message ?? 'Diff failed');
             } finally {
@@ -253,24 +295,25 @@ const RunDiffPage: React.FC = () => {
             <span>modelVersionChanged: {String(Boolean(diff.attribution?.modelVersionChanged))}</span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Run A</div>
-              <div>ID: {diff.a?.id ?? '—'}</div>
-              <div>Created: {diff.a?.createdAt ?? '—'}</div>
-              <div>Version: {diff.a?.modelAppVersion ?? '—'}</div>
-              <div>Seed: {diff.a?.rngSeed ?? '—'}</div>
+          <div style={{ marginTop: 10, border: '1px solid #333', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.9fr', gap: 10, padding: '8px 10px', background: '#1a1a1a', fontWeight: 700, fontSize: 12 }}>
+              <div>Signature</div>
+              <div>Run A</div>
+              <div>Run B</div>
+              <div></div>
             </div>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Run B</div>
-              <div>ID: {diff.b?.id ?? '—'}</div>
-              <div>Created: {diff.b?.createdAt ?? '—'}</div>
-              <div>Version: {diff.b?.modelAppVersion ?? '—'}</div>
-              <div>Seed: {diff.b?.rngSeed ?? '—'}</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 10, border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+            <MetricRow
+              label="ID"
+              a={diff.a?.id ?? '—'}
+              b={diff.b?.id ?? '—'}
+              different={Boolean(diff.a?.id !== diff.b?.id)}
+            />
+            <MetricRow
+              label="Created"
+              a={formatDateTime(diff.a?.createdAt)}
+              b={formatDateTime(diff.b?.createdAt)}
+              different={Boolean(diff.a?.createdAt !== diff.b?.createdAt)}
+            />
             <MetricRow
               label="Model app version"
               a={diff.a?.modelAppVersion ?? '—'}
@@ -279,8 +322,8 @@ const RunDiffPage: React.FC = () => {
             />
             <MetricRow
               label="Model build time"
-              a={diff.a?.modelBuildTime ?? '—'}
-              b={diff.b?.modelBuildTime ?? '—'}
+              a={formatDateTime(diff.a?.modelBuildTime)}
+              b={formatDateTime(diff.b?.modelBuildTime)}
               different={Boolean(diff.a?.modelBuildTime !== diff.b?.modelBuildTime)}
             />
             <MetricRow
@@ -295,15 +338,7 @@ const RunDiffPage: React.FC = () => {
               b={diff.b?.modelJavaVersion ?? '—'}
               different={Boolean(diff.a?.modelJavaVersion !== diff.b?.modelJavaVersion)}
             />
-            <MetricRow
-              label="RNG seed"
-              a={diff.a?.rngSeed !== null && diff.a?.rngSeed !== undefined ? String(diff.a?.rngSeed) : '—'}
-              b={diff.b?.rngSeed !== null && diff.b?.rngSeed !== undefined ? String(diff.b?.rngSeed) : '—'}
-              different={Boolean((diff.a?.rngSeed ?? null) !== (diff.b?.rngSeed ?? null))}
-            />
           </div>
-
-          <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
 
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Inputs</div>
 
@@ -376,6 +411,360 @@ const RunDiffPage: React.FC = () => {
                 delta={inputSummaryA && inputSummaryB ? String(inputSummaryB.withdrawRatePhaseCount - inputSummaryA.withdrawRatePhaseCount) : ''}
                 different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.withdrawRatePhaseCount !== inputSummaryB.withdrawRatePhaseCount)}
               />
+
+              {/* Advanced mode details */}
+              {(inputSummaryA?.advancedMode || inputSummaryB?.advancedMode) && (
+                <>
+                  <div style={{ padding: '10px', background: '#1a1a1a', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Advanced Mode Details
+                  </div>
+                  
+                  {/* Return type and seed */}
+                  <MetricRow
+                    label="Return type"
+                    a={inputSummaryA?.advancedMode?.returnType || '—'}
+                    b={inputSummaryB?.advancedMode?.returnType || '—'}
+                    different={Boolean(inputSummaryA?.advancedMode?.returnType !== inputSummaryB?.advancedMode?.returnType)}
+                  />
+                  <MetricRow
+                    label="RNG seed"
+                    a={inputSummaryA?.advancedMode?.seed !== null && inputSummaryA?.advancedMode?.seed !== undefined ? String(inputSummaryA.advancedMode.seed) : '—'}
+                    b={inputSummaryB?.advancedMode?.seed !== null && inputSummaryB?.advancedMode?.seed !== undefined ? String(inputSummaryB.advancedMode.seed) : '—'}
+                    delta={inputSummaryA?.advancedMode?.seed !== null && inputSummaryA?.advancedMode?.seed !== undefined && inputSummaryB?.advancedMode?.seed !== null && inputSummaryB?.advancedMode?.seed !== undefined ? String(inputSummaryB.advancedMode.seed - inputSummaryA.advancedMode.seed) : ''}
+                    different={Boolean(inputSummaryA?.advancedMode?.seed !== inputSummaryB?.advancedMode?.seed)}
+                  />
+
+                  {/* Inflation and fees */}
+                  {(inputSummaryA?.advancedMode?.inflationFactor !== undefined || inputSummaryB?.advancedMode?.inflationFactor !== undefined) && (
+                    <MetricRow
+                      label="Inflation factor"
+                      a={inputSummaryA?.advancedMode?.inflationFactor !== undefined ? String(inputSummaryA.advancedMode.inflationFactor.toFixed(4)) : '—'}
+                      b={inputSummaryB?.advancedMode?.inflationFactor !== undefined ? String(inputSummaryB.advancedMode.inflationFactor.toFixed(4)) : '—'}
+                      delta={inputSummaryA?.advancedMode?.inflationFactor !== undefined && inputSummaryB?.advancedMode?.inflationFactor !== undefined ? String((inputSummaryB.advancedMode.inflationFactor - inputSummaryA.advancedMode.inflationFactor).toFixed(4)) : ''}
+                      different={Boolean(inputSummaryA?.advancedMode?.inflationFactor !== inputSummaryB?.advancedMode?.inflationFactor)}
+                    />
+                  )}
+                  {(inputSummaryA?.advancedMode?.yearlyFeePercentage !== undefined || inputSummaryB?.advancedMode?.yearlyFeePercentage !== undefined) && (
+                    <MetricRow
+                      label="Yearly fee %"
+                      a={inputSummaryA?.advancedMode?.yearlyFeePercentage !== undefined ? formatPct2(inputSummaryA.advancedMode.yearlyFeePercentage) : '—'}
+                      b={inputSummaryB?.advancedMode?.yearlyFeePercentage !== undefined ? formatPct2(inputSummaryB.advancedMode.yearlyFeePercentage) : '—'}
+                      delta={inputSummaryA?.advancedMode?.yearlyFeePercentage !== undefined && inputSummaryB?.advancedMode?.yearlyFeePercentage !== undefined ? formatDeltaPct2(inputSummaryB.advancedMode.yearlyFeePercentage - inputSummaryA.advancedMode.yearlyFeePercentage) : ''}
+                      different={Boolean(inputSummaryA?.advancedMode?.yearlyFeePercentage !== inputSummaryB?.advancedMode?.yearlyFeePercentage)}
+                    />
+                  )}
+
+                  {/* Distribution details */}
+                  {(inputSummaryA?.advancedMode?.distributionType || inputSummaryB?.advancedMode?.distributionType) && (
+                    <>
+                      <MetricRow
+                        label="Distribution type"
+                        a={inputSummaryA?.advancedMode?.distributionType || '—'}
+                        b={inputSummaryB?.advancedMode?.distributionType || '—'}
+                        different={Boolean(inputSummaryA?.advancedMode?.distributionType !== inputSummaryB?.advancedMode?.distributionType)}
+                      />
+                      
+                      {/* Normal distribution params */}
+                      {(inputSummaryA?.advancedMode?.normalMean !== undefined || inputSummaryB?.advancedMode?.normalMean !== undefined) && (
+                        <>
+                          <MetricRow
+                            label="  Normal mean"
+                            a={inputSummaryA?.advancedMode?.normalMean !== undefined ? String(inputSummaryA.advancedMode.normalMean.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.normalMean !== undefined ? String(inputSummaryB.advancedMode.normalMean.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.normalMean !== undefined && inputSummaryB?.advancedMode?.normalMean !== undefined ? String((inputSummaryB.advancedMode.normalMean - inputSummaryA.advancedMode.normalMean).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.normalMean !== inputSummaryB?.advancedMode?.normalMean)}
+                          />
+                          <MetricRow
+                            label="  Normal std dev"
+                            a={inputSummaryA?.advancedMode?.normalStdDev !== undefined ? String(inputSummaryA.advancedMode.normalStdDev.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.normalStdDev !== undefined ? String(inputSummaryB.advancedMode.normalStdDev.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.normalStdDev !== undefined && inputSummaryB?.advancedMode?.normalStdDev !== undefined ? String((inputSummaryB.advancedMode.normalStdDev - inputSummaryA.advancedMode.normalStdDev).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.normalStdDev !== inputSummaryB?.advancedMode?.normalStdDev)}
+                          />
+                        </>
+                      )}
+
+                      {/* Brownian motion params */}
+                      {(inputSummaryA?.advancedMode?.brownianDrift !== undefined || inputSummaryB?.advancedMode?.brownianDrift !== undefined) && (
+                        <>
+                          <MetricRow
+                            label="  Brownian drift"
+                            a={inputSummaryA?.advancedMode?.brownianDrift !== undefined ? String(inputSummaryA.advancedMode.brownianDrift.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.brownianDrift !== undefined ? String(inputSummaryB.advancedMode.brownianDrift.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.brownianDrift !== undefined && inputSummaryB?.advancedMode?.brownianDrift !== undefined ? String((inputSummaryB.advancedMode.brownianDrift - inputSummaryA.advancedMode.brownianDrift).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.brownianDrift !== inputSummaryB?.advancedMode?.brownianDrift)}
+                          />
+                          <MetricRow
+                            label="  Brownian volatility"
+                            a={inputSummaryA?.advancedMode?.brownianVolatility !== undefined ? String(inputSummaryA.advancedMode.brownianVolatility.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.brownianVolatility !== undefined ? String(inputSummaryB.advancedMode.brownianVolatility.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.brownianVolatility !== undefined && inputSummaryB?.advancedMode?.brownianVolatility !== undefined ? String((inputSummaryB.advancedMode.brownianVolatility - inputSummaryA.advancedMode.brownianVolatility).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.brownianVolatility !== inputSummaryB?.advancedMode?.brownianVolatility)}
+                          />
+                        </>
+                      )}
+
+                      {/* Student-t params */}
+                      {(inputSummaryA?.advancedMode?.studentMu !== undefined || inputSummaryB?.advancedMode?.studentMu !== undefined) && (
+                        <>
+                          <MetricRow
+                            label="  Student-t μ"
+                            a={inputSummaryA?.advancedMode?.studentMu !== undefined ? String(inputSummaryA.advancedMode.studentMu.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.studentMu !== undefined ? String(inputSummaryB.advancedMode.studentMu.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.studentMu !== undefined && inputSummaryB?.advancedMode?.studentMu !== undefined ? String((inputSummaryB.advancedMode.studentMu - inputSummaryA.advancedMode.studentMu).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.studentMu !== inputSummaryB?.advancedMode?.studentMu)}
+                          />
+                          <MetricRow
+                            label="  Student-t σ"
+                            a={inputSummaryA?.advancedMode?.studentSigma !== undefined ? String(inputSummaryA.advancedMode.studentSigma.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.studentSigma !== undefined ? String(inputSummaryB.advancedMode.studentSigma.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.studentSigma !== undefined && inputSummaryB?.advancedMode?.studentSigma !== undefined ? String((inputSummaryB.advancedMode.studentSigma - inputSummaryA.advancedMode.studentSigma).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.studentSigma !== inputSummaryB?.advancedMode?.studentSigma)}
+                          />
+                          <MetricRow
+                            label="  Student-t ν"
+                            a={inputSummaryA?.advancedMode?.studentNu !== undefined ? String(inputSummaryA.advancedMode.studentNu.toFixed(4)) : '—'}
+                            b={inputSummaryB?.advancedMode?.studentNu !== undefined ? String(inputSummaryB.advancedMode.studentNu.toFixed(4)) : '—'}
+                            delta={inputSummaryA?.advancedMode?.studentNu !== undefined && inputSummaryB?.advancedMode?.studentNu !== undefined ? String((inputSummaryB.advancedMode.studentNu - inputSummaryA.advancedMode.studentNu).toFixed(4)) : ''}
+                            different={Boolean(inputSummaryA?.advancedMode?.studentNu !== inputSummaryB?.advancedMode?.studentNu)}
+                          />
+                        </>
+                      )}
+
+                      {/* Regime-based params */}
+                      {(inputSummaryA?.advancedMode?.regimeTickMonths !== undefined || inputSummaryB?.advancedMode?.regimeTickMonths !== undefined) && (
+                        <MetricRow
+                          label="  Regime tick months"
+                          a={inputSummaryA?.advancedMode?.regimeTickMonths !== undefined ? String(inputSummaryA.advancedMode.regimeTickMonths) : '—'}
+                          b={inputSummaryB?.advancedMode?.regimeTickMonths !== undefined ? String(inputSummaryB.advancedMode.regimeTickMonths) : '—'}
+                          delta={inputSummaryA?.advancedMode?.regimeTickMonths !== undefined && inputSummaryB?.advancedMode?.regimeTickMonths !== undefined ? String(inputSummaryB.advancedMode.regimeTickMonths - inputSummaryA.advancedMode.regimeTickMonths) : ''}
+                          different={Boolean(inputSummaryA?.advancedMode?.regimeTickMonths !== inputSummaryB?.advancedMode?.regimeTickMonths)}
+                        />
+                      )}
+
+                      {/* Simple average percentage */}
+                      {(inputSummaryA?.advancedMode?.simpleAveragePercentage !== undefined || inputSummaryB?.advancedMode?.simpleAveragePercentage !== undefined) && (
+                        <MetricRow
+                          label="  Simple average %"
+                          a={inputSummaryA?.advancedMode?.simpleAveragePercentage !== undefined ? formatPct2(inputSummaryA.advancedMode.simpleAveragePercentage) : '—'}
+                          b={inputSummaryB?.advancedMode?.simpleAveragePercentage !== undefined ? formatPct2(inputSummaryB.advancedMode.simpleAveragePercentage) : '—'}
+                          delta={inputSummaryA?.advancedMode?.simpleAveragePercentage !== undefined && inputSummaryB?.advancedMode?.simpleAveragePercentage !== undefined ? formatDeltaPct2(inputSummaryB.advancedMode.simpleAveragePercentage - inputSummaryA.advancedMode.simpleAveragePercentage) : ''}
+                          different={Boolean(inputSummaryA?.advancedMode?.simpleAveragePercentage !== inputSummaryB?.advancedMode?.simpleAveragePercentage)}
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {/* Tax exemption config */}
+                  {(inputSummaryA?.advancedMode?.taxExemptionConfig || inputSummaryB?.advancedMode?.taxExemptionConfig) && (
+                    <>
+                      <div style={{ padding: '8px 10px', background: 'rgba(100, 150, 255, 0.05)', fontSize: 12, fontWeight: 700 }}>
+                        Tax Exemptions
+                      </div>
+                      <MetricRow
+                        label="  Exemption Card limit"
+                        a={inputSummaryA?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit !== undefined ? formatMoney0(inputSummaryA.advancedMode.taxExemptionConfig.exemptionCard.limit) : '—'}
+                        b={inputSummaryB?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit !== undefined ? formatMoney0(inputSummaryB.advancedMode.taxExemptionConfig.exemptionCard.limit) : '—'}
+                        delta={inputSummaryA?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit !== undefined && inputSummaryB?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit !== undefined ? formatDeltaMoney0(inputSummaryB.advancedMode.taxExemptionConfig.exemptionCard.limit - inputSummaryA.advancedMode.taxExemptionConfig.exemptionCard.limit) : ''}
+                        different={Boolean(inputSummaryA?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit !== inputSummaryB?.advancedMode?.taxExemptionConfig?.exemptionCard?.limit)}
+                      />
+                      <MetricRow
+                        label="  Stock exemption tax rate"
+                        a={inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate !== undefined ? formatPct2(inputSummaryA.advancedMode.taxExemptionConfig.stockExemption.taxRate) : '—'}
+                        b={inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate !== undefined ? formatPct2(inputSummaryB.advancedMode.taxExemptionConfig.stockExemption.taxRate) : '—'}
+                        delta={inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate !== undefined && inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate !== undefined ? formatDeltaPct2(inputSummaryB.advancedMode.taxExemptionConfig.stockExemption.taxRate - inputSummaryA.advancedMode.taxExemptionConfig.stockExemption.taxRate) : ''}
+                        different={Boolean(inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate !== inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.taxRate)}
+                      />
+                      <MetricRow
+                        label="  Stock exemption limit"
+                        a={inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.limit !== undefined ? formatMoney0(inputSummaryA.advancedMode.taxExemptionConfig.stockExemption.limit) : '—'}
+                        b={inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.limit !== undefined ? formatMoney0(inputSummaryB.advancedMode.taxExemptionConfig.stockExemption.limit) : '—'}
+                        delta={inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.limit !== undefined && inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.limit !== undefined ? formatDeltaMoney0(inputSummaryB.advancedMode.taxExemptionConfig.stockExemption.limit - inputSummaryA.advancedMode.taxExemptionConfig.stockExemption.limit) : ''}
+                        different={Boolean(inputSummaryA?.advancedMode?.taxExemptionConfig?.stockExemption?.limit !== inputSummaryB?.advancedMode?.taxExemptionConfig?.stockExemption?.limit)}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Phase-by-phase breakdown */}
+              {(inputSummaryA?.phases ?? []).length > 0 || (inputSummaryB?.phases ?? []).length > 0 ? (
+                <>
+                  <div style={{ padding: '10px', background: '#1a1a1a', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Per-Phase Details
+                  </div>
+                  {Array.from({ length: Math.max(inputSummaryA?.phases.length ?? 0, inputSummaryB?.phases.length ?? 0) }).map((_, phaseIdx) => {
+                    const phaseA = inputSummaryA?.phases[phaseIdx];
+                    const phaseB = inputSummaryB?.phases[phaseIdx];
+                    const typeDiff = phaseA?.phaseType !== phaseB?.phaseType;
+                    const durationDiff = phaseA?.durationInMonths !== phaseB?.durationInMonths;
+                    
+                    // Create label showing phase type(s)
+                    const typeLabel = phaseA?.phaseType || phaseB?.phaseType || 'Unknown';
+                    const typeALabel = phaseA?.phaseType === 'DEPOSIT' ? 'DEPOSIT' : phaseA?.phaseType === 'WITHDRAW' ? 'WITHDRAW' : 'PASSIVE';
+                    const typeBLabel = phaseB?.phaseType === 'DEPOSIT' ? 'DEPOSIT' : phaseB?.phaseType === 'WITHDRAW' ? 'WITHDRAW' : 'PASSIVE';
+
+                    return (
+                      <div key={phaseIdx} style={{ borderTop: '1px solid #222' }}>
+                        <div style={{ padding: '8px 10px', background: 'rgba(100, 150, 255, 0.05)', fontSize: 12, fontWeight: 700 }}>
+                          Phase {phaseIdx + 1}: {typeLabel}
+                        </div>
+                        <MetricRow
+                          label="  Type"
+                          a={typeALabel}
+                          b={typeBLabel}
+                          different={typeDiff}
+                        />
+                        <MetricRow
+                          label="  Duration (years, months)"
+                          a={phaseA ? formatDurationYM(phaseA.durationInMonths) : '—'}
+                          b={phaseB ? formatDurationYM(phaseB.durationInMonths) : '—'}
+                          delta={phaseA && phaseB ? formatDeltaMonths(phaseB.durationInMonths - phaseA.durationInMonths) : ''}
+                          different={durationDiff}
+                        />
+
+                        <MetricRow
+                          label="  Tax exemptions active"
+                          a={formatTaxExemptionsActive(phaseA)}
+                          b={formatTaxExemptionsActive(phaseB)}
+                          different={Boolean(phaseA?.taxExemptionsActive?.any !== phaseB?.taxExemptionsActive?.any || phaseA?.taxExemptionsActive?.card !== phaseB?.taxExemptionsActive?.card || phaseA?.taxExemptionsActive?.stock !== phaseB?.taxExemptionsActive?.stock)}
+                        />
+
+                        {/* DEPOSIT phase details */}
+                        {(phaseA?.phaseType === 'DEPOSIT' || phaseB?.phaseType === 'DEPOSIT') && (
+                          <>
+                            <MetricRow
+                              label="  Initial deposit"
+                              a={phaseA?.phaseType === 'DEPOSIT' ? formatMoney0(phaseA?.initialDeposit) : '—'}
+                              b={phaseB?.phaseType === 'DEPOSIT' ? formatMoney0(phaseB?.initialDeposit) : '—'}
+                              delta={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA && phaseB ? formatDeltaMoney0(phaseB.initialDeposit! - phaseA.initialDeposit!) : ''}
+                              different={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA?.initialDeposit !== phaseB?.initialDeposit}
+                            />
+                            <MetricRow
+                              label="  Monthly deposit"
+                              a={phaseA?.phaseType === 'DEPOSIT' ? formatMoney0(phaseA?.monthlyDeposit) : '—'}
+                              b={phaseB?.phaseType === 'DEPOSIT' ? formatMoney0(phaseB?.monthlyDeposit) : '—'}
+                              delta={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA && phaseB ? formatDeltaMoney0(phaseB.monthlyDeposit! - phaseA.monthlyDeposit!) : ''}
+                              different={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA?.monthlyDeposit !== phaseB?.monthlyDeposit}
+                            />
+                            <MetricRow
+                              label="  Yearly increase %"
+                              a={phaseA?.phaseType === 'DEPOSIT' ? formatPct2(phaseA?.yearlyIncreaseInPercentage) : '—'}
+                              b={phaseB?.phaseType === 'DEPOSIT' ? formatPct2(phaseB?.yearlyIncreaseInPercentage) : '—'}
+                              delta={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA && phaseB ? formatDeltaPct2(phaseB.yearlyIncreaseInPercentage! - phaseA.yearlyIncreaseInPercentage!) : ''}
+                              different={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA?.yearlyIncreaseInPercentage !== phaseB?.yearlyIncreaseInPercentage}
+                            />
+                            <MetricRow
+                              label="  Total deposits (approx)"
+                              a={phaseA?.phaseType === 'DEPOSIT' ? formatMoney0(phaseA?.depositTotal) : '—'}
+                              b={phaseB?.phaseType === 'DEPOSIT' ? formatMoney0(phaseB?.depositTotal) : '—'}
+                              delta={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA && phaseB ? formatDeltaMoney0(phaseB.depositTotal! - phaseA.depositTotal!) : ''}
+                              different={phaseA?.phaseType === 'DEPOSIT' && phaseB?.phaseType === 'DEPOSIT' && phaseA?.depositTotal !== phaseB?.depositTotal}
+                            />
+                          </>
+                        )}
+
+                        {/* WITHDRAW phase details */}
+                        {(phaseA?.phaseType === 'WITHDRAW' || phaseB?.phaseType === 'WITHDRAW') && (
+                          <>
+                            <MetricRow
+                              label="  Withdraw amount"
+                              a={phaseA?.phaseType === 'WITHDRAW' ? formatMoney0(phaseA?.withdrawAmount) : '—'}
+                              b={phaseB?.phaseType === 'WITHDRAW' ? formatMoney0(phaseB?.withdrawAmount) : '—'}
+                              delta={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA && phaseB ? formatDeltaMoney0(phaseB.withdrawAmount! - phaseA.withdrawAmount!) : ''}
+                              different={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA?.withdrawAmount !== phaseB?.withdrawAmount}
+                            />
+                            <MetricRow
+                              label="  Withdraw rate"
+                              a={phaseA?.phaseType === 'WITHDRAW' ? formatPct2(phaseA?.withdrawRate) : '—'}
+                              b={phaseB?.phaseType === 'WITHDRAW' ? formatPct2(phaseB?.withdrawRate) : '—'}
+                              delta={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA && phaseB ? formatDeltaPct2(phaseB.withdrawRate! - phaseA.withdrawRate!) : ''}
+                              different={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA?.withdrawRate !== phaseB?.withdrawRate}
+                            />
+                            <MetricRow
+                              label="  Variation (lower %)"
+                              a={phaseA?.phaseType === 'WITHDRAW' ? formatPct2(phaseA?.lowerVariationPercentage) : '—'}
+                              b={phaseB?.phaseType === 'WITHDRAW' ? formatPct2(phaseB?.lowerVariationPercentage) : '—'}
+                              delta={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA && phaseB ? formatDeltaPct2(phaseB.lowerVariationPercentage! - phaseA.lowerVariationPercentage!) : ''}
+                              different={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA?.lowerVariationPercentage !== phaseB?.lowerVariationPercentage}
+                            />
+                            <MetricRow
+                              label="  Variation (upper %)"
+                              a={phaseA?.phaseType === 'WITHDRAW' ? formatPct2(phaseA?.upperVariationPercentage) : '—'}
+                              b={phaseB?.phaseType === 'WITHDRAW' ? formatPct2(phaseB?.upperVariationPercentage) : '—'}
+                              delta={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA && phaseB ? formatDeltaPct2(phaseB.upperVariationPercentage! - phaseA.upperVariationPercentage!) : ''}
+                              different={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA?.upperVariationPercentage !== phaseB?.upperVariationPercentage}
+                            />
+                            <MetricRow
+                              label="  Total withdrawals (approx)"
+                              a={phaseA?.phaseType === 'WITHDRAW' ? formatMoney0(phaseA?.withdrawTotal) : '—'}
+                              b={phaseB?.phaseType === 'WITHDRAW' ? formatMoney0(phaseB?.withdrawTotal) : '—'}
+                              delta={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA && phaseB ? formatDeltaMoney0(phaseB.withdrawTotal! - phaseA.withdrawTotal!) : ''}
+                              different={phaseA?.phaseType === 'WITHDRAW' && phaseB?.phaseType === 'WITHDRAW' && phaseA?.withdrawTotal !== phaseB?.withdrawTotal}
+                            />
+                          </>
+                        )}
+
+                        {/* Tax exemptions for this phase */}
+                        {(phaseA?.taxExemptions || phaseB?.taxExemptions) && (
+                          <>
+                            {(phaseA?.taxExemptions?.exemptionCard || phaseB?.taxExemptions?.exemptionCard) && (
+                              <>
+                                <MetricRow
+                                  label="  Tax exemption: Card limit"
+                                  a={phaseA?.taxExemptions?.exemptionCard?.limit ? `$${formatMoney0(phaseA.taxExemptions.exemptionCard.limit)}` : '—'}
+                                  b={phaseB?.taxExemptions?.exemptionCard?.limit ? `$${formatMoney0(phaseB.taxExemptions.exemptionCard.limit)}` : '—'}
+                                  delta={phaseA?.taxExemptions?.exemptionCard?.limit && phaseB?.taxExemptions?.exemptionCard?.limit ? formatDeltaMoney0(phaseB.taxExemptions.exemptionCard.limit - phaseA.taxExemptions.exemptionCard.limit) : ''}
+                                  different={phaseA?.taxExemptions?.exemptionCard?.limit !== phaseB?.taxExemptions?.exemptionCard?.limit}
+                                />
+                                <MetricRow
+                                  label="  Tax exemption: Card yearly increase %"
+                                  a={phaseA?.taxExemptions?.exemptionCard?.yearlyIncrease ? formatPct2(phaseA.taxExemptions.exemptionCard.yearlyIncrease) : '—'}
+                                  b={phaseB?.taxExemptions?.exemptionCard?.yearlyIncrease ? formatPct2(phaseB.taxExemptions.exemptionCard.yearlyIncrease) : '—'}
+                                  delta={phaseA?.taxExemptions?.exemptionCard?.yearlyIncrease && phaseB?.taxExemptions?.exemptionCard?.yearlyIncrease ? formatDeltaPct2(phaseB.taxExemptions.exemptionCard.yearlyIncrease - phaseA.taxExemptions.exemptionCard.yearlyIncrease) : ''}
+                                  different={phaseA?.taxExemptions?.exemptionCard?.yearlyIncrease !== phaseB?.taxExemptions?.exemptionCard?.yearlyIncrease}
+                                />
+                              </>
+                            )}
+                            {(phaseA?.taxExemptions?.stockExemption || phaseB?.taxExemptions?.stockExemption) && (
+                              <>
+                                <MetricRow
+                                  label="  Tax exemption: Stock tax rate %"
+                                  a={phaseA?.taxExemptions?.stockExemption?.taxRate ? formatPct2(phaseA.taxExemptions.stockExemption.taxRate) : '—'}
+                                  b={phaseB?.taxExemptions?.stockExemption?.taxRate ? formatPct2(phaseB.taxExemptions.stockExemption.taxRate) : '—'}
+                                  delta={phaseA?.taxExemptions?.stockExemption?.taxRate && phaseB?.taxExemptions?.stockExemption?.taxRate ? formatDeltaPct2(phaseB.taxExemptions.stockExemption.taxRate - phaseA.taxExemptions.stockExemption.taxRate) : ''}
+                                  different={phaseA?.taxExemptions?.stockExemption?.taxRate !== phaseB?.taxExemptions?.stockExemption?.taxRate}
+                                />
+                                <MetricRow
+                                  label="  Tax exemption: Stock limit"
+                                  a={phaseA?.taxExemptions?.stockExemption?.limit ? `$${formatMoney0(phaseA.taxExemptions.stockExemption.limit)}` : '—'}
+                                  b={phaseB?.taxExemptions?.stockExemption?.limit ? `$${formatMoney0(phaseB.taxExemptions.stockExemption.limit)}` : '—'}
+                                  delta={phaseA?.taxExemptions?.stockExemption?.limit && phaseB?.taxExemptions?.stockExemption?.limit ? formatDeltaMoney0(phaseB.taxExemptions.stockExemption.limit - phaseA.taxExemptions.stockExemption.limit) : ''}
+                                  different={phaseA?.taxExemptions?.stockExemption?.limit !== phaseB?.taxExemptions?.stockExemption?.limit}
+                                />
+                                <MetricRow
+                                  label="  Tax exemption: Stock yearly increase %"
+                                  a={phaseA?.taxExemptions?.stockExemption?.yearlyIncrease ? formatPct2(phaseA.taxExemptions.stockExemption.yearlyIncrease) : '—'}
+                                  b={phaseB?.taxExemptions?.stockExemption?.yearlyIncrease ? formatPct2(phaseB.taxExemptions.stockExemption.yearlyIncrease) : '—'}
+                                  delta={phaseA?.taxExemptions?.stockExemption?.yearlyIncrease && phaseB?.taxExemptions?.stockExemption?.yearlyIncrease ? formatDeltaPct2(phaseB.taxExemptions.stockExemption.yearlyIncrease - phaseA.taxExemptions.stockExemption.yearlyIncrease) : ''}
+                                  different={phaseA?.taxExemptions?.stockExemption?.yearlyIncrease !== phaseB?.taxExemptions?.stockExemption?.yearlyIncrease}
+                                />
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {/* PASSIVE phase - minimal fields */}
+                        {(phaseA?.phaseType === 'PASSIVE' || phaseB?.phaseType === 'PASSIVE') && (
+                          <div style={{ padding: '8px 10px', fontSize: 13, opacity: 0.75, fontStyle: 'italic' }}>
+                            Passive phase (no action)
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              ) : null}
             </div>
           ) : (
             <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>

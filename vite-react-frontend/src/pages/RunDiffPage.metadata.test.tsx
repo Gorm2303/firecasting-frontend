@@ -69,7 +69,7 @@ vi.mock('../config/savedScenarios', () => {
 import RunDiffPage from './RunDiffPage';
 
 describe('RunDiffPage metadata', () => {
-  it('renders run metadata comparison', async () => {
+  it('does not render metadata comparison table', async () => {
     render(
       <MemoryRouter initialEntries={['/simulation/diff']}>
         <RunDiffPage />
@@ -82,10 +82,10 @@ describe('RunDiffPage metadata', () => {
     fireEvent.click(screen.getByRole('button', { name: /diff/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Model build time')).toBeInTheDocument();
-      expect(screen.getByText('Spring Boot version')).toBeInTheDocument();
-      expect(screen.getByText('Java version')).toBeInTheDocument();
-      expect(screen.getByText('RNG seed')).toBeInTheDocument();
+      expect(screen.queryByText('Model build time')).not.toBeInTheDocument();
+      expect(screen.queryByText('Spring Boot version')).not.toBeInTheDocument();
+      expect(screen.queryByText('Java version')).not.toBeInTheDocument();
+      expect(screen.queryByText('RNG seed')).not.toBeInTheDocument();
     });
   });
 });
