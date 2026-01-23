@@ -1,6 +1,5 @@
 // src/features/simulation/SimulationForm.tsx
 import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
@@ -22,6 +21,8 @@ import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeSce
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
 
+const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
 type ReturnType = 'dataDrivenReturn' | 'distributionReturn' | 'simpleReturn';
@@ -32,21 +33,37 @@ type AdvancedOptionsLoad = {
   enabled?: boolean;
   inflationAveragePct?: number;
   yearlyFeePercentage?: number;
-  taxExemptionConfig?: {
-    exemptionCard?: { limit?: number; yearlyIncrease?: number };
-    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
-  };
-  returnerConfig?: AdvancedSimulationRequest['returnerConfig'];
   returnType?: ReturnType;
-  seed?: string | number;
-};
-
-const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
-
-const toNumOrUndef = (v: any): number | undefined => {
-  if (v === '' || v === null || v === undefined) return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
+  seed?: number | string;
+  simpleAveragePercentage?: number | string;
+  distributionType?: DistributionType;
+  normalMean?: number | string;
+  normalStdDev?: number | string;
+  brownianDrift?: number | string;
+  brownianVolatility?: number | string;
+  studentMu?: number | string;
+  studentSigma?: number | string;
+  studentNu?: number | string;
+  regimeTickMonths?: number | string;
+  regimes?: Array<{
+    distributionType?: 'normal' | 'studentT';
+    expectedDurationMonths?: number | string;
+    toRegime0?: number | string;
+    toRegime1?: number | string;
+    toRegime2?: number | string;
+    normalMean?: number | string;
+    normalStdDev?: number | string;
+    studentMu?: number | string;
+    studentSigma?: number | string;
+    studentNu?: number | string;
+  }>;
+  returnerConfig?: AdvancedSimulationRequest['returnerConfig'];
+  taxExemptionConfig?: AdvancedSimulationRequest['taxExemptionConfig'];
+  exemptionCardLimit?: number | string;
+  exemptionCardYearlyIncrease?: number | string;
+  stockExemptionTaxRate?: number | string;
+  stockExemptionLimit?: number | string;
+  stockExemptionYearlyIncrease?: number | string;
 };
 
 const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule === 'NOTIONAL' ? 'notional' : 'capital');
@@ -214,7 +231,6 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
 },
 ref
 ) {
-  const navigate = useNavigate();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
@@ -1901,27 +1917,6 @@ ref
                 value={selectedScenarioId}
                 onChange={(e) => {
                   setSelectedScenarioId(e.target.value);
-                  setShowScenarioCompare(false);
-                }}
-                disabled={simulateInProgress}
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
-              >
-                <option value="">— Select —</option>
-                {savedScenarios.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Compare to</span>
-              <select
-                aria-label="Compare to scenario"
-                value={compareScenarioId}
-                onChange={(e) => {
-                  setCompareScenarioId(e.target.value);
                   setShowScenarioCompare(false);
                 }}
                 disabled={simulateInProgress}
