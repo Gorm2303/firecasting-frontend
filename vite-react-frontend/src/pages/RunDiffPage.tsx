@@ -270,6 +270,39 @@ const RunDiffPage: React.FC = () => {
             </div>
           </div>
 
+          <div style={{ marginTop: 10, border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+            <MetricRow
+              label="Model app version"
+              a={diff.a?.modelAppVersion ?? '—'}
+              b={diff.b?.modelAppVersion ?? '—'}
+              different={Boolean(diff.a?.modelAppVersion !== diff.b?.modelAppVersion)}
+            />
+            <MetricRow
+              label="Model build time"
+              a={diff.a?.modelBuildTime ?? '—'}
+              b={diff.b?.modelBuildTime ?? '—'}
+              different={Boolean(diff.a?.modelBuildTime !== diff.b?.modelBuildTime)}
+            />
+            <MetricRow
+              label="Spring Boot version"
+              a={diff.a?.modelSpringBootVersion ?? '—'}
+              b={diff.b?.modelSpringBootVersion ?? '—'}
+              different={Boolean(diff.a?.modelSpringBootVersion !== diff.b?.modelSpringBootVersion)}
+            />
+            <MetricRow
+              label="Java version"
+              a={diff.a?.modelJavaVersion ?? '—'}
+              b={diff.b?.modelJavaVersion ?? '—'}
+              different={Boolean(diff.a?.modelJavaVersion !== diff.b?.modelJavaVersion)}
+            />
+            <MetricRow
+              label="RNG seed"
+              a={diff.a?.rngSeed !== null && diff.a?.rngSeed !== undefined ? String(diff.a?.rngSeed) : '—'}
+              b={diff.b?.rngSeed !== null && diff.b?.rngSeed !== undefined ? String(diff.b?.rngSeed) : '—'}
+              different={Boolean((diff.a?.rngSeed ?? null) !== (diff.b?.rngSeed ?? null))}
+            />
+          </div>
+
           <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
 
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Inputs</div>

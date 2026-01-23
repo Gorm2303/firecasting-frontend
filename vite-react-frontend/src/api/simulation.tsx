@@ -105,6 +105,9 @@ export type RunListItem = {
   createdAt?: string;
   rngSeed?: number | null;
   modelAppVersion?: string | null;
+  modelBuildTime?: string | null;
+  modelSpringBootVersion?: string | null;
+  modelJavaVersion?: string | null;
   inputHash?: string | null;
 };
 
