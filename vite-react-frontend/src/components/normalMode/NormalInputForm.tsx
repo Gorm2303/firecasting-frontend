@@ -69,6 +69,12 @@ type AdvancedOptionsLoad = {
 
 const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule === 'NOTIONAL' ? 'notional' : 'capital');
 
+const toNumOrUndef = (v: unknown): number | undefined => {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
+
 const parseReturnType = (v: any): ReturnType => {
   const s = String(v ?? '').trim();
   if (s === 'distributionReturn' || s === 'dataDrivenReturn' || s === 'simpleReturn') return s;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { diffRuns, findRunForInput, getRunSummaries, type RunDiffResponse } from '../api/simulation';
