@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import { diffRuns, getRunInput, getRunSummaries, listRuns, type RunDiffResponse, type RunListItem } from '../api/simulation';
+import { diffRuns, findRunForInput, getRunSummaries, type RunDiffResponse } from '../api/simulation';
+import { listSavedScenarios, type SavedScenario } from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
 
@@ -78,24 +79,28 @@ const formatDeltaPct2 = (v: number | null | undefined): string => {
   return `${prefix}${Number(v).toFixed(2)}%`;
 };
 
-const toScenarioSummary = (input: unknown): ScenarioSummary | null => {
-  if (!input || typeof input !== 'object') return null;
-  const req: any = input;
-  if (!req?.startDate?.date || !Array.isArray(req?.phases)) return null;
+const toScenarioSummary = (scenario: SavedScenario | null): ScenarioSummary | null => {
+  if (!scenario?.request) return null;
   try {
-    return summarizeScenario(req);
+    return summarizeScenario(scenario.request);
   } catch {
     return null;
   }
 };
 
 const RunDiffPage: React.FC = () => {
-  const [runs, setRuns] = useState<RunListItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
 
-  const [aId, setAId] = useState('');
-  const [bId, setBId] = useState('');
+  const savedScenarios = useMemo(() => listSavedScenarios(), []);
+  const scenarioAFromQuery = searchParams.get('scenarioA') ?? '';
+  const scenarioBFromQuery = searchParams.get('scenarioB') ?? '';
+
+  const [scenarioAId, setScenarioAId] = useState<string>(() => scenarioAFromQuery || '');
+  const [scenarioBId, setScenarioBId] = useState<string>(() => scenarioBFromQuery || '');
+
+  const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === scenarioAId) ?? null, [savedScenarios, scenarioAId]);
+  const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === scenarioBId) ?? null, [savedScenarios, scenarioBId]);
+
 
   const [diff, setDiff] = useState<RunDiffResponse | null>(null);
   const [diffErr, setDiffErr] = useState<string | null>(null);
@@ -106,42 +111,9 @@ const RunDiffPage: React.FC = () => {
 
   const [inputSummaryA, setInputSummaryA] = useState<ScenarioSummary | null>(null);
   const [inputSummaryB, setInputSummaryB] = useState<ScenarioSummary | null>(null);
-  const [inputErr, setInputErr] = useState<string | null>(null);
+  const [lookupErr, setLookupErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setLoadErr(null);
-    listRuns()
-      .then((data) => {
-        if (!alive) return;
-        setRuns(Array.isArray(data) ? data : []);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setLoadErr(e?.message ?? 'Failed to load runs');
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const byId = useMemo(() => {
-    const m = new Map<string, RunListItem>();
-    for (const r of runs) {
-      if (r?.id) m.set(r.id, r);
-    }
-    return m;
-  }, [runs]);
-
-  const aInfo = aId ? byId.get(aId) : undefined;
-  const bInfo = bId ? byId.get(bId) : undefined;
-
-  const canDiff = aId && bId && aId !== bId && !diffBusy;
+  const canDiff = Boolean(scenarioA && scenarioB && scenarioA.id !== scenarioB.id && !diffBusy);
 
   const attributionLine = (d: RunDiffResponse | null): string | null => {
     const s = d?.attribution?.summary;
@@ -156,8 +128,7 @@ const RunDiffPage: React.FC = () => {
       </div>
 
       <p style={{ opacity: 0.85, marginTop: 10 }}>
-        Pick two completed (persisted) runs. The diff attributes output differences to <strong>inputs</strong>,
-        <strong> model version</strong>, and/or <strong>randomness</strong>.
+        Pick two saved scenarios. We resolve their persisted runs and then diff both the inputs and outputs.
       </p>
 
       <div style={{
@@ -165,53 +136,43 @@ const RunDiffPage: React.FC = () => {
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
       }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Run A</div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario A</div>
           <select
-            value={aId}
-            onChange={(e) => setAId(e.target.value)}
+            value={scenarioAId}
+            onChange={(e) => setScenarioAId(e.target.value)}
             style={{ width: '100%', padding: 8, borderRadius: 8 }}
-            disabled={loading}
           >
             <option value="">Select…</option>
-            {runs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.id} {r.createdAt ? `(${r.createdAt})` : ''}
-              </option>
+            {savedScenarios.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-            Version: {fmt(aInfo?.modelAppVersion) || 'unknown'}
-            <br />
-            Seed: {aInfo?.rngSeed ?? '—'}
-          </div>
         </div>
 
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Run B</div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario B</div>
           <select
-            value={bId}
-            onChange={(e) => setBId(e.target.value)}
+            value={scenarioBId}
+            onChange={(e) => setScenarioBId(e.target.value)}
             style={{ width: '100%', padding: 8, borderRadius: 8 }}
-            disabled={loading}
           >
             <option value="">Select…</option>
-            {runs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.id} {r.createdAt ? `(${r.createdAt})` : ''}
-              </option>
+            {savedScenarios.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-            Version: {fmt(bInfo?.modelAppVersion) || 'unknown'}
-            <br />
-            Seed: {bInfo?.rngSeed ?? '—'}
-          </div>
         </div>
       </div>
 
-      {loadErr && (
+      {savedScenarios.length === 0 && (
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+          No saved scenarios yet. Save a scenario first, then run it to persist a run.
+        </div>
+      )}
+
+      {lookupErr && (
         <div style={{ marginTop: 12, padding: 10, borderRadius: 10, border: '1px solid #ff6b6b55', background: 'rgba(255,107,107,0.10)' }}>
-          {loadErr}
+          {lookupErr}
         </div>
       )}
 
@@ -226,34 +187,32 @@ const RunDiffPage: React.FC = () => {
             setRunSummariesB(null);
             setInputSummaryA(null);
             setInputSummaryB(null);
-            setInputErr(null);
+            setLookupErr(null);
             setDiffBusy(true);
             try {
+              if (!scenarioA || !scenarioB) throw new Error('Select two saved scenarios.');
+
+              const [runA, runB] = await Promise.all([
+                findRunForInput(scenarioA.request),
+                findRunForInput(scenarioB.request),
+              ]);
+
+              if (!runA || !runB) {
+                setLookupErr('One or both scenarios have no persisted run. Run them once and try again.');
+                return;
+              }
+
               const [d, sa, sb] = await Promise.all([
-                diffRuns(aId, bId),
-                getRunSummaries(aId),
-                getRunSummaries(bId),
+                diffRuns(runA, runB),
+                getRunSummaries(runA),
+                getRunSummaries(runB),
               ]);
               setDiff(d);
               setRunSummariesA(sa);
               setRunSummariesB(sb);
 
-              const inputResults = await Promise.allSettled([
-                getRunInput(aId),
-                getRunInput(bId),
-              ]);
-
-              if (inputResults[0].status === 'fulfilled') {
-                setInputSummaryA(toScenarioSummary(inputResults[0].value));
-              } else {
-                setInputErr(inputResults[0].reason?.message ?? 'Failed to load input for Run A');
-              }
-
-              if (inputResults[1].status === 'fulfilled') {
-                setInputSummaryB(toScenarioSummary(inputResults[1].value));
-              } else {
-                setInputErr((prev) => prev ?? (inputResults[1].reason?.message ?? 'Failed to load input for Run B'));
-              }
+              setInputSummaryA(toScenarioSummary(scenarioA));
+              setInputSummaryB(toScenarioSummary(scenarioB));
             } catch (e: any) {
               setDiffErr(e?.message ?? 'Diff failed');
             } finally {
@@ -270,8 +229,8 @@ const RunDiffPage: React.FC = () => {
         >
           {diffBusy ? 'Diffing…' : 'Diff'}
         </button>
-        {aId && bId && aId === bId && (
-          <div style={{ fontSize: 13, opacity: 0.85 }}>Select two different runs.</div>
+        {scenarioAId && scenarioBId && scenarioAId === scenarioBId && (
+          <div style={{ fontSize: 13, opacity: 0.85 }}>Select two different scenarios.</div>
         )}
       </div>
 
@@ -294,15 +253,26 @@ const RunDiffPage: React.FC = () => {
             <span>modelVersionChanged: {String(Boolean(diff.attribution?.modelVersionChanged))}</span>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Run A</div>
+              <div>ID: {diff.a?.id ?? '—'}</div>
+              <div>Created: {diff.a?.createdAt ?? '—'}</div>
+              <div>Version: {diff.a?.modelAppVersion ?? '—'}</div>
+              <div>Seed: {diff.a?.rngSeed ?? '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Run B</div>
+              <div>ID: {diff.b?.id ?? '—'}</div>
+              <div>Created: {diff.b?.createdAt ?? '—'}</div>
+              <div>Version: {diff.b?.modelAppVersion ?? '—'}</div>
+              <div>Seed: {diff.b?.rngSeed ?? '—'}</div>
+            </div>
+          </div>
+
           <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
 
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Inputs</div>
-
-          {inputErr && (
-            <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, border: '1px solid #ff6b6b55', background: 'rgba(255,107,107,0.10)' }}>
-              {inputErr}
-            </div>
-          )}
 
           {(inputSummaryA || inputSummaryB) ? (
             <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>

@@ -1,5 +1,6 @@
 // src/features/simulation/SimulationForm.tsx
 import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
@@ -231,6 +232,7 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
 },
 ref
 ) {
+  const navigate = useNavigate();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
@@ -1931,6 +1933,27 @@ ref
               </select>
             </label>
 
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '0.95rem', opacity: 0.9 }}>Compare to</span>
+              <select
+                aria-label="Compare to scenario"
+                value={compareScenarioId}
+                onChange={(e) => {
+                  setCompareScenarioId(e.target.value);
+                  setShowScenarioCompare(false);
+                }}
+                disabled={simulateInProgress}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.95rem', padding: '0.35rem' }}
+              >
+                <option value="">— Select —</option>
+                {savedScenarios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 type="button"
@@ -1939,10 +1962,9 @@ ref
                 onClick={() => {
                   if (!scenarioA || !scenarioB) return;
 
-                  // Keep ids in the URL so /simulation/diff can recover on reload (from localStorage).
                   const q = new URLSearchParams({ scenarioA: scenarioA.id, scenarioB: scenarioB.id }).toString();
                   closeScenarioModal();
-                  navigate(`/simulation/diff?${q}`, { state: { scenarioA, scenarioB } });
+                  navigate(`/simulation/diff?${q}`);
                 }}
                 disabled={!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress}
                 style={btn(!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress ? 'disabled' : 'ghost')}

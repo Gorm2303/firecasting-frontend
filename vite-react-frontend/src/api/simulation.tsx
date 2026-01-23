@@ -208,6 +208,18 @@ export async function getRunInput(runId: string): Promise<unknown> {
   return (await res.json()) as unknown;
 }
 
+export async function findRunForInput(input: unknown): Promise<string | null> {
+  const res = await fetch(`${BASE_URL}/runs/lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as { runId?: string };
+  return data?.runId ?? null;
+}
+
 export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffResponse> {
   const res = await fetch(
     `${BASE_URL}/diff/${encodeURIComponent(runAId)}/${encodeURIComponent(runBId)}`,
