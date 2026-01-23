@@ -179,13 +179,23 @@ export async function getReplayStatus(replayId: string): Promise<ReplayStatusRes
   return (await res.json()) as ReplayStatusResponse;
 }
 
-export async function listRuns(limit = 50): Promise<RunListItem[]> {
-  const res = await fetch(`${BASE_URL}/runs?limit=${encodeURIComponent(String(limit))}`, {
+export async function listRuns(): Promise<RunListItem[]> {
+  const res = await fetch(`${BASE_URL}/runs`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as RunListItem[];
+}
+
+export async function getRunSummaries(runId: string): Promise<YearlySummary[]> {
+  const res = await fetch(`${BASE_URL}/runs/${encodeURIComponent(runId)}/summaries`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) throw new Error('Run not found (or not persisted).');
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as YearlySummary[];
 }
 
 export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffResponse> {
