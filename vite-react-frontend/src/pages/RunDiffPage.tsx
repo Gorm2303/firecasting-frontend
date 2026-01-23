@@ -74,6 +74,28 @@ const MetricRow: React.FC<{ label: string; a?: string; b?: string; delta?: strin
   );
 };
 
+const formatMoney0 = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '—';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
+};
+
+const formatPct2 = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '—';
+  return `${Number(v).toFixed(2)}%`;
+};
+
+const formatDeltaMoney0 = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '';
+  const prefix = v >= 0 ? '+' : '';
+  return `${prefix}${formatMoney0(v)}`;
+};
+
+const formatDeltaPct2 = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '';
+  const prefix = v >= 0 ? '+' : '';
+  return `${prefix}${Number(v).toFixed(2)}%`;
+};
+
 const RunDiffPage: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -538,6 +560,100 @@ const RunDiffPage: React.FC = () => {
               <div style={{ fontWeight: 700 }}>{fmt(diff.output?.maxAbsDiff) || '0'}</div>
             </div>
           </div>
+
+          {(runSummariesA && runSummariesB) && (
+            <>
+              <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>Key metrics</div>
+
+              {(() => {
+                const lastA = pickLastEntry(runSummariesA);
+                const lastB = pickLastEntry(runSummariesB);
+
+                const aEnd = lastA ? `${lastA.phaseName} / year ${lastA.year}` : '—';
+                const bEnd = lastB ? `${lastB.phaseName} / year ${lastB.year}` : '—';
+                const endDifferent = Boolean(lastA && lastB && (lastA.phaseName !== lastB.phaseName || lastA.year !== lastB.year));
+
+                const avgA = lastA?.averageCapital;
+                const avgB = lastB?.averageCapital;
+                const medA = lastA?.medianCapital;
+                const medB = lastB?.medianCapital;
+                const q05A = lastA?.quantile5;
+                const q05B = lastB?.quantile5;
+                const q95A = lastA?.quantile95;
+                const q95B = lastB?.quantile95;
+                const varA = lastA?.var;
+                const varB = lastB?.var;
+                const cvarA = lastA?.cvar;
+                const cvarB = lastB?.cvar;
+                const failA = lastA?.negativeCapitalPercentage;
+                const failB = lastB?.negativeCapitalPercentage;
+
+                const dAvg = avgA !== undefined && avgB !== undefined ? avgB - avgA : null;
+                const dMed = medA !== undefined && medB !== undefined ? medB - medA : null;
+                const dQ05 = q05A !== undefined && q05B !== undefined ? q05B - q05A : null;
+                const dQ95 = q95A !== undefined && q95B !== undefined ? q95B - q95A : null;
+                const dVar = varA !== undefined && varB !== undefined ? varB - varA : null;
+                const dCvar = cvarA !== undefined && cvarB !== undefined ? cvarB - cvarA : null;
+                const dFail = failA !== undefined && failB !== undefined ? failB - failA : null;
+
+                return (
+                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+                    <MetricRow label="End point (phase/year)" a={aEnd} b={bEnd} different={endDifferent} />
+                    <MetricRow
+                      label="End average capital"
+                      a={formatMoney0(avgA)}
+                      b={formatMoney0(avgB)}
+                      delta={formatDeltaMoney0(dAvg)}
+                      different={Boolean(dAvg && Math.abs(dAvg) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End median capital"
+                      a={formatMoney0(medA)}
+                      b={formatMoney0(medB)}
+                      delta={formatDeltaMoney0(dMed)}
+                      different={Boolean(dMed && Math.abs(dMed) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End worst-case (5th percentile)"
+                      a={formatMoney0(q05A)}
+                      b={formatMoney0(q05B)}
+                      delta={formatDeltaMoney0(dQ05)}
+                      different={Boolean(dQ05 && Math.abs(dQ05) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End best-case (95th percentile)"
+                      a={formatMoney0(q95A)}
+                      b={formatMoney0(q95B)}
+                      delta={formatDeltaMoney0(dQ95)}
+                      different={Boolean(dQ95 && Math.abs(dQ95) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End VaR"
+                      a={formatMoney0(varA)}
+                      b={formatMoney0(varB)}
+                      delta={formatDeltaMoney0(dVar)}
+                      different={Boolean(dVar && Math.abs(dVar) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End CVaR"
+                      a={formatMoney0(cvarA)}
+                      b={formatMoney0(cvarB)}
+                      delta={formatDeltaMoney0(dCvar)}
+                      different={Boolean(dCvar && Math.abs(dCvar) > 1e-6)}
+                    />
+                    <MetricRow
+                      label="End failure rate (negative capital %)"
+                      a={formatPct2(failA)}
+                      b={formatPct2(failB)}
+                      delta={formatDeltaPct2(dFail)}
+                      different={Boolean(dFail && Math.abs(dFail) > 1e-9)}
+                    />
+                  </div>
+                );
+              })()}
+            </>
+          )}
 
           {(runSummariesA && runSummariesB) && (
             <>
