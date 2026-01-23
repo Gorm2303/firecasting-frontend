@@ -1,31 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import SimulationProgress from '../components/SimulationProgress';
-import { diffRuns, getRunSummaries, listRuns, startSimulation, type RunDiffResponse, type RunListItem } from '../api/simulation';
-import { findScenarioById, listSavedScenarios, type SavedScenario } from '../config/savedScenarios';
-import type { SimulationTimelineContext } from '../models/types';
+import { diffRuns, getRunInput, getRunSummaries, listRuns, type RunDiffResponse, type RunListItem } from '../api/simulation';
 import type { YearlySummary } from '../models/YearlySummary';
+import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
 
 const fmt = (v: any): string => {
   if (v === null || v === undefined) return '';
   return String(v);
-};
-
-type Mode = 'runs' | 'scenarios';
-
-const computeTimelineFromScenario = (s: SavedScenario | null): SimulationTimelineContext | null => {
-  const req = s?.request;
-  if (!req?.startDate?.date) return null;
-  const types = (req.phases ?? []).map((p) => p.phaseType);
-  const months = (req.phases ?? []).map((p) => Number(p.durationInMonths) || 0);
-  const firstDeposit = req.phases?.[0]?.phaseType === 'DEPOSIT' ? Number(req.phases?.[0]?.initialDeposit) : undefined;
-  return {
-    startDate: req.startDate.date,
-    phaseTypes: types,
-    phaseDurationsInMonths: months,
-    firstPhaseInitialDeposit: Number.isFinite(firstDeposit) ? firstDeposit : undefined,
-  };
 };
 
 const pickLastEntry = (data: YearlySummary[], preferredPhase?: string): YearlySummary | null => {
@@ -96,86 +78,18 @@ const formatDeltaPct2 = (v: number | null | undefined): string => {
   return `${prefix}${Number(v).toFixed(2)}%`;
 };
 
+const toScenarioSummary = (input: unknown): ScenarioSummary | null => {
+  if (!input || typeof input !== 'object') return null;
+  const req: any = input;
+  if (!req?.startDate?.date || !Array.isArray(req?.phases)) return null;
+  try {
+    return summarizeScenario(req);
+  } catch {
+    return null;
+  }
+};
+
 const RunDiffPage: React.FC = () => {
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
-
-  // ----------------
-  // Scenario compare (saved scenarios)
-  // ----------------
-
-  const savedScenarios = useMemo(() => listSavedScenarios(), []);
-
-  const scenarioFromNavState = (location.state as any) ?? null;
-  const scenarioAFromState: SavedScenario | null = scenarioFromNavState?.scenarioA ?? null;
-  const scenarioBFromState: SavedScenario | null = scenarioFromNavState?.scenarioB ?? null;
-
-  const scenarioAIdFromQuery = searchParams.get('scenarioA') ?? '';
-  const scenarioBIdFromQuery = searchParams.get('scenarioB') ?? '';
-
-  const scenarioAResolved = scenarioAFromState ?? (scenarioAIdFromQuery ? findScenarioById(scenarioAIdFromQuery) ?? null : null);
-  const scenarioBResolved = scenarioBFromState ?? (scenarioBIdFromQuery ? findScenarioById(scenarioBIdFromQuery) ?? null : null);
-
-  const [scenarioAId, setScenarioAId] = useState<string>(scenarioAResolved?.id ?? '');
-  const [scenarioBId, setScenarioBId] = useState<string>(scenarioBResolved?.id ?? '');
-
-  const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === scenarioAId) ?? null, [savedScenarios, scenarioAId]);
-  const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === scenarioBId) ?? null, [savedScenarios, scenarioBId]);
-
-  const timelineA = useMemo(() => computeTimelineFromScenario(scenarioA), [scenarioA]);
-  const timelineB = useMemo(() => computeTimelineFromScenario(scenarioB), [scenarioB]);
-
-  const [scenarioSimAId, setScenarioSimAId] = useState<string>('');
-  const [scenarioSimBId, setScenarioSimBId] = useState<string>('');
-  const [scenarioSummariesA, setScenarioSummariesA] = useState<YearlySummary[] | null>(null);
-  const [scenarioSummariesB, setScenarioSummariesB] = useState<YearlySummary[] | null>(null);
-  const [scenarioErr, setScenarioErr] = useState<string | null>(null);
-  const [scenarioBusy, setScenarioBusy] = useState(false);
-
-  useEffect(() => {
-    if (!scenarioBusy) return;
-    if (scenarioSummariesA && scenarioSummariesB) setScenarioBusy(false);
-  }, [scenarioBusy, scenarioSummariesA, scenarioSummariesB]);
-
-  const canCompareScenarios = Boolean(scenarioA && scenarioB && scenarioA.id !== scenarioB.id && !scenarioBusy);
-
-  const startScenarioCompare = useCallback(async () => {
-    if (!scenarioA || !scenarioB) return;
-    setScenarioErr(null);
-    setScenarioBusy(true);
-    setScenarioSummariesA(null);
-    setScenarioSummariesB(null);
-
-    try {
-      const [idA, idB] = await Promise.all([
-        startSimulation(scenarioA.request),
-        startSimulation(scenarioB.request),
-      ]);
-      setScenarioSimAId(idA);
-      setScenarioSimBId(idB);
-    } catch (e: any) {
-      setScenarioErr(e?.message ?? 'Failed to start scenario comparison');
-      setScenarioBusy(false);
-    }
-  }, [scenarioA, scenarioB]);
-
-  // Auto-start if we arrived here via the Saved scenarios Compare button.
-  useEffect(() => {
-    const cameFromCompare = Boolean(scenarioAResolved && scenarioBResolved);
-    if (!cameFromCompare) return;
-    if (!scenarioAResolved || !scenarioBResolved) return;
-    // Only auto-start once.
-    if (scenarioSimAId || scenarioSimBId || scenarioSummariesA || scenarioSummariesB) return;
-    startScenarioCompare();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ----------------
-  // Run diff (persisted runs)
-  // ----------------
-
-  const [mode, setMode] = useState<Mode>(() => (scenarioAResolved && scenarioBResolved ? 'scenarios' : 'runs'));
-
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -189,6 +103,10 @@ const RunDiffPage: React.FC = () => {
 
   const [runSummariesA, setRunSummariesA] = useState<YearlySummary[] | null>(null);
   const [runSummariesB, setRunSummariesB] = useState<YearlySummary[] | null>(null);
+
+  const [inputSummaryA, setInputSummaryA] = useState<ScenarioSummary | null>(null);
+  const [inputSummaryB, setInputSummaryB] = useState<ScenarioSummary | null>(null);
+  const [inputErr, setInputErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -237,193 +155,10 @@ const RunDiffPage: React.FC = () => {
         <Link to="/simulation" style={{ textDecoration: 'none' }}>← Back</Link>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={() => setMode('runs')}
-          style={{
-            padding: '6px 10px',
-            borderRadius: 999,
-            border: '1px solid #444',
-            background: mode === 'runs' ? '#2e2e2e' : 'transparent',
-            color: '#ddd',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 650,
-          }}
-          aria-pressed={mode === 'runs'}
-        >
-          Two runs
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('scenarios')}
-          style={{
-            padding: '6px 10px',
-            borderRadius: 999,
-            border: '1px solid #444',
-            background: mode === 'scenarios' ? '#2e2e2e' : 'transparent',
-            color: '#ddd',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 650,
-          }}
-          aria-pressed={mode === 'scenarios'}
-        >
-          Two saved scenarios
-        </button>
-      </div>
-
-      {mode === 'scenarios' ? (
-        <>
-          <p style={{ opacity: 0.85, marginTop: 10 }}>
-            Select two saved scenarios and click <strong>Compare</strong>. You’ll see key metrics and charts side-by-side.
-          </p>
-
-          <div style={{
-            border: '1px solid #444', borderRadius: 12, padding: 12,
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
-          }}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario A</div>
-              <select
-                value={scenarioAId}
-                onChange={(e) => setScenarioAId(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 8 }}
-                disabled={scenarioBusy}
-              >
-                <option value="">Select…</option>
-                {savedScenarios.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario B</div>
-              <select
-                value={scenarioBId}
-                onChange={(e) => setScenarioBId(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 8 }}
-                disabled={scenarioBusy}
-              >
-                <option value="">Select…</option>
-                {savedScenarios.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {scenarioErr && (
-            <div style={{ marginTop: 12, padding: 10, borderRadius: 10, border: '1px solid #ff6b6b55', background: 'rgba(255,107,107,0.10)' }}>
-              {scenarioErr}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-            <button
-              type="button"
-              disabled={!canCompareScenarios}
-              onClick={startScenarioCompare}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: '1px solid #444',
-                cursor: canCompareScenarios ? 'pointer' : 'not-allowed',
-                opacity: canCompareScenarios ? 1 : 0.6,
-              }}
-            >
-              {scenarioBusy ? 'Starting…' : 'Compare'}
-            </button>
-            {scenarioAId && scenarioBId && scenarioAId === scenarioBId && (
-              <div style={{ fontSize: 13, opacity: 0.85 }}>Select two different scenarios.</div>
-            )}
-          </div>
-
-          {(scenarioSimAId || scenarioSimBId) && (
-            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ border: '1px solid #444', borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>{scenarioA?.name ?? 'Scenario A'}</div>
-                {scenarioSimAId && !scenarioSummariesA && (
-                  <SimulationProgress
-                    simulationId={scenarioSimAId}
-                    onComplete={(result) => {
-                      setScenarioSummariesA(result);
-                    }}
-                  />
-                )}
-                {scenarioSummariesA && (
-                  <MultiPhaseOverview data={scenarioSummariesA} timeline={timelineA} />
-                )}
-              </div>
-              <div style={{ border: '1px solid #444', borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>{scenarioB?.name ?? 'Scenario B'}</div>
-                {scenarioSimBId && !scenarioSummariesB && (
-                  <SimulationProgress
-                    simulationId={scenarioSimBId}
-                    onComplete={(result) => {
-                      setScenarioSummariesB(result);
-                    }}
-                  />
-                )}
-                {scenarioSummariesB && (
-                  <MultiPhaseOverview data={scenarioSummariesB} timeline={timelineB} />
-                )}
-              </div>
-            </div>
-          )}
-
-          {scenarioSummariesA && scenarioSummariesB && (
-            <div style={{ marginTop: 12, border: '1px solid #444', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: 12, fontWeight: 800 }}>Key metrics</div>
-
-              {(() => {
-                const lastPhaseA = scenarioA?.request?.phases?.at(-1)?.phaseType;
-                const lastPhaseB = scenarioB?.request?.phases?.at(-1)?.phaseType;
-                const lastA = pickLastEntry(scenarioSummariesA, lastPhaseA ?? undefined);
-                const lastB = pickLastEntry(scenarioSummariesB, lastPhaseB ?? undefined);
-
-                const medA = lastA ? lastA.medianCapital : null;
-                const medB = lastB ? lastB.medianCapital : null;
-                const failA = lastA ? lastA.negativeCapitalPercentage : null;
-                const failB = lastB ? lastB.negativeCapitalPercentage : null;
-
-                const dMed = medA !== null && medB !== null ? medB - medA : null;
-                const dFail = failA !== null && failB !== null ? failB - failA : null;
-
-                const fmtMoney = (v: number | null) => (v === null ? '—' : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v));
-                const fmtPct = (v: number | null) => (v === null ? '—' : `${Number(v).toFixed(2)}%`);
-                const fmtDeltaMoney = (v: number | null) => (v === null ? '' : `${v >= 0 ? '+' : ''}${fmtMoney(v)}`);
-                const fmtDeltaPct = (v: number | null) => (v === null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
-
-                return (
-                  <>
-                    <MetricRow
-                      label="End-of-sim median capital"
-                      a={fmtMoney(medA)}
-                      b={fmtMoney(medB)}
-                      delta={fmtDeltaMoney(dMed)}
-                      different={Boolean(dMed && Math.abs(dMed) > 1e-6)}
-                    />
-                    <MetricRow
-                      label="End-of-sim failure rate (negative capital %)"
-                      a={fmtPct(failA)}
-                      b={fmtPct(failB)}
-                      delta={fmtDeltaPct(dFail)}
-                      different={Boolean(dFail && Math.abs(dFail) > 1e-9)}
-                    />
-                  </>
-                );
-              })()}
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <p style={{ opacity: 0.85, marginTop: 10 }}>
-            Pick two completed (persisted) runs. The diff attributes output differences to <strong>inputs</strong>,
-            <strong> model version</strong>, and/or <strong>randomness</strong>.
-          </p>
+      <p style={{ opacity: 0.85, marginTop: 10 }}>
+        Pick two completed (persisted) runs. The diff attributes output differences to <strong>inputs</strong>,
+        <strong> model version</strong>, and/or <strong>randomness</strong>.
+      </p>
 
       <div style={{
         border: '1px solid #444', borderRadius: 12, padding: 12,
@@ -489,6 +224,9 @@ const RunDiffPage: React.FC = () => {
             setDiff(null);
             setRunSummariesA(null);
             setRunSummariesB(null);
+            setInputSummaryA(null);
+            setInputSummaryB(null);
+            setInputErr(null);
             setDiffBusy(true);
             try {
               const [d, sa, sb] = await Promise.all([
@@ -499,6 +237,23 @@ const RunDiffPage: React.FC = () => {
               setDiff(d);
               setRunSummariesA(sa);
               setRunSummariesB(sb);
+
+              const inputResults = await Promise.allSettled([
+                getRunInput(aId),
+                getRunInput(bId),
+              ]);
+
+              if (inputResults[0].status === 'fulfilled') {
+                setInputSummaryA(toScenarioSummary(inputResults[0].value));
+              } else {
+                setInputErr(inputResults[0].reason?.message ?? 'Failed to load input for Run A');
+              }
+
+              if (inputResults[1].status === 'fulfilled') {
+                setInputSummaryB(toScenarioSummary(inputResults[1].value));
+              } else {
+                setInputErr((prev) => prev ?? (inputResults[1].reason?.message ?? 'Failed to load input for Run B'));
+              }
             } catch (e: any) {
               setDiffErr(e?.message ?? 'Diff failed');
             } finally {
@@ -538,6 +293,90 @@ const RunDiffPage: React.FC = () => {
             <span>randomnessChanged: {String(Boolean(diff.attribution?.randomnessChanged))}</span>
             <span>modelVersionChanged: {String(Boolean(diff.attribution?.modelVersionChanged))}</span>
           </div>
+
+          <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
+
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Inputs</div>
+
+          {inputErr && (
+            <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, border: '1px solid #ff6b6b55', background: 'rgba(255,107,107,0.10)' }}>
+              {inputErr}
+            </div>
+          )}
+
+          {(inputSummaryA || inputSummaryB) ? (
+            <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+              <MetricRow
+                label="Start date"
+                a={inputSummaryA?.startDate || '—'}
+                b={inputSummaryB?.startDate || '—'}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.startDate !== inputSummaryB.startDate)}
+              />
+              <MetricRow
+                label="Tax rule"
+                a={inputSummaryA?.overallTaxRule || '—'}
+                b={inputSummaryB?.overallTaxRule || '—'}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.overallTaxRule !== inputSummaryB.overallTaxRule)}
+              />
+              <MetricRow
+                label="Tax %"
+                a={formatPct2(inputSummaryA?.taxPercentage)}
+                b={formatPct2(inputSummaryB?.taxPercentage)}
+                delta={inputSummaryA && inputSummaryB ? formatDeltaPct2(inputSummaryB.taxPercentage - inputSummaryA.taxPercentage) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.taxPercentage !== inputSummaryB.taxPercentage)}
+              />
+              <MetricRow
+                label="Phase count"
+                a={inputSummaryA ? String(inputSummaryA.phaseCount) : '—'}
+                b={inputSummaryB ? String(inputSummaryB.phaseCount) : '—'}
+                delta={inputSummaryA && inputSummaryB ? String(inputSummaryB.phaseCount - inputSummaryA.phaseCount) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.phaseCount !== inputSummaryB.phaseCount)}
+              />
+              <MetricRow
+                label="Total months"
+                a={inputSummaryA ? String(inputSummaryA.totalMonths) : '—'}
+                b={inputSummaryB ? String(inputSummaryB.totalMonths) : '—'}
+                delta={inputSummaryA && inputSummaryB ? String(inputSummaryB.totalMonths - inputSummaryA.totalMonths) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.totalMonths !== inputSummaryB.totalMonths)}
+              />
+              <MetricRow
+                label="Phase pattern"
+                a={inputSummaryA?.phasePattern || '—'}
+                b={inputSummaryB?.phasePattern || '—'}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.phasePattern !== inputSummaryB.phasePattern)}
+              />
+              <MetricRow
+                label="Total initial deposit"
+                a={formatMoney0(inputSummaryA?.totalInitialDeposit)}
+                b={formatMoney0(inputSummaryB?.totalInitialDeposit)}
+                delta={inputSummaryA && inputSummaryB ? formatDeltaMoney0(inputSummaryB.totalInitialDeposit - inputSummaryA.totalInitialDeposit) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.totalInitialDeposit !== inputSummaryB.totalInitialDeposit)}
+              />
+              <MetricRow
+                label="Total monthly deposits"
+                a={formatMoney0(inputSummaryA?.totalMonthlyDeposits)}
+                b={formatMoney0(inputSummaryB?.totalMonthlyDeposits)}
+                delta={inputSummaryA && inputSummaryB ? formatDeltaMoney0(inputSummaryB.totalMonthlyDeposits - inputSummaryA.totalMonthlyDeposits) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.totalMonthlyDeposits !== inputSummaryB.totalMonthlyDeposits)}
+              />
+              <MetricRow
+                label="Total withdrawals"
+                a={formatMoney0(inputSummaryA?.totalWithdrawAmount)}
+                b={formatMoney0(inputSummaryB?.totalWithdrawAmount)}
+                delta={inputSummaryA && inputSummaryB ? formatDeltaMoney0(inputSummaryB.totalWithdrawAmount - inputSummaryA.totalWithdrawAmount) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.totalWithdrawAmount !== inputSummaryB.totalWithdrawAmount)}
+              />
+              <MetricRow
+                label="Withdraw-rate phases"
+                a={inputSummaryA ? String(inputSummaryA.withdrawRatePhaseCount) : '—'}
+                b={inputSummaryB ? String(inputSummaryB.withdrawRatePhaseCount) : '—'}
+                delta={inputSummaryA && inputSummaryB ? String(inputSummaryB.withdrawRatePhaseCount - inputSummaryA.withdrawRatePhaseCount) : ''}
+                different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.withdrawRatePhaseCount !== inputSummaryB.withdrawRatePhaseCount)}
+              />
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>
+          )}
 
           <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
 
@@ -672,8 +511,6 @@ const RunDiffPage: React.FC = () => {
             </>
           )}
         </div>
-      )}
-        </>
       )}
     </div>
   );

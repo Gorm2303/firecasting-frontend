@@ -198,6 +198,16 @@ export async function getRunSummaries(runId: string): Promise<YearlySummary[]> {
   return (await res.json()) as YearlySummary[];
 }
 
+export async function getRunInput(runId: string): Promise<unknown> {
+  const res = await fetch(`${BASE_URL}/runs/${encodeURIComponent(runId)}/input`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) throw new Error('Run input not found (or not persisted).');
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as unknown;
+}
+
 export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffResponse> {
   const res = await fetch(
     `${BASE_URL}/diff/${encodeURIComponent(runAId)}/${encodeURIComponent(runBId)}`,
