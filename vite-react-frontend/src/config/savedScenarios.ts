@@ -5,6 +5,7 @@ export type SavedScenario = {
   name: string;
   savedAt: string;
   request: SimulationRequest;
+  runId?: string | null;
 };
 
 const STORAGE_KEY = 'firecasting:savedScenarios:v1';
@@ -36,7 +37,7 @@ export function listSavedScenarios(): SavedScenario[] {
     .filter((x) => !!x && typeof x.id === 'string' && typeof x.name === 'string' && !!x.request);
 }
 
-export function saveScenario(name: string, request: SimulationRequest, id?: string): SavedScenario {
+export function saveScenario(name: string, request: SimulationRequest, id?: string, runId?: string | null): SavedScenario {
   if (typeof window === 'undefined') throw new Error('Cannot save scenario outside browser');
 
   const trimmed = name.trim();
@@ -50,6 +51,7 @@ export function saveScenario(name: string, request: SimulationRequest, id?: stri
     name: trimmed,
     savedAt: now,
     request,
+    runId: runId ?? undefined,
   };
 
   const withoutSameId = scenarios.filter((s) => s.id !== scenario.id);

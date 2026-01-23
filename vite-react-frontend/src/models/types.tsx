@@ -16,6 +16,8 @@ export interface SimulationRequest {
   overallTaxRule: 'CAPITAL' | 'NOTIONAL';
   taxPercentage: number;
   phases: PhaseRequest[];
+  /** Optional RNG seed for reproducibility in normal mode. */
+  seed?: number;
 }
 
 // UI-only helper: enough info to compute where each phase starts on a calendar.

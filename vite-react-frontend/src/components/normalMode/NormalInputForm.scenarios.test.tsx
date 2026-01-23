@@ -3,11 +3,32 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
     startAdvancedSimulation: vi.fn().mockResolvedValue('test-sim-id'),
     exportSimulationCsv: vi.fn(),
+    findRunForInput: vi.fn().mockResolvedValue(null),
+  };
+});
+
+vi.mock('../SimulationProgress', () => {
+  return {
+    __esModule: true,
+    default: ({ onComplete }: any) => {
+      if (typeof onComplete === 'function') Promise.resolve().then(() => onComplete([]));
+      return null;
+    },
   };
 });
 
@@ -118,8 +139,9 @@ describe('NormalInputForm scenarios', () => {
     expect(lastCallArg).toEqual(request);
   });
 
-  it('compares two saved scenarios and highlights differences', async () => {
+  it('navigates to diff page with two saved scenarios', async () => {
     window.localStorage.clear();
+    navigateMock.mockClear();
 
     saveScenario(
       'Scenario A',
@@ -165,28 +187,51 @@ describe('NormalInputForm scenarios', () => {
     });
 
     const getOptionValue = (select: HTMLSelectElement, optionText: string) => {
-      const opt = Array.from(select.options).find((o) => o.text === optionText);
-      return opt?.value ?? '';
+      const match = Array.from(select.options).find((o) => o.textContent?.includes(optionText));
+      return match?.value ?? '';
     };
 
     const aId = getOptionValue(primarySelect, 'Scenario A');
-    const bId = getOptionValue(primarySelect, 'Scenario B');
-    expect(aId).not.toBe('');
-    expect(bId).not.toBe('');
+    const bId = getOptionValue(compareSelect, 'Scenario B');
 
     fireEvent.change(primarySelect, { target: { value: aId } });
     fireEvent.change(compareSelect, { target: { value: bId } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: /Compare scenarios/i }));
 
-    const taxRow = within(dialog).getByTestId('compare-row-taxPercentage');
-    expect(taxRow).toHaveAttribute('data-different', 'true');
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalled();
+    });
 
-    expect(within(dialog).getByTestId('compare-taxPercentage-a')).toHaveTextContent('25');
-    expect(within(dialog).getByTestId('compare-taxPercentage-b')).toHaveTextContent('30');
+    const [path] = navigateMock.mock.calls.at(-1) ?? [];
+    expect(String(path)).toContain('/simulation/diff');
+    expect(String(path)).toContain(`scenarioA=${encodeURIComponent(aId)}`);
+    expect(String(path)).toContain(`scenarioB=${encodeURIComponent(bId)}`);
+  });
 
-    // Timeline should render for both sides.
-    expect(within(dialog).getByTestId('compare-timeline-a')).toBeInTheDocument();
-    expect(within(dialog).getByTestId('compare-timeline-b')).toBeInTheDocument();
+  it('stores runId when saving after a run', async () => {
+    window.localStorage.clear();
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(<SimulationForm ref={ref} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+
+    await waitFor(() => {
+      expect(startSimulation).toHaveBeenCalled();
+    });
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Scenario With Run');
+    fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
+    promptSpy.mockRestore();
+
+    const raw = window.localStorage.getItem('firecasting:savedScenarios:v1');
+    expect(raw).toBeTruthy();
+    const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>
+    expect(scenarios[0]?.runId).toBe('test-sim-id');
   });
 });

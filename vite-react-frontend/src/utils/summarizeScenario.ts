@@ -1,5 +1,56 @@
 import type { PhaseRequest, SimulationRequest } from '../models/types';
 
+export type PhaseSummary = {
+  index: number;
+  phaseType: PhaseRequest['phaseType'];
+  durationInMonths: number;
+  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  taxExemptionsActive?: {
+    card: boolean;
+    stock: boolean;
+    any: boolean;
+  };
+  // Per-phase tax exemption details (from global TaxExemptionConfig)
+  taxExemptions?: {
+    exemptionCard?: { limit?: number; yearlyIncrease?: number };
+    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
+  };
+  // DEPOSIT-specific fields
+  initialDeposit?: number;
+  monthlyDeposit?: number;
+  yearlyIncreaseInPercentage?: number;
+  depositTotal?: number; // initialDeposit + (monthlyDeposit * durationInMonths)
+  // WITHDRAW-specific fields
+  withdrawAmount?: number;
+  withdrawRate?: number;
+  withdrawTotal?: number; // withdrawAmount * durationInMonths (approximation)
+  lowerVariationPercentage?: number;
+  upperVariationPercentage?: number;
+  // PASSIVE has no additional fields beyond durationInMonths
+};
+
+export type AdvancedModeSummary = {
+  returnType?: string;
+  seed?: number | null;
+  inflationFactor?: number;
+  yearlyFeePercentage?: number;
+  taxExemptionConfig?: {
+    exemptionCard?: { limit?: number; yearlyIncrease?: number };
+    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
+  };
+  // Returner config details
+  simpleAveragePercentage?: number;
+  distributionType?: string;
+  normalMean?: number;
+  normalStdDev?: number;
+  brownianDrift?: number;
+  brownianVolatility?: number;
+  studentMu?: number;
+  studentSigma?: number;
+  studentNu?: number;
+  regimeTickMonths?: number;
+};
+
 export type ScenarioSummary = {
   startDate: string;
   overallTaxRule: SimulationRequest['overallTaxRule'];
@@ -11,6 +62,9 @@ export type ScenarioSummary = {
   totalMonthlyDeposits: number;
   totalWithdrawAmount: number;
   withdrawRatePhaseCount: number;
+  phases: PhaseSummary[];
+  // Advanced mode details (included even for normal mode runs)
+  advancedMode?: AdvancedModeSummary;
 };
 
 export type ScenarioTimelineSegment = {
@@ -23,6 +77,14 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Frontend fallback defaults for tax exemptions when not provided by backend
+function getDefaultTaxExemptionConfig() {
+  return {
+    exemptionCard: { limit: 51600, yearlyIncrease: 1000 },
+    stockExemption: { taxRate: 27, limit: 67500, yearlyIncrease: 1000 },
+  } as AdvancedModeSummary['taxExemptionConfig'];
+}
+
 export function getTimelineSegments(req: SimulationRequest): ScenarioTimelineSegment[] {
   return (req.phases ?? []).map((p) => ({
     phaseType: p.phaseType,
@@ -30,24 +92,65 @@ export function getTimelineSegments(req: SimulationRequest): ScenarioTimelineSeg
   }));
 }
 
-export function summarizeScenario(req: SimulationRequest): ScenarioSummary {
-  const phases = req.phases ?? [];
+export function summarizePhase(phase: PhaseRequest, index: number, taxExemptionConfig?: any): PhaseSummary {
+  const taxRules = phase.taxRules ?? [];
+  const cardActive = taxRules.includes('EXEMPTIONCARD');
+  const stockActive = taxRules.includes('STOCKEXEMPTION');
 
-  const totalMonths = phases.reduce((s, p) => s + toNum(p.durationInMonths), 0);
+  const summary: PhaseSummary = {
+    index,
+    phaseType: phase.phaseType,
+    durationInMonths: toNum(phase.durationInMonths),
+    taxRules,
+    taxExemptionsActive: {
+      card: cardActive,
+      stock: stockActive,
+      any: cardActive || stockActive,
+    },
+    taxExemptions: taxExemptionConfig,
+  };
+
+  if (phase.phaseType === 'DEPOSIT') {
+    summary.initialDeposit = toNum(phase.initialDeposit);
+    summary.monthlyDeposit = toNum(phase.monthlyDeposit);
+    summary.yearlyIncreaseInPercentage = toNum(phase.yearlyIncreaseInPercentage);
+    summary.depositTotal = summary.initialDeposit + summary.monthlyDeposit * summary.durationInMonths;
+  } else if (phase.phaseType === 'WITHDRAW') {
+    summary.withdrawAmount = toNum(phase.withdrawAmount);
+    summary.withdrawRate = toNum(phase.withdrawRate);
+    summary.withdrawTotal = summary.withdrawAmount * summary.durationInMonths;
+    summary.lowerVariationPercentage = toNum(phase.lowerVariationPercentage);
+    summary.upperVariationPercentage = toNum(phase.upperVariationPercentage);
+  }
+  // PASSIVE phase: only has durationInMonths and taxRules
+
+  return summary;
+}
+
+export function summarizeScenario(req: any): ScenarioSummary {
+  const phases = req.phases ?? [];
+  const startDate = resolveStartDate(req?.startDate);
+
+  const totalMonths = phases.reduce((s: number, p: any) => s + toNum(p.durationInMonths), 0);
   const phaseCount = phases.length;
   const phasePattern = phases
-    .map((p) => (p.phaseType === 'DEPOSIT' ? 'D' : p.phaseType === 'WITHDRAW' ? 'W' : 'P'))
+    .map((p: any) => (p.phaseType === 'DEPOSIT' ? 'D' : p.phaseType === 'WITHDRAW' ? 'W' : 'P'))
     .join('-');
 
-  const totalInitialDeposit = phases.reduce((s, p) => s + toNum(p.initialDeposit), 0);
+  const totalInitialDeposit = phases.reduce((s: number, p: any) => s + toNum(p.initialDeposit), 0);
 
   // Best-effort totals for constant monthly amounts. This ignores growth/variation.
-  const totalMonthlyDeposits = phases.reduce((s, p) => s + toNum(p.monthlyDeposit) * toNum(p.durationInMonths), 0);
-  const totalWithdrawAmount = phases.reduce((s, p) => s + toNum(p.withdrawAmount) * toNum(p.durationInMonths), 0);
-  const withdrawRatePhaseCount = phases.filter((p) => toNum(p.withdrawRate) > 0).length;
+  const totalMonthlyDeposits = phases.reduce((s: number, p: any) => s + toNum(p.monthlyDeposit) * toNum(p.durationInMonths), 0);
+  const totalWithdrawAmount = phases.reduce((s: number, p: any) => s + toNum(p.withdrawAmount) * toNum(p.durationInMonths), 0);
+  const withdrawRatePhaseCount = phases.filter((p: any) => toNum(p.withdrawRate) > 0).length;
+
+  // Extract advanced mode details (present for both normal and advanced requests)
+  const advancedMode = extractAdvancedModeDetails(req);
+  // Ensure tax exemption defaults are present in per-phase details
+  const taxExemptionConfig = req.taxExemptionConfig ?? getDefaultTaxExemptionConfig();
 
   return {
-    startDate: req.startDate?.date ?? '',
+    startDate,
     overallTaxRule: req.overallTaxRule,
     taxPercentage: toNum(req.taxPercentage),
     phaseCount,
@@ -57,5 +160,46 @@ export function summarizeScenario(req: SimulationRequest): ScenarioSummary {
     totalMonthlyDeposits,
     totalWithdrawAmount,
     withdrawRatePhaseCount,
+    phases: phases.map((p: any, idx: number) => summarizePhase(p, idx, taxExemptionConfig)),
+    advancedMode: advancedMode && Object.keys(advancedMode).length > 0 ? advancedMode : undefined,
+  };
+}
+
+function resolveStartDate(startDate: any): string {
+  if (!startDate) return '';
+  if (typeof startDate?.date === 'string' && startDate.date.trim()) return startDate.date;
+  const y = Number(startDate?.year);
+  const m = Number(startDate?.month);
+  const d = Number(startDate?.dayOfMonth);
+  if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+    const mm = String(m).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    return `${y}-${mm}-${dd}`;
+  }
+  return '';
+}
+
+function extractAdvancedModeDetails(req: any): AdvancedModeSummary | null {
+  const returnerConfig = req.returnerConfig;
+  const distribution = returnerConfig?.distribution;
+  const taxCfg = req.taxExemptionConfig ?? getDefaultTaxExemptionConfig();
+
+  return {
+    returnType: req.returnType,
+    seed: req.seed ?? returnerConfig?.seed,
+    inflationFactor: req.inflationFactor,
+    yearlyFeePercentage: req.yearlyFeePercentage,
+    taxExemptionConfig: taxCfg,
+    // Returner config fields
+    simpleAveragePercentage: returnerConfig?.simpleAveragePercentage,
+    distributionType: distribution?.type,
+    normalMean: distribution?.normal?.mean,
+    normalStdDev: distribution?.normal?.standardDeviation,
+    brownianDrift: distribution?.brownianMotion?.drift,
+    brownianVolatility: distribution?.brownianMotion?.volatility,
+    studentMu: distribution?.studentT?.mu,
+    studentSigma: distribution?.studentT?.sigma,
+    studentNu: distribution?.studentT?.nu,
+    regimeTickMonths: distribution?.regimeBased?.tickMonths,
   };
 }

@@ -1,10 +1,11 @@
 // src/features/simulation/SimulationForm.tsx
 import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import SimulationProgress from '../../components/SimulationProgress';
-import { startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
+import { findRunForInput, startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
 import {
@@ -21,6 +22,8 @@ import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeSce
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
 
+const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
 type ReturnType = 'dataDrivenReturn' | 'distributionReturn' | 'simpleReturn';
@@ -31,24 +34,47 @@ type AdvancedOptionsLoad = {
   enabled?: boolean;
   inflationAveragePct?: number;
   yearlyFeePercentage?: number;
-  taxExemptionConfig?: {
-    exemptionCard?: { limit?: number; yearlyIncrease?: number };
-    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
-  };
-  returnerConfig?: AdvancedSimulationRequest['returnerConfig'];
   returnType?: ReturnType;
-  seed?: string | number;
+  seed?: number | string;
+  simpleAveragePercentage?: number | string;
+  distributionType?: DistributionType;
+  normalMean?: number | string;
+  normalStdDev?: number | string;
+  brownianDrift?: number | string;
+  brownianVolatility?: number | string;
+  studentMu?: number | string;
+  studentSigma?: number | string;
+  studentNu?: number | string;
+  regimeTickMonths?: number | string;
+  regimes?: Array<{
+    distributionType?: 'normal' | 'studentT';
+    expectedDurationMonths?: number | string;
+    toRegime0?: number | string;
+    toRegime1?: number | string;
+    toRegime2?: number | string;
+    normalMean?: number | string;
+    normalStdDev?: number | string;
+    studentMu?: number | string;
+    studentSigma?: number | string;
+    studentNu?: number | string;
+  }>;
+  returnerConfig?: AdvancedSimulationRequest['returnerConfig'];
+  taxExemptionConfig?: AdvancedSimulationRequest['taxExemptionConfig'];
+  exemptionCardLimit?: number | string;
+  exemptionCardYearlyIncrease?: number | string;
+  stockExemptionTaxRate?: number | string;
+  stockExemptionLimit?: number | string;
+  stockExemptionYearlyIncrease?: number | string;
 };
 
-const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+// Keep advanced payload tax rule aligned with the normal endpoint casing so reproducibility works across modes.
+const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule === 'NOTIONAL' ? 'NOTIONAL' : 'CAPITAL');
 
-const toNumOrUndef = (v: any): number | undefined => {
-  if (v === '' || v === null || v === undefined) return undefined;
+const toNumOrUndef = (v: unknown): number | undefined => {
+  if (v === null || v === undefined || v === '') return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 };
-
-const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule === 'NOTIONAL' ? 'notional' : 'capital');
 
 const parseReturnType = (v: any): ReturnType => {
   const s = String(v ?? '').trim();
@@ -213,6 +239,7 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
 },
 ref
 ) {
+  const navigate = useNavigate();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
@@ -412,11 +439,15 @@ ref
   >(initialAdvancedState.regimes);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
-  const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => ({
-    ...initialDefaults,
-    startDate: { date: initialDefaults.startDate.date },
-    phases: initialDefaults.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
-  }));
+  const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => {
+    const seedNum = toNumOrUndef(initialAdvancedState.seed);
+    return {
+      ...initialDefaults,
+      startDate: { date: initialDefaults.startDate.date },
+      phases: initialDefaults.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      ...(seedNum !== undefined ? { seed: seedNum } : {}),
+    };
+  });
 
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
@@ -427,6 +458,9 @@ ref
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [lastCompletedRun, setLastCompletedRun] = useState<{ id: string; request: SimulationRequest } | null>(null);
+  const lastRunRequestRef = useRef<SimulationRequest | null>(null);
+  const lastRunWasNormalRef = useRef<boolean>(false);
 
   const advancedMode = mode === 'advanced';
 
@@ -453,13 +487,29 @@ ref
     }
   }, []);
 
-  const handleAddPhase = (phase: PhaseRequest) => setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
-  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) =>
+  const hasUserEditedRef = useRef(false);
+  const markUserEdited = useCallback(() => {
+    hasUserEditedRef.current = true;
+  }, []);
+
+  const handleAddPhase = (phase: PhaseRequest) => {
+    markUserEdited();
+    setPhases(prev => [...prev, { ...phase, taxRules: phase.taxRules || [] }]);
+  };
+  const handlePhaseChange = (index: number, field: keyof PhaseRequest, value: number | string | undefined) => {
+    markUserEdited();
     setPhases(phs => phs.map((p, i) => (i === index ? { ...p, [field]: value as any } : p)));
-  const handlePhaseReplace = (index: number, phase: PhaseRequest) =>
+  };
+  const handlePhaseReplace = (index: number, phase: PhaseRequest) => {
+    markUserEdited();
     setPhases(phs => phs.map((p, i) => (i === index ? { ...phase, taxRules: phase.taxRules ?? [] } : p)));
-  const handlePhaseRemove = (index: number) => setPhases(phs => phs.filter((_, i) => i !== index));
-  const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') =>
+  };
+  const handlePhaseRemove = (index: number) => {
+    markUserEdited();
+    setPhases(phs => phs.filter((_, i) => i !== index));
+  };
+  const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') => {
+    markUserEdited();
     setPhases(phs =>
       phs.map((p, i) => {
         if (i !== index) return p;
@@ -469,26 +519,35 @@ ref
         return { ...p, taxRules: updated };
       })
     );
+  };
 
   const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
   const overLimit = totalMonths > MAX_MONTHS;
 
   const currentRequest = useMemo<SimulationRequest>(() => {
+    const seedNum = toNumOrUndef(seed);
     return {
       startDate: { date: startDate },
       overallTaxRule,
       taxPercentage,
       phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      ...(seedNum !== undefined ? { seed: seedNum } : {}),
     };
-  }, [startDate, overallTaxRule, taxPercentage, phases]);
+  }, [startDate, overallTaxRule, taxPercentage, phases, seed]);
 
   const isDirty = useMemo(() => !deepEqual(currentRequest, baselineRequest), [currentRequest, baselineRequest]);
 
   const applyRequestToForm = useCallback((req: SimulationRequest) => {
+    hasUserEditedRef.current = false;
     setStartDate(req.startDate.date);
     setOverallTaxRule(req.overallTaxRule);
     setTaxPercentage(req.taxPercentage);
     setPhases(req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+    if (req.seed !== undefined && req.seed !== null) {
+      setSeed(String(req.seed));
+    } else {
+      setSeed('');
+    }
     setBaselineRequest({
       ...req,
       startDate: { date: req.startDate.date },
@@ -827,24 +886,33 @@ ref
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [closeScenarioModal, isScenarioModalOpen]);
 
-  const handleSaveScenario = useCallback(() => {
+  const handleSaveScenario = useCallback(async () => {
     const name = window.prompt('Scenario name?');
     if (!name) return;
+
+    const matchingLastRunId = lastCompletedRun && deepEqual(lastCompletedRun.request, currentRequest)
+      ? lastCompletedRun.id
+      : undefined;
+
+    const resolvedRunId = matchingLastRunId
+      ?? (simulationId
+        ? simulationId
+        : await findRunForInput(currentRequest).catch(() => null));
 
     const existing = findScenarioByName(name);
     if (existing) {
       const ok = window.confirm(`Overwrite existing scenario "${existing.name}"?`);
       if (!ok) return;
-      const saved = saveScenario(existing.name, currentRequest, existing.id);
+      const saved = saveScenario(existing.name, currentRequest, existing.id, resolvedRunId ?? existing.runId ?? undefined);
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
       return;
     }
 
-    const saved = saveScenario(name, currentRequest);
+    const saved = saveScenario(name, currentRequest, undefined, resolvedRunId ?? undefined);
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
-  }, [currentRequest, refreshSavedScenarios]);
+  }, [currentRequest, refreshSavedScenarios, simulationId, lastCompletedRun]);
 
   const runSimulationWithRequest = useCallback(async (req: SimulationRequest) => {
     const total = (req.phases ?? []).reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
@@ -862,14 +930,18 @@ ref
         startDate: { date: req.startDate.date },
         phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
       };
+      lastRunRequestRef.current = sanitized;
 
       if (!advancedEnabled) {
         const id = await startSimulation(sanitized);
+        lastRunWasNormalRef.current = true;
         setSimulationId(id);
         return;
       }
 
-      const seedNum = returnModelFeatureOn ? toNumOrUndef(seed) : undefined;
+      // Always honor a provided seed, even if return-model features are off, so reproducibility
+      // works across normal vs advanced modes and dedup hashing differs when the seed differs.
+      const seedNum = toNumOrUndef(seed);
       const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
       const yearlyFeePercentageToSend = feeFeatureOn ? (Number(yearlyFeePercentage) || 0) : undefined;
 
@@ -953,20 +1025,18 @@ ref
       }
 
       const hasReturnerConfig =
-        returnModelFeatureOn && (
-          rc.seed !== undefined ||
+        (rc.seed !== undefined) ||
+        (returnModelFeatureOn && (
           rc.simpleAveragePercentage !== undefined ||
           rc.distribution?.type !== undefined
-        );
+        ));
 
       const inflationEquivalentToNormal = !inflationFeatureOn || (inflationFactorToSend !== undefined && Math.abs(inflationFactorToSend - 1.02) < 1e-12);
       const yearlyFeeEquivalentToNormal = !feeFeatureOn || (yearlyFeePercentageToSend !== undefined && Math.abs(yearlyFeePercentageToSend) < 1e-12);
       const returnerEquivalentToNormal =
-        !returnModelFeatureOn || (
-          returnTypeToSend === 'dataDrivenReturn' &&
-          seedNum === undefined &&
-          !hasReturnerConfig
-        );
+        returnTypeToSend === 'dataDrivenReturn' &&
+        seedNum === undefined &&
+        !hasReturnerConfig;
       const taxEquivalentToNormal = !exemptionsFeatureOn || taxExemptionConfig === undefined;
 
       // Backend dedup is based on the *input DTO* (normal vs advanced), so even if the
@@ -981,6 +1051,7 @@ ref
 
       if (shouldUseNormalEndpointForDedup) {
         const id = await startSimulation(sanitized);
+        lastRunWasNormalRef.current = true;
         setSimulationId(id);
         return;
       }
@@ -990,7 +1061,7 @@ ref
         phases: sanitized.phases,
         overallTaxRule: mapOverallTaxRuleForAdvanced(sanitized.overallTaxRule),
         taxPercentage: sanitized.taxPercentage,
-        ...(returnModelFeatureOn
+        ...((returnModelFeatureOn || seedNum !== undefined)
           ? {
               returnType: returnTypeToSend,
               seed: seedNum,
@@ -1003,6 +1074,7 @@ ref
       };
 
       const id = await startAdvancedSimulation(advReq);
+      lastRunWasNormalRef.current = false;
       setSimulationId(id);
     } catch (err) {
       alert((err as Error).message);
@@ -1098,10 +1170,11 @@ ref
     }
   }, [isDirty, selectedTemplateId]);
 
-  const applyTemplate = useCallback((templateId: SimulationTemplateId) => {
+  const applyTemplate = useCallback((templateId: SimulationTemplateId, opts?: { confirmOverwrite?: boolean }) => {
     const template = getTemplateById(templateId);
 
-    if (templateId !== 'custom' && isDirty) {
+    const shouldConfirm = opts?.confirmOverwrite !== false;
+    if (shouldConfirm && templateId !== 'custom' && isDirty && hasUserEditedRef.current) {
       const ok = window.confirm('Applying a template will overwrite your current inputs. Continue?');
       if (!ok) return;
     }
@@ -1113,12 +1186,19 @@ ref
     }
 
     const resolved = resolveTemplateToRequest(template);
+    hasUserEditedRef.current = false;
+    const seedNum = toNumOrUndef(seed);
     setStartDate(resolved.startDate.date);
     setOverallTaxRule(resolved.overallTaxRule);
     setTaxPercentage(resolved.taxPercentage);
     setPhases(resolved.phases);
-    setBaselineRequest(resolved);
-  }, [isDirty]);
+    setBaselineRequest({
+      ...resolved,
+      startDate: { date: resolved.startDate.date },
+      phases: resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      ...(seedNum !== undefined ? { seed: seedNum } : {}),
+    });
+  }, [isDirty, seed]);
 
   const hasAppliedInitialTemplateRef = useRef(false);
   useEffect(() => {
@@ -1126,7 +1206,7 @@ ref
     hasAppliedInitialTemplateRef.current = true;
 
     if (scenarioParamOnLoad) return;
-    applyTemplate(selectedTemplateId); // Apply starter template on first load
+    applyTemplate(selectedTemplateId, { confirmOverwrite: false }); // Apply starter template on first load
   }, [applyTemplate, scenarioParamOnLoad, selectedTemplateId]);
 
   const hasAppliedScenarioFromUrlRef = useRef(false);
@@ -1252,7 +1332,7 @@ ref
               <input
                 type="date"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => { markUserEdited(); setStartDate(e.target.value); }}
                 style={inputStyle}
               />
               <InfoTooltip label="Info: Start date">
@@ -1309,7 +1389,7 @@ ref
             <div style={rowStyle}>
               <select
                 value={overallTaxRule}
-                onChange={e => setOverallTaxRule(e.target.value as OverallTaxRule)}
+                onChange={e => { markUserEdited(); setOverallTaxRule(e.target.value as OverallTaxRule); }}
                 style={inputStyle}
               >
                 <option value="CAPITAL">Capital Gains</option>
@@ -1328,7 +1408,7 @@ ref
                 type="number"
                 step="0.01"
                 value={taxPercentage}
-                onChange={e => setTaxPercentage(+e.target.value)}
+                onChange={e => { markUserEdited(); setTaxPercentage(+e.target.value); }}
                 style={inputStyle}
               />
               <InfoTooltip label="Info: Tax percentage">
@@ -1449,7 +1529,7 @@ ref
               <label className="fc-field-row" style={{ marginBottom: 10 }}>
                 <span className="fc-field-label">RNG seed (optional)</span>
                 <div className="fc-field-control">
-                  <input type="number" step="1" value={seed} onChange={(e) => setSeed(e.target.value)} style={inputStyle} />
+                  <input type="number" step="1" value={seed} onChange={(e) => { markUserEdited(); setSeed(e.target.value); }} style={inputStyle} />
                 </div>
                 <div className="fc-field-info">
                   <InfoTooltip label="(i)">
@@ -1819,6 +1899,10 @@ ref
             setSimulateInProgress(false);
             setSimulationId(null);
 
+            if (completedId && lastRunRequestRef.current) {
+              setLastCompletedRun({ id: completedId, request: lastRunRequestRef.current });
+            }
+
             const inflationFactorPerYear = inflationFeatureOn
               ? 1 + (Number(inflationAveragePct) || 0) / 100
               : 1.02;
@@ -1940,9 +2024,11 @@ ref
                 aria-label="Compare scenarios"
                 title="Compare the two selected scenarios"
                 onClick={() => {
-                  setShowScenarioCompare(true);
-                  setShareUrl('');
-                  setDidCopyShareUrl(false);
+                  if (!scenarioA || !scenarioB) return;
+
+                  const q = new URLSearchParams({ scenarioA: scenarioA.id, scenarioB: scenarioB.id }).toString();
+                  closeScenarioModal();
+                  navigate(`/simulation/diff?${q}`);
                 }}
                 disabled={!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress}
                 style={btn(!selectedScenarioId || !compareScenarioId || selectedScenarioId === compareScenarioId || simulateInProgress ? 'disabled' : 'ghost')}
