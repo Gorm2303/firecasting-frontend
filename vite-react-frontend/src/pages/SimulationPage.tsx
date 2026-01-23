@@ -493,7 +493,7 @@ const SimulationPage: React.FC = () => {
             padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
             textDecoration:'none', color:'inherit',
           }}>
-            Diff runs
+            Diff scenarios
           </Link>
           <div role="group" aria-label="Mode" className="fc-sim-mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {modeButton('Normal', 'normal', () => {
