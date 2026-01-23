@@ -193,12 +193,12 @@ const RunDiffPage: React.FC = () => {
               if (!scenarioA || !scenarioB) throw new Error('Select two saved scenarios.');
 
               const [runA, runB] = await Promise.all([
-                findRunForInput(scenarioA.request),
-                findRunForInput(scenarioB.request),
+                scenarioA.runId ? Promise.resolve(scenarioA.runId) : findRunForInput(scenarioA.request),
+                scenarioB.runId ? Promise.resolve(scenarioB.runId) : findRunForInput(scenarioB.request),
               ]);
 
               if (!runA || !runB) {
-                setLookupErr('One or both scenarios have no persisted run. Run them once and try again.');
+                setLookupErr('One or both scenarios have no persisted run. Run them once, then save (or re-save) the scenario and try again.');
                 return;
               }
 

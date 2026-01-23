@@ -5,7 +5,7 @@ import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import SimulationProgress from '../../components/SimulationProgress';
-import { startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
+import { findRunForInput, startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
 import {
@@ -853,24 +853,28 @@ ref
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [closeScenarioModal, isScenarioModalOpen]);
 
-  const handleSaveScenario = useCallback(() => {
+  const handleSaveScenario = useCallback(async () => {
     const name = window.prompt('Scenario name?');
     if (!name) return;
+
+    const resolvedRunId = simulationId
+      ? simulationId
+      : await findRunForInput(currentRequest).catch(() => null);
 
     const existing = findScenarioByName(name);
     if (existing) {
       const ok = window.confirm(`Overwrite existing scenario "${existing.name}"?`);
       if (!ok) return;
-      const saved = saveScenario(existing.name, currentRequest, existing.id);
+      const saved = saveScenario(existing.name, currentRequest, existing.id, resolvedRunId ?? existing.runId ?? undefined);
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
       return;
     }
 
-    const saved = saveScenario(name, currentRequest);
+    const saved = saveScenario(name, currentRequest, undefined, resolvedRunId ?? undefined);
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
-  }, [currentRequest, refreshSavedScenarios]);
+  }, [currentRequest, refreshSavedScenarios, simulationId]);
 
   const runSimulationWithRequest = useCallback(async (req: SimulationRequest) => {
     const total = (req.phases ?? []).reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);

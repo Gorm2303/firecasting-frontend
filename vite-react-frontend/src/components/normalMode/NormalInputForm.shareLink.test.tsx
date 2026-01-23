@@ -8,6 +8,7 @@ vi.mock('../../api/simulation', () => {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
     startAdvancedSimulation: vi.fn().mockResolvedValue('test-sim-id'),
     exportSimulationCsv: vi.fn(),
+    findRunForInput: vi.fn().mockResolvedValue(null),
   };
 });
 
