@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import { diffRuns, findRunForInput, getRunSummaries, getRunInput, type RunDiffResponse } from '../api/simulation';
-import { listSavedScenarios, type SavedScenario } from '../config/savedScenarios';
+import { diffRuns, findRunForInput, getCompletedSummaries, getRunInput, getRunSummaries, listRuns, startAdvancedSimulation, type RunDiffResponse, type RunListItem, type StartRunResponse } from '../api/simulation';
+import SimulationProgress from '../components/SimulationProgress';
+import { isRandomSeedRequested, listSavedScenarios, materializeRandomSeedIfNeeded, saveScenario, updateScenarioRunMeta, type SavedScenario } from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
+import { deepEqual } from '../utils/deepEqual';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
 
 const fmt = (v: any): string => {
@@ -119,18 +121,137 @@ const formatTaxExemptionsActive = (phase?: ScenarioSummary['phases'][number]): s
 };
 
 const toScenarioSummary = (scenario: SavedScenario | null): ScenarioSummary | null => {
-  if (!scenario?.request) return null;
   try {
-    return summarizeScenario(scenario.request);
+    if (!scenario?.advancedRequest) return null;
+    // Always summarize from advancedRequest so returnType/seed/inflation/yearlyFee/etc are present.
+    return summarizeScenario(scenario.advancedRequest);
   } catch {
     return null;
   }
 };
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
+
+const isRandomRequested = (scenario: SavedScenario): boolean => isRandomSeedRequested(scenario.advancedRequest);
+
+const waitForSummaries = async (simulationId: string, timeoutMs = 180_000): Promise<YearlySummary[]> => {
+  const started = Date.now();
+  // /progress returns 404 until completed.
+  for (;;) {
+    const summaries = await getCompletedSummaries(simulationId);
+    if (summaries) return summaries;
+    if (Date.now() - started > timeoutMs) throw new Error('Timed out waiting for simulation to complete.');
+    await sleep(750);
+  }
+};
+
+type ResolvedRun = {
+  runId: string | null;
+  simulationId: string;
+  summaries: YearlySummary[];
+  persisted: boolean;
+  meta?: RunListItem | null;
+};
+
+const resolveOrRerun = async (
+  scenario: SavedScenario,
+  opts: {
+    onRerunStarted?: (simulationId: string, started: StartRunResponse) => void;
+    getMetaForPersistedRun?: (runId: string) => Promise<RunListItem | null>;
+  } = {}
+): Promise<ResolvedRun> => {
+  const random = isRandomRequested(scenario);
+
+  // A saved scenario can be overwritten while still carrying an old runId.
+  // Prefer the persisted run that matches the *current* scenario footprint.
+  const lookupId = await findRunForInput(scenario.advancedRequest).catch(() => null);
+
+  let maybePersistedId: string | null = scenario.runId ? String(scenario.runId) : null;
+  if (lookupId) {
+    // If lookup finds a run for these inputs, use it (even if the stored runId differs).
+    maybePersistedId = lookupId;
+  } else if (maybePersistedId) {
+    // No lookup match found: only trust the stored runId if its persisted input matches.
+    try {
+      const persistedInput = await getRunInput(maybePersistedId);
+      if (!deepEqual(persistedInput, scenario.advancedRequest)) {
+        maybePersistedId = null;
+      }
+    } catch {
+      maybePersistedId = null;
+    }
+  }
+
+  if (maybePersistedId) {
+    try {
+      const summaries = await getRunSummaries(maybePersistedId);
+      const meta = opts.getMetaForPersistedRun ? await opts.getMetaForPersistedRun(maybePersistedId).catch(() => null) : null;
+      return { runId: maybePersistedId, simulationId: maybePersistedId, summaries, persisted: true, meta };
+    } catch {
+      // Might be a non-persisted run id (random mode) or an old id.
+    }
+  }
+
+  const started = await startAdvancedSimulation(scenario.advancedRequest);
+  opts.onRerunStarted?.(started.id, started);
+  const summaries = await waitForSummaries(started.id);
+  const meta: RunListItem = {
+    id: started.id,
+    ...(started.createdAt ? { createdAt: started.createdAt } : {}),
+    ...(started.rngSeed !== undefined ? { rngSeed: started.rngSeed } : {}),
+    ...(started.modelAppVersion !== undefined ? { modelAppVersion: started.modelAppVersion } : {}),
+    ...(started.modelBuildTime !== undefined ? { modelBuildTime: started.modelBuildTime } : {}),
+    ...(started.modelSpringBootVersion !== undefined ? { modelSpringBootVersion: started.modelSpringBootVersion } : {}),
+    ...(started.modelJavaVersion !== undefined ? { modelJavaVersion: started.modelJavaVersion } : {}),
+  };
+
+  // Backend guarantees: random-requested runs are never persisted.
+  if (random) return { runId: null, simulationId: started.id, summaries, persisted: false, meta };
+
+  return { runId: started.id, simulationId: started.id, summaries, persisted: true, meta };
+};
+
+const compareOutputs = (a: YearlySummary[], b: YearlySummary[]): { exactMatch: boolean; maxAbsDiff: number; mismatches: number } => {
+  const key = (x: YearlySummary) => `${String(x.phaseName ?? '')}::${Number(x.year) || 0}`;
+  const mapA = new Map(a.map((x) => [key(x), x] as const));
+  const mapB = new Map(b.map((x) => [key(x), x] as const));
+
+  const keys = new Set<string>([...mapA.keys(), ...mapB.keys()]);
+  let mismatches = 0;
+  let maxAbsDiff = 0;
+
+  const fields: Array<keyof YearlySummary> = [
+    'averageCapital', 'medianCapital', 'quantile5', 'quantile95', 'var', 'cvar', 'negativeCapitalPercentage',
+  ];
+
+  for (const k of keys) {
+    const xa = mapA.get(k);
+    const xb = mapB.get(k);
+    if (!xa || !xb) {
+      mismatches++;
+      continue;
+    }
+    for (const f of fields) {
+      const va = (xa as any)[f];
+      const vb = (xb as any)[f];
+      if (va === undefined || vb === undefined) continue;
+      const da = Number(va);
+      const db = Number(vb);
+      if (!Number.isFinite(da) || !Number.isFinite(db)) continue;
+      const d = Math.abs(db - da);
+      if (d > maxAbsDiff) maxAbsDiff = d;
+      if (d > 1e-9) mismatches++;
+    }
+  }
+
+  return { exactMatch: mismatches === 0, maxAbsDiff, mismatches };
+};
+
 const RunDiffPage: React.FC = () => {
   const [searchParams] = useSearchParams();
 
-  const savedScenarios = useMemo(() => listSavedScenarios(), []);
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
+  const refreshSavedScenarios = useCallback(() => setSavedScenarios(listSavedScenarios()), []);
   const scenarioAFromQuery = searchParams.get('scenarioA') ?? '';
   const scenarioBFromQuery = searchParams.get('scenarioB') ?? '';
 
@@ -152,12 +273,46 @@ const RunDiffPage: React.FC = () => {
   const [inputSummaryB, setInputSummaryB] = useState<ScenarioSummary | null>(null);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
 
+  const [rerunAId, setRerunAId] = useState<string | null>(null);
+  const [rerunBId, setRerunBId] = useState<string | null>(null);
+
   const canDiff = Boolean(scenarioA && scenarioB && scenarioA.id !== scenarioB.id && !diffBusy);
 
   const attributionLine = (d: RunDiffResponse | null): string | null => {
     const s = d?.attribution?.summary;
     return s ? String(s) : null;
   };
+
+  const ensureDeterministicScenario = useCallback((scenario: SavedScenario): SavedScenario => {
+    if (!isRandomSeedRequested(scenario.advancedRequest)) return scenario;
+
+    const pinnedReq = materializeRandomSeedIfNeeded(
+      scenario.advancedRequest,
+      scenario.lastRunMeta?.rngSeed ?? null
+    );
+
+    const pinnedSeed = (pinnedReq as any)?.seed ?? (pinnedReq as any)?.returnerConfig?.seed;
+    const nextMeta =
+      scenario.lastRunMeta && pinnedSeed != null
+        ? { ...scenario.lastRunMeta, rngSeed: Number(pinnedSeed) }
+        : scenario.lastRunMeta;
+
+    try {
+      saveScenario(
+        scenario.name,
+        pinnedReq,
+        scenario.id,
+        scenario.runId ?? undefined,
+        nextMeta
+      );
+    } catch {
+      // ignore
+    }
+
+    const refreshed = listSavedScenarios().find((s) => s.id === scenario.id);
+    refreshSavedScenarios();
+    return refreshed ?? { ...scenario, advancedRequest: pinnedReq, ...(nextMeta ? { lastRunMeta: nextMeta } : {}) };
+  }, [refreshSavedScenarios]);
 
   return (
     <div style={{ minHeight: '100vh', padding: 16, maxWidth: 980, margin: '0 auto' }}>
@@ -167,7 +322,7 @@ const RunDiffPage: React.FC = () => {
       </div>
 
       <p style={{ opacity: 0.85, marginTop: 10 }}>
-        Pick two saved scenarios. We resolve their persisted runs and then diff both the inputs and outputs.
+        Pick two saved scenarios. If their persisted runs aren’t found, we re-run them from the saved scenario footprint.
       </p>
 
       <div style={{
@@ -215,6 +370,31 @@ const RunDiffPage: React.FC = () => {
         </div>
       )}
 
+      {(rerunAId || rerunBId) && (
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {rerunAId && (
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 6, opacity: 0.9 }}>Scenario A re-run progress</div>
+              <SimulationProgress
+                simulationId={rerunAId}
+                onDismiss={() => setRerunAId(null)}
+                onComplete={() => { /* handled by polling */ }}
+              />
+            </div>
+          )}
+          {rerunBId && (
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 6, opacity: 0.9 }}>Scenario B re-run progress</div>
+              <SimulationProgress
+                simulationId={rerunBId}
+                onDismiss={() => setRerunBId(null)}
+                onComplete={() => { /* handled by polling */ }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
         <button
           type="button"
@@ -227,34 +407,142 @@ const RunDiffPage: React.FC = () => {
             setInputSummaryA(null);
             setInputSummaryB(null);
             setLookupErr(null);
+            setRerunAId(null);
+            setRerunBId(null);
             setDiffBusy(true);
             try {
               if (!scenarioA || !scenarioB) throw new Error('Select two saved scenarios.');
 
-              const [runA, runB] = await Promise.all([
-                scenarioA.runId ? Promise.resolve(scenarioA.runId) : findRunForInput(scenarioA.request),
-                scenarioB.runId ? Promise.resolve(scenarioB.runId) : findRunForInput(scenarioB.request),
+              const scenarioAStable = ensureDeterministicScenario(scenarioA);
+              const scenarioBStable = ensureDeterministicScenario(scenarioB);
+
+              const runsIndex = await listRuns().catch(() => [] as RunListItem[]);
+              const metaForRun = async (runId: string): Promise<RunListItem | null> => {
+                const found = runsIndex.find((r) => String(r.id) === String(runId));
+                return found ?? null;
+              };
+
+              const [ra, rb] = await Promise.all([
+                resolveOrRerun(scenarioAStable, {
+                  onRerunStarted: (id, started) => {
+                    setRerunAId(id);
+                    // Store best-effort meta locally so future diffs can display it.
+                    updateScenarioRunMeta(scenarioAStable.id, {
+                      id: started.id,
+                      createdAt: started.createdAt,
+                      rngSeed: started.rngSeed ?? null,
+                      modelAppVersion: started.modelAppVersion ?? null,
+                      modelBuildTime: started.modelBuildTime ?? null,
+                      modelSpringBootVersion: started.modelSpringBootVersion ?? null,
+                      modelJavaVersion: started.modelJavaVersion ?? null,
+                    });
+                    refreshSavedScenarios();
+                  },
+                  getMetaForPersistedRun: metaForRun,
+                }),
+                resolveOrRerun(scenarioBStable, {
+                  onRerunStarted: (id, started) => {
+                    setRerunBId(id);
+                    updateScenarioRunMeta(scenarioBStable.id, {
+                      id: started.id,
+                      createdAt: started.createdAt,
+                      rngSeed: started.rngSeed ?? null,
+                      modelAppVersion: started.modelAppVersion ?? null,
+                      modelBuildTime: started.modelBuildTime ?? null,
+                      modelSpringBootVersion: started.modelSpringBootVersion ?? null,
+                      modelJavaVersion: started.modelJavaVersion ?? null,
+                    });
+                    refreshSavedScenarios();
+                  },
+                  getMetaForPersistedRun: metaForRun,
+                }),
               ]);
 
-              if (!runA || !runB) {
-                setLookupErr('One or both scenarios have no persisted run. Run them once, then save (or re-save) the scenario and try again.');
-                return;
+              setRunSummariesA(ra.summaries);
+              setRunSummariesB(rb.summaries);
+
+              // Inputs: always summarize from the saved advancedRequest so advanced parameters are present.
+              setInputSummaryA(toScenarioSummary(scenarioAStable));
+              setInputSummaryB(toScenarioSummary(scenarioBStable));
+
+              // Persist deterministic reruns back into local saved scenarios so future diffs are instant.
+              if (ra.runId && !scenarioAStable.runId) {
+                try {
+                  saveScenario(
+                    scenarioAStable.name,
+                    scenarioAStable.advancedRequest,
+                    scenarioAStable.id,
+                    ra.runId,
+                    ra.meta
+                      ? {
+                          id: ra.meta.id,
+                          createdAt: ra.meta.createdAt,
+                          rngSeed: ra.meta.rngSeed ?? null,
+                          modelAppVersion: ra.meta.modelAppVersion ?? null,
+                          modelBuildTime: ra.meta.modelBuildTime ?? null,
+                          modelSpringBootVersion: ra.meta.modelSpringBootVersion ?? null,
+                          modelJavaVersion: ra.meta.modelJavaVersion ?? null,
+                        }
+                      : scenarioAStable.lastRunMeta
+                  );
+                  refreshSavedScenarios();
+                } catch {
+                  // ignore
+                }
+              }
+              if (rb.runId && !scenarioBStable.runId) {
+                try {
+                  saveScenario(
+                    scenarioBStable.name,
+                    scenarioBStable.advancedRequest,
+                    scenarioBStable.id,
+                    rb.runId,
+                    rb.meta
+                      ? {
+                          id: rb.meta.id,
+                          createdAt: rb.meta.createdAt,
+                          rngSeed: rb.meta.rngSeed ?? null,
+                          modelAppVersion: rb.meta.modelAppVersion ?? null,
+                          modelBuildTime: rb.meta.modelBuildTime ?? null,
+                          modelSpringBootVersion: rb.meta.modelSpringBootVersion ?? null,
+                          modelJavaVersion: rb.meta.modelJavaVersion ?? null,
+                        }
+                      : scenarioBStable.lastRunMeta
+                  );
+                  refreshSavedScenarios();
+                } catch {
+                  // ignore
+                }
               }
 
-              const [d, sa, sb, inputA, inputB] = await Promise.all([
-                diffRuns(runA, runB),
-                getRunSummaries(runA),
-                getRunSummaries(runB),
-                getRunInput(runA),
-                getRunInput(runB),
-              ]);
-              setDiff(d);
-              setRunSummariesA(sa);
-              setRunSummariesB(sb);
+              if (ra.runId && rb.runId) {
+                const d = await diffRuns(ra.runId, rb.runId);
+                setDiff(d);
+              } else {
+                const cmp = compareOutputs(ra.summaries, rb.summaries);
+                const note = 'Compared outputs by re-running one or both scenarios.';
 
-              // Use the persisted input from runs, falling back to saved scenario
-              setInputSummaryA(inputA ? summarizeScenario(inputA) : toScenarioSummary(scenarioA));
-              setInputSummaryB(inputB ? summarizeScenario(inputB) : toScenarioSummary(scenarioB));
+                const aMeta = ra.meta ?? metaForRun(ra.runId ?? ra.simulationId).catch(() => null);
+                const bMeta = rb.meta ?? metaForRun(rb.runId ?? rb.simulationId).catch(() => null);
+                const [metaA, metaB] = await Promise.all([aMeta, bMeta]);
+
+                setDiff({
+                  a: { id: ra.runId ?? ra.simulationId, ...(metaA ?? {}) },
+                  b: { id: rb.runId ?? rb.simulationId, ...(metaB ?? {}) },
+                  attribution: {
+                    inputsChanged: true,
+                    randomnessChanged: true,
+                    modelVersionChanged: false,
+                    summary: note,
+                  },
+                  output: {
+                    exactMatch: cmp.exactMatch,
+                    withinTolerance: cmp.maxAbsDiff < 1e-6,
+                    mismatches: cmp.mismatches,
+                    maxAbsDiff: cmp.maxAbsDiff,
+                  },
+                });
+              }
             } catch (e: any) {
               setDiffErr(e?.message ?? 'Diff failed');
             } finally {
@@ -338,6 +626,71 @@ const RunDiffPage: React.FC = () => {
               b={diff.b?.modelJavaVersion ?? '—'}
               different={Boolean(diff.a?.modelJavaVersion !== diff.b?.modelJavaVersion)}
             />
+            <MetricRow
+              label="Paths (runs)"
+              a={inputSummaryA?.paths !== undefined ? String(inputSummaryA.paths) : '—'}
+              b={inputSummaryB?.paths !== undefined ? String(inputSummaryB.paths) : '—'}
+              delta={
+                inputSummaryA?.paths !== undefined && inputSummaryB?.paths !== undefined
+                  ? String(inputSummaryB.paths - inputSummaryA.paths)
+                  : ''
+              }
+              different={Boolean(
+                inputSummaryA?.paths !== undefined &&
+                  inputSummaryB?.paths !== undefined &&
+                  inputSummaryA.paths !== inputSummaryB.paths
+              )}
+            />
+            <MetricRow
+              label="Batch size"
+              a={inputSummaryA?.batchSize !== undefined ? String(inputSummaryA.batchSize) : '—'}
+              b={inputSummaryB?.batchSize !== undefined ? String(inputSummaryB.batchSize) : '—'}
+              delta={
+                inputSummaryA?.batchSize !== undefined && inputSummaryB?.batchSize !== undefined
+                  ? String(inputSummaryB.batchSize - inputSummaryA.batchSize)
+                  : ''
+              }
+              different={Boolean(
+                inputSummaryA?.batchSize !== undefined &&
+                  inputSummaryB?.batchSize !== undefined &&
+                  inputSummaryA.batchSize !== inputSummaryB.batchSize
+              )}
+            />
+            <MetricRow
+              label="Master seed"
+              a={(() => {
+                const requested = inputSummaryA?.advancedMode?.seed;
+                const effective = (requested !== null && requested !== undefined && Number(requested) < 0)
+                  ? diff?.a?.rngSeed
+                  : requested;
+                return effective !== null && effective !== undefined ? String(effective) : '—';
+              })()}
+              b={(() => {
+                const requested = inputSummaryB?.advancedMode?.seed;
+                const effective = (requested !== null && requested !== undefined && Number(requested) < 0)
+                  ? diff?.b?.rngSeed
+                  : requested;
+                return effective !== null && effective !== undefined ? String(effective) : '—';
+              })()}
+              delta={(() => {
+                const ra = inputSummaryA?.advancedMode?.seed;
+                const rb = inputSummaryB?.advancedMode?.seed;
+                const a = (ra !== null && ra !== undefined && Number(ra) < 0) ? diff?.a?.rngSeed : ra;
+                const b = (rb !== null && rb !== undefined && Number(rb) < 0) ? diff?.b?.rngSeed : rb;
+                if (a === null || a === undefined || b === null || b === undefined) return '';
+                const na = Number(a);
+                const nb = Number(b);
+                if (!Number.isFinite(na) || !Number.isFinite(nb)) return '';
+                return String(nb - na);
+              })()}
+              different={(() => {
+                const ra = inputSummaryA?.advancedMode?.seed;
+                const rb = inputSummaryB?.advancedMode?.seed;
+                const a = (ra !== null && ra !== undefined && Number(ra) < 0) ? diff?.a?.rngSeed : ra;
+                const b = (rb !== null && rb !== undefined && Number(rb) < 0) ? diff?.b?.rngSeed : rb;
+                return Boolean(a !== b);
+              })()}
+            />
           </div>
 
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Inputs</div>
@@ -419,19 +772,12 @@ const RunDiffPage: React.FC = () => {
                     Advanced Mode Details
                   </div>
                   
-                  {/* Return type and seed */}
+                  {/* Return type */}
                   <MetricRow
                     label="Return type"
                     a={inputSummaryA?.advancedMode?.returnType || '—'}
                     b={inputSummaryB?.advancedMode?.returnType || '—'}
                     different={Boolean(inputSummaryA?.advancedMode?.returnType !== inputSummaryB?.advancedMode?.returnType)}
-                  />
-                  <MetricRow
-                    label="RNG seed"
-                    a={inputSummaryA?.advancedMode?.seed !== null && inputSummaryA?.advancedMode?.seed !== undefined ? String(inputSummaryA.advancedMode.seed) : '—'}
-                    b={inputSummaryB?.advancedMode?.seed !== null && inputSummaryB?.advancedMode?.seed !== undefined ? String(inputSummaryB.advancedMode.seed) : '—'}
-                    delta={inputSummaryA?.advancedMode?.seed !== null && inputSummaryA?.advancedMode?.seed !== undefined && inputSummaryB?.advancedMode?.seed !== null && inputSummaryB?.advancedMode?.seed !== undefined ? String(inputSummaryB.advancedMode.seed - inputSummaryA.advancedMode.seed) : ''}
-                    different={Boolean(inputSummaryA?.advancedMode?.seed !== inputSummaryB?.advancedMode?.seed)}
                   />
 
                   {/* Inflation and fees */}

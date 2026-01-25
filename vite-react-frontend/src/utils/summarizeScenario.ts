@@ -52,6 +52,8 @@ export type AdvancedModeSummary = {
 };
 
 export type ScenarioSummary = {
+  paths?: number;
+  batchSize?: number;
   startDate: string;
   overallTaxRule: SimulationRequest['overallTaxRule'];
   taxPercentage: number;
@@ -130,6 +132,8 @@ export function summarizePhase(phase: PhaseRequest, index: number, taxExemptionC
 export function summarizeScenario(req: any): ScenarioSummary {
   const phases = req.phases ?? [];
   const startDate = resolveStartDate(req?.startDate);
+  const paths = toNum(req?.paths) > 0 ? toNum(req?.paths) : undefined;
+  const batchSize = toNum(req?.batchSize) > 0 ? toNum(req?.batchSize) : undefined;
 
   const totalMonths = phases.reduce((s: number, p: any) => s + toNum(p.durationInMonths), 0);
   const phaseCount = phases.length;
@@ -150,6 +154,8 @@ export function summarizeScenario(req: any): ScenarioSummary {
   const taxExemptionConfig = req.taxExemptionConfig ?? getDefaultTaxExemptionConfig();
 
   return {
+    paths,
+    batchSize,
     startDate,
     overallTaxRule: req.overallTaxRule,
     taxPercentage: toNum(req.taxPercentage),

@@ -9,6 +9,10 @@ vi.mock('../api/simulation', async () => {
   return {
     ...actual,
     findRunForInput: vi.fn().mockResolvedValue('run-1'),
+    listRuns: vi.fn().mockResolvedValue([
+      { id: 'run-1', createdAt: '2026-01-01T00:00:00Z', rngSeed: 123 },
+      { id: 'run-2', createdAt: '2026-01-02T00:00:00Z', rngSeed: null },
+    ]),
     diffRuns: vi.fn().mockResolvedValue({
       a: {
         id: 'run-1',
@@ -47,11 +51,13 @@ vi.mock('../api/simulation', async () => {
 
 vi.mock('../config/savedScenarios', () => {
   return {
+    isRandomSeedRequested: () => false,
     listSavedScenarios: () => ([
       {
         id: 's1',
         name: 'Scenario A',
         savedAt: '2026-01-01T00:00:00Z',
+        advancedRequest: { startDate: { date: '2026-01-01' }, phases: [], overallTaxRule: 'CAPITAL', taxPercentage: 0 },
         request: { startDate: { date: '2026-01-01' }, phases: [], overallTaxRule: 'CAPITAL', taxPercentage: 0 },
         runId: 'run-1',
       },
@@ -59,17 +65,26 @@ vi.mock('../config/savedScenarios', () => {
         id: 's2',
         name: 'Scenario B',
         savedAt: '2026-01-02T00:00:00Z',
+        advancedRequest: { startDate: { date: '2026-01-02' }, phases: [], overallTaxRule: 'CAPITAL', taxPercentage: 0 },
         request: { startDate: { date: '2026-01-02' }, phases: [], overallTaxRule: 'CAPITAL', taxPercentage: 0 },
         runId: 'run-2',
       },
     ]),
+    materializeRandomSeedIfNeeded: (req: any) => req,
+    saveScenario: () => ({
+      id: 's1',
+      name: 'Scenario A',
+      savedAt: '2026-01-01T00:00:00Z',
+      advancedRequest: { startDate: { date: '2026-01-01' }, phases: [], overallTaxRule: 'CAPITAL', taxPercentage: 0 },
+    }),
+    updateScenarioRunMeta: () => {},
   };
 });
 
 import RunDiffPage from './RunDiffPage';
 
 describe('RunDiffPage metadata', () => {
-  it('does not render metadata comparison table', async () => {
+  it('renders metadata rows when diff is available', async () => {
     render(
       <MemoryRouter initialEntries={['/simulation/diff']}>
         <RunDiffPage />
@@ -82,10 +97,10 @@ describe('RunDiffPage metadata', () => {
     fireEvent.click(screen.getByRole('button', { name: /diff/i }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Model build time')).not.toBeInTheDocument();
-      expect(screen.queryByText('Spring Boot version')).not.toBeInTheDocument();
-      expect(screen.queryByText('Java version')).not.toBeInTheDocument();
-      expect(screen.queryByText('RNG seed')).not.toBeInTheDocument();
+      expect(screen.getByText('Model build time')).toBeInTheDocument();
+      expect(screen.getByText('Spring Boot version')).toBeInTheDocument();
+      expect(screen.getByText('Java version')).toBeInTheDocument();
+      expect(screen.getByText('Model app version')).toBeInTheDocument();
     });
   });
 });
