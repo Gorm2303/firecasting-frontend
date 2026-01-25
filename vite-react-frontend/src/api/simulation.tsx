@@ -1,5 +1,7 @@
 // src/api/simulation.ts
 import { SimulationRequest } from '../models/types';
+import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
+import { normalToAdvancedWithDefaults } from '../models/advancedSimulation';
 import { YearlySummary } from '../models/YearlySummary';
 import { getApiBaseUrl } from '../config/runtimeEnv';
 
@@ -38,48 +40,14 @@ async function readApiError(res: Response): Promise<string> {
   }
 }
 
-type StartResponse = { id: string };
-
-export type AdvancedSimulationRequest = {
-  startDate: { date: string };
-  phases: SimulationRequest['phases'];
-  overallTaxRule: string;
-  taxPercentage: number;
-  // Optional to allow clients to omit when UI sections are disabled/hidden.
-  // Backend defaults to dataDrivenReturn when missing/blank.
-  returnType?: string;
-  seed?: number;
-  returnerConfig?: {
-    seed?: number;
-    simpleAveragePercentage?: number;
-    distribution?: {
-      type?: string;
-      normal?: { mean?: number; standardDeviation?: number };
-      brownianMotion?: { drift?: number; volatility?: number };
-      studentT?: { mu?: number; sigma?: number; nu?: number };
-      regimeBased?: {
-        tickMonths?: number;
-        regimes?: Array<{
-          distributionType?: string;
-          expectedDurationMonths?: number;
-          switchWeights?: { toRegime0?: number; toRegime1?: number; toRegime2?: number };
-          normal?: { mean?: number; standardDeviation?: number };
-          studentT?: { mu?: number; sigma?: number; nu?: number };
-        }>;
-      };
-    };
-  };
-  taxExemptionConfig?: {
-    exemptionCard?: { limit?: number; yearlyIncrease?: number };
-    stockExemption?: { taxRate?: number; limit?: number; yearlyIncrease?: number };
-  };
-  // Optional to allow omitting when UI sections are disabled/hidden.
-  // Backend defaults to 1.02 when missing/<=0.
-  inflationFactor?: number;
-
-  // Optional: yearly fee percent charged on capital at year-end (e.g. 0.5 = 0.5% per year).
-  // Backend defaults to 0 when missing/invalid.
-  yearlyFeePercentage?: number;
+export type StartRunResponse = {
+  id: string;
+  createdAt?: string;
+  rngSeed?: number | null;
+  modelAppVersion?: string | null;
+  modelBuildTime?: string | null;
+  modelSpringBootVersion?: string | null;
+  modelJavaVersion?: string | null;
 };
 
 type ImportReplayResponse = {
@@ -109,6 +77,14 @@ export type RunListItem = {
   modelSpringBootVersion?: string | null;
   modelJavaVersion?: string | null;
   inputHash?: string | null;
+};
+
+export type RunDetails = RunListItem & {
+  computeMs?: number | null;
+  aggregateMs?: number | null;
+  gridsMs?: number | null;
+  persistMs?: number | null;
+  totalMs?: number | null;
 };
 
 export type RunDiffResponse = {
@@ -141,28 +117,51 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
 export async function startSimulation(req: SimulationRequest): Promise<string> {
   // For normal mode: convert to advanced request with defaults and
   // call the unified advanced endpoint. Keep legacy input for dedup/lookups.
-  const advanced = toAdvancedWithDefaults(req);
+  const advanced = normalToAdvancedWithDefaults(req);
   const res = await fetch(`${BASE_URL}/start-advanced`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(advanced),
   });
   if (!res.ok) throw new Error(await readApiError(res));
-  const data: StartResponse = await res.json();
-  if (!data?.id) throw new Error('No simulation id returned');
-  return data.id;
+  const data = (await res.json()) as any;
+  const id = String(data?.id ?? '');
+  if (!id) throw new Error('No simulation id returned');
+  return id;
 }
 
-export async function startAdvancedSimulation(req: AdvancedSimulationRequest): Promise<string> {
+export async function startAdvancedSimulation(req: AdvancedSimulationRequest): Promise<StartRunResponse> {
   const res = await fetch(`${BASE_URL}/start-advanced`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(await readApiError(res));
-  const data: StartResponse = await res.json();
-  if (!data?.id) throw new Error('No simulation id returned');
-  return data.id;
+  const raw = (await res.json()) as any;
+  const id = String(raw?.id ?? '');
+  if (!id) throw new Error('No simulation id returned');
+
+  const parsedSeed = raw?.rngSeed;
+  const rngSeed =
+    parsedSeed === null || parsedSeed === undefined || parsedSeed === ''
+      ? null
+      : (Number(parsedSeed) as any);
+
+  const toNullIfEmpty = (v: any): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v);
+    return s.trim() === '' ? null : s;
+  };
+
+  return {
+    id,
+    ...(raw?.createdAt ? { createdAt: String(raw.createdAt) } : {}),
+    ...(rngSeed === null || Number.isFinite(rngSeed) ? { rngSeed } : {}),
+    ...(raw?.modelAppVersion !== undefined ? { modelAppVersion: toNullIfEmpty(raw.modelAppVersion) } : {}),
+    ...(raw?.modelBuildTime !== undefined ? { modelBuildTime: toNullIfEmpty(raw.modelBuildTime) } : {}),
+    ...(raw?.modelSpringBootVersion !== undefined ? { modelSpringBootVersion: toNullIfEmpty(raw.modelSpringBootVersion) } : {}),
+    ...(raw?.modelJavaVersion !== undefined ? { modelJavaVersion: toNullIfEmpty(raw.modelJavaVersion) } : {}),
+  };
 }
 
 export async function importRunBundle(file: File): Promise<ImportReplayResponse> {
@@ -192,6 +191,16 @@ export async function listRuns(): Promise<RunListItem[]> {
   });
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as RunListItem[];
+}
+
+export async function getRunDetails(runId: string): Promise<RunDetails> {
+  const res = await fetch(`${BASE_URL}/runs/${encodeURIComponent(runId)}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) throw new Error('Run not found (or not persisted).');
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as RunDetails;
 }
 
 export async function getRunSummaries(runId: string): Promise<YearlySummary[]> {
@@ -235,32 +244,6 @@ export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffR
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as RunDiffResponse;
 }
-
-export function toAdvancedWithDefaults(req: SimulationRequest): AdvancedSimulationRequest {
-  // Tax exemption frontend defaults (mirror backend defaults)
-  const taxExemptionConfig = {
-    exemptionCard: { limit: 51600, yearlyIncrease: 1000 },
-    stockExemption: { taxRate: 27, limit: 67500, yearlyIncrease: 1000 },
-  };
-
-  const seed = req.seed;
-  const returnerConfig = seed !== undefined ? { seed } : undefined;
-
-  return {
-    startDate: req.startDate,
-    phases: req.phases,
-    overallTaxRule: req.overallTaxRule,
-    taxPercentage: req.taxPercentage,
-    returnType: 'dataDrivenReturn',
-    ...(seed !== undefined ? { seed } : {}),
-    ...(returnerConfig ? { returnerConfig } : {}),
-    taxExemptionConfig,
-    inflationFactor: 1.02,
-    yearlyFeePercentage: 0.5,
-  };
-}
-
-
 
 export const exportSimulationCsv = async (simulationId?: string | null): Promise<void> => {
   const base = BASE_URL.replace(/\/+$/, '');

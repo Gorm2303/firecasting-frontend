@@ -3,11 +3,37 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { YearlySummary } from "../models/YearlySummary";
 import { getApiBaseUrl } from "../config/runtimeEnv";
 
+type SimulationMeta = {
+  dedupHit?: boolean;
+  source?: "db" | "cache" | string;
+  persisted?: boolean;
+  effectiveRuns?: number;
+  effectiveBatchSize?: number;
+  queueMs?: number;
+  computeMs?: number;
+  aggregateMs?: number;
+  gridsMs?: number;
+  persistMs?: number;
+  totalMs?: number;
+};
+
+const formatSeconds2 = (ms?: number) => {
+  if (ms == null || !Number.isFinite(ms)) return "—";
+  return `${(ms / 1000).toFixed(2)} s`;
+};
+
+const shouldShowOptionalStage = (ms?: number) => {
+  if (ms == null || !Number.isFinite(ms)) return false;
+  return ms >= 10; // >= 0.01s
+};
+
 interface SimulationProgressProps {
   simulationId: string;
   onComplete: (result: YearlySummary[]) => void;
   /** 'auto' (default) respects document dark class or prefers-color-scheme */
   theme?: "auto" | "light" | "dark";
+  /** Optional: allow the parent to hide this progress panel. */
+  onDismiss?: () => void;
 }
 
 const API_BASE = getApiBaseUrl();
@@ -16,13 +42,21 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
   simulationId,
   onComplete,
   theme = "auto",
+  onDismiss,
 }) => {
   const [status, setStatus] = useState<"open" | "queued" | "running" | "done" | "error">("open");
   const [queuePos0, setQueuePos0] = useState<number | null>(null); // 0 = next in line (from server)
   const [runsPct, setRunsPct] = useState<number>(0);
   const [summariesPct, setSummariesPct] = useState<number>(0);
   const [headline, setHeadline] = useState<string>("Waiting for updates…");
+  const [meta, setMeta] = useState<SimulationMeta | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   // ---------- Theme detection ----------
   const [prefersDark, setPrefersDark] = useState<boolean>(() =>
@@ -96,6 +130,17 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
     const es = new EventSource(url, { withCredentials: false });
     esRef.current = es;
 
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        es.close();
+      } catch {
+        // ignore
+      }
+    };
+
     const setMessage = (m: string) => setHeadline(m.trim());
 
     es.addEventListener("open", (ev) => {
@@ -161,32 +206,46 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
       setMessage(msg);
     });
 
+    es.addEventListener("meta", (ev) => {
+      if (closed) return;
+      try {
+        const payload = JSON.parse(String((ev as MessageEvent).data ?? "null")) as SimulationMeta;
+        if (payload && typeof payload === "object") {
+          setMeta((prev) => ({ ...prev, ...payload }));
+        }
+      } catch {
+        // best-effort
+      }
+    });
+
     es.addEventListener("completed", (ev) => {
+      if (closed) return;
       try {
         const payload = JSON.parse(String((ev as MessageEvent).data ?? "null")) as YearlySummary[];
         setStatus("done");
         setRunsPct(100);
         setSummariesPct(100);
         setMessage("Completed");
-        onComplete(payload);
+        onCompleteRef.current(payload);
       } catch (e) {
         setStatus("error");
         setMessage("Error parsing final results");
         console.error(e);
       } finally {
-        es.close();
+        close();
       }
     });
 
     // unnamed fallback
     es.onmessage = (event) => {
+      if (closed) return;
       const trimmed = String(event.data ?? "").trim();
       if (!trimmed) return;
       if (trimmed.startsWith("[")) {
         try {
-          onComplete(JSON.parse(trimmed));
+          onCompleteRef.current(JSON.parse(trimmed));
         } finally {
-          es.close();
+          close();
         }
       } else {
         setMessage(trimmed);
@@ -194,42 +253,113 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
     };
 
     es.onerror = (err) => {
+      if (closed) return;
       setStatus("error");
       setMessage("SSE connection error");
       console.error("SSE error", err);
-      es.close();
+      close();
     };
 
-    return () => es.close();
-  }, [simulationId, onComplete, API_BASE]);
+    return () => close();
+  }, [simulationId]);
+
+  useEffect(() => {
+    if (!detailsOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetailsOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [detailsOpen]);
+
+  const timingRows = useMemo(() => {
+    if (!meta) return [] as Array<{ label: string; ms?: number }>;
+
+    const knownKeys = new Set([
+      "queueMs",
+      "computeMs",
+      "aggregateMs",
+      "gridsMs",
+      "persistMs",
+      "totalMs",
+    ]);
+
+    const humanize = (k: string) => {
+      const base = k.replace(/Ms$/, "");
+      const spaced = base.replace(/([a-z])([A-Z])/g, "$1 $2");
+      return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    };
+
+    const rows: Array<{ label: string; ms?: number; always?: boolean }> = [
+      { label: "Queue", ms: meta.queueMs, always: true },
+      { label: "Running", ms: meta.computeMs, always: true },
+      { label: "Aggregation", ms: meta.aggregateMs, always: true },
+      { label: "Grids", ms: meta.gridsMs, always: false },
+      { label: "Persist", ms: meta.persistMs, always: false },
+    ];
+
+    const extra = Object.entries(meta as Record<string, unknown>)
+      .filter(([k]) => k.endsWith("Ms") && !knownKeys.has(k))
+      .map(([k, v]) => ({ key: k, ms: typeof v === "number" ? v : undefined }))
+      .filter((r) => shouldShowOptionalStage(r.ms))
+      .map((r) => ({ label: humanize(r.key), ms: r.ms, always: false }));
+
+    rows.push(...extra);
+    rows.push({ label: "Total", ms: meta.totalMs, always: true });
+
+    return rows.filter((r) => r.always || shouldShowOptionalStage(r.ms)).map(({ label, ms }) => ({ label, ms }));
+  }, [meta]);
 
   return (
     <div style={{ marginTop: "1rem" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span
-          style={{
-            display: "inline-block",
-            padding: "2px 8px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 600,
-            color: "white",
-            background: badgeBg,
-          }}
-        >
-          {status.toUpperCase()}
-        </span>
-
-        {status === "queued" && (
-          <span style={{ fontSize: 13, color: colors.subtext }}>
-            {queuePos0 != null
-              ? queuePos0 === 0
-                ? "You’re next in line"
-                : `Queue position: ${queuePos0 + 1}`
-              : "Queued"}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-block",
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "white",
+              background: badgeBg,
+            }}
+          >
+            {status.toUpperCase()}
           </span>
-        )}
+
+          {status === "queued" && (
+            <span style={{ fontSize: 13, color: colors.subtext }}>
+              {queuePos0 != null
+                ? queuePos0 === 0
+                  ? "You’re next in line"
+                  : `Queue position: ${queuePos0 + 1}`
+                : "Queued"}
+            </span>
+          )}
+        </div>
+
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            style={{
+              border: `1px solid ${colors.border}`,
+              background: "transparent",
+              color: colors.text,
+              borderRadius: 999,
+              padding: "2px 8px",
+              fontSize: 12,
+              cursor: "pointer",
+              opacity: 0.9,
+            }}
+            aria-label="Hide progress"
+            title="Hide"
+          >
+            Hide
+          </button>
+        ) : null}
       </div>
 
       {/* Fixed-size card (visual) */}
@@ -330,6 +460,95 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
             </div>
           ) : null}
         </div>
+
+        {/* Meta summary + details button */}
+        {meta ? (
+          <div style={{ marginTop: 12, fontSize: 12, color: colors.subtext }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span>
+                {meta.dedupHit === true
+                  ? `Dedup hit${meta.source ? ` (${meta.source})` : ""}`
+                  : meta.dedupHit === false
+                  ? "New run"
+                  : "Run info"}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((v) => !v)}
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  background: colors.track,
+                  color: colors.text,
+                  borderRadius: 999,
+                  padding: "2px 8px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+                aria-expanded={detailsOpen}
+                aria-label={detailsOpen ? "Hide run details" : "Show run details"}
+              >
+                Details {detailsOpen ? "▴" : "▾"}
+              </button>
+            </div>
+
+            {meta.persisted != null ? (
+              <div style={{ marginTop: 4 }}>Persisted: {meta.persisted ? "yes" : "no"}</div>
+            ) : null}
+
+            {meta.effectiveRuns != null || meta.effectiveBatchSize != null ? (
+              <div style={{ marginTop: 4 }}>
+                Effective: {meta.effectiveRuns ?? "?"} runs, batch {meta.effectiveBatchSize ?? "?"}
+              </div>
+            ) : null}
+
+            {detailsOpen ? (
+              <div
+                role="region"
+                aria-label="Run details"
+                style={{
+                  marginTop: 8,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 12,
+                  padding: 10,
+                  background: colors.cardBg,
+                  color: colors.text,
+                }}
+              >
+                <div style={{ fontSize: 12, color: colors.subtext, display: "grid", rowGap: 4 }}>
+                  <div>Dedup: {meta.dedupHit === true ? "hit" : meta.dedupHit === false ? "miss" : "—"}</div>
+                  {meta.source ? <div>Source: {meta.source}</div> : null}
+                  {meta.persisted != null ? <div>Persisted: {meta.persisted ? "yes" : "no"}</div> : null}
+                  {meta.effectiveRuns != null ? <div>Effective runs: {meta.effectiveRuns}</div> : null}
+                  {meta.effectiveBatchSize != null ? <div>Effective batch size: {meta.effectiveBatchSize}</div> : null}
+                </div>
+
+                {timingRows.length ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      rowGap: 6,
+                      columnGap: 12,
+                      fontSize: 12,
+                    }}
+                  >
+                    {timingRows.map((r) => (
+                      <React.Fragment key={r.label}>
+                        <div style={{ color: colors.subtext }}>{r.label}</div>
+                        <div style={{ color: colors.text, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}>
+                          {formatSeconds2(r.ms)}
+                        </div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
