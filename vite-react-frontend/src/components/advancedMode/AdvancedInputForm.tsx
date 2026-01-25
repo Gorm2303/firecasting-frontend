@@ -187,6 +187,8 @@ type AdvancedPhaseRequest = {
 };
 
 type AdvancedSimulationRequest = {
+  paths?: number;
+  batchSize?: number;
   startDate: { date: string };
   phases: AdvancedPhaseRequest[];
   overallTaxRule: string;
@@ -243,6 +245,12 @@ const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[]
 };
 
 const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequest => {
+  const paths = toNumberOrUndefined(data?.paths);
+  const pathsInt = paths === undefined ? undefined : Math.trunc(paths);
+
+  const batchSize = toNumberOrUndefined(data?.batchSize);
+  const batchSizeInt = batchSize === undefined ? undefined : Math.trunc(batchSize);
+
   const phasesInput: any[] = Array.isArray(data.phases) ? data.phases : [];
   const phases: AdvancedPhaseRequest[] = phasesInput.map((p) => ({
     phaseType: (String(p?.phaseType ?? 'DEPOSIT').toUpperCase() as any) ?? 'DEPOSIT',
@@ -300,8 +308,9 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
     },
   }));
 
+  const seed = toNumberOrUndefined(data?.seed) ?? toNumberOrUndefined(data?.returner?.random?.seed);
+
   const returnerConfig = {
-    seed: toNumberOrUndefined(data?.returner?.random?.seed),
     simpleAveragePercentage: toNumberOrUndefined(data?.returner?.simpleReturn?.averagePercentage),
     distribution: {
       type: data?.returner?.distribution?.type,
@@ -330,11 +339,13 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
   };
 
   const hasReturnerConfig =
-    returnerConfig.seed !== undefined ||
     returnerConfig.simpleAveragePercentage !== undefined ||
     returnerConfig.distribution?.type !== undefined;
 
   return {
+    ...(pathsInt !== undefined ? { paths: pathsInt } : {}),
+    ...(batchSizeInt !== undefined ? { batchSize: batchSizeInt } : {}),
+    ...(seed !== undefined ? { seed } : {}),
     startDate: { date: String(data.startDate ?? '') },
     phases,
     overallTaxRule: mapOverallTaxRule(data.taxRule),
@@ -361,6 +372,9 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
 
   const TAB_MAPPING: Record<string, string> = {
     startDate: 'general',
+    paths: 'general',
+    batchSize: 'general',
+    seed: 'general',
     inflation: 'general',
     taxRule: 'general',
     tax: 'taxation',
@@ -385,7 +399,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
       setError(null);
 
       const fetchFormConfigFrom = async (url: string): Promise<FormConfig> => {
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
         if (!res.ok) throw new Error(`Failed to fetch form config: ${res.status}`);
         return (await res.json()) as FormConfig;
       };
@@ -439,6 +453,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
 
       // Basics
       next.startDate = toIso(req?.startDate);
+      if (req?.paths !== undefined) next.paths = req.paths;
+      if (req?.batchSize !== undefined) next.batchSize = req.batchSize;
+      if (req?.seed !== undefined) next.seed = req.seed;
+      else if (req?.returnerConfig?.seed !== undefined) next.seed = req.returnerConfig.seed;
       next.taxRule = String(req?.overallTaxRule ?? next.taxRule ?? '').toLowerCase();
       next.tax = { ...(next.tax ?? {}) };
       if (req?.taxPercentage !== undefined) next.tax.percentage = req.taxPercentage;
@@ -477,8 +495,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
         if (req?.returnType) next.returner.type = req.returnType;
 
         const rc = req.returnerConfig ?? {};
-        next.returner.random = { ...(next.returner.random ?? {}) };
-        if (rc.seed !== undefined) next.returner.random.seed = rc.seed;
 
         next.returner.simpleReturn = { ...(next.returner.simpleReturn ?? {}) };
         if (rc.simpleAveragePercentage !== undefined) next.returner.simpleReturn.averagePercentage = rc.simpleAveragePercentage;
@@ -575,6 +591,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
   const stripToKnownRoot = (p: string): string => {
     const known = [
       'startDate',
+      'seed',
       'phases',
       'overallTaxRule',
       'taxPercentage',
@@ -604,7 +621,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
     if (p === 'taxPercentage') return 'tax.percentage';
 
     // returnerConfig.* originates from returner group
-    if (p.startsWith('returnerConfig.seed')) return p.replace('returnerConfig.seed', 'returner.random.seed');
+    if (p.startsWith('returnerConfig.seed')) return p.replace('returnerConfig.seed', 'seed');
     if (p.startsWith('returnerConfig.simpleAveragePercentage')) {
       return p.replace('returnerConfig.simpleAveragePercentage', 'returner.simpleReturn.averagePercentage');
     }
@@ -1218,10 +1235,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
         {simulationId && (
           <SimulationProgress
             simulationId={simulationId}
+            onDismiss={() => setSimulationId(null)}
             onComplete={(result) => {
               const completedId = simulationId;
               setSubmitting(false);
-              setSimulationId(null);
               onSimulationComplete(result, timelineForRun ?? undefined, completedId ?? undefined);
             }}
           />
