@@ -5,14 +5,18 @@ import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
 import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import SimulationProgress from '../../components/SimulationProgress';
-import { findRunForInput, startAdvancedSimulation, startSimulation, type AdvancedSimulationRequest } from '../../api/simulation';
+import { findRunForInput, startAdvancedSimulation, type StartRunResponse } from '../../api/simulation';
+import type { AdvancedSimulationRequest, MasterSeedMode } from '../../models/advancedSimulation';
+import { advancedToNormalRequest, normalToAdvancedWithDefaults, seedForMode } from '../../models/advancedSimulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
-import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId } from '../../config/simulationTemplates';
+import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId, type TemplateAdvancedDefaults } from '../../config/simulationTemplates';
 import {
   deleteScenario,
   findScenarioById,
   findScenarioByName,
+  isRandomSeedRequested,
   listSavedScenarios,
+  materializeRandomSeedIfNeeded,
   saveScenario,
   type SavedScenario,
 } from '../../config/savedScenarios';
@@ -23,6 +27,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
 
 const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+const NORMAL_DRAFT_KEY = 'firecasting:normalDraft:v1';
 
 type OverallTaxRule = 'CAPITAL' | 'NOTIONAL';
 
@@ -32,9 +37,12 @@ type DistributionType = 'normal' | 'brownianMotion' | 'studentT' | 'regimeBased'
 
 type AdvancedOptionsLoad = {
   enabled?: boolean;
+  paths?: number | string;
+  batchSize?: number | string;
   inflationAveragePct?: number;
   yearlyFeePercentage?: number;
   returnType?: ReturnType;
+  seedMode?: MasterSeedMode;
   seed?: number | string;
   simpleAveragePercentage?: number | string;
   distributionType?: DistributionType;
@@ -101,6 +109,7 @@ export type TutorialStep = {
 export type NormalInputFormMode = 'normal' | 'advanced';
 
 export type AdvancedFeatureFlags = {
+  execution: boolean;
   inflation: boolean;
   fee: boolean;
   exemptions: boolean;
@@ -247,47 +256,20 @@ ref
   const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
   const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
 
-  const initialAdvancedState = useMemo<{
-    enabled: boolean;
-    inflationAveragePct: number;
-    yearlyFeePercentage: number;
-    returnType: ReturnType;
-    seed: string;
-    simpleAveragePercentage: string;
-    distributionType: DistributionType;
-    normalMean: string;
-    normalStdDev: string;
-    brownianDrift: string;
-    brownianVolatility: string;
-    studentMu: string;
-    studentSigma: string;
-    studentNu: string;
-    regimeTickMonths: string;
-    regimes: Array<{
-      distributionType: 'normal' | 'studentT';
-      expectedDurationMonths: string;
-      toRegime0: string;
-      toRegime1: string;
-      toRegime2: string;
-      normalMean: string;
-      normalStdDev: string;
-      studentMu: string;
-      studentSigma: string;
-      studentNu: string;
-    }>;
-    exemptionCardLimit: string;
-    exemptionCardYearlyIncrease: string;
-    stockExemptionTaxRate: string;
-    stockExemptionLimit: string;
-    stockExemptionYearlyIncrease: string;
-  }>(() => {
-    const fallbackDefaults = {
+  // Hard-coded advanced defaults (independent of localStorage).
+  // Templates reset advanced values back to these defaults (unless the template overrides).
+  const hardDefaultAdvancedUi = useMemo(() => {
+    return {
       enabled: false,
+      // Execution params (defaults align with backend defaults; backend will clamp/validate anyway).
+      paths: '10000',
+      batchSize: '10000',
       inflationAveragePct: 2,
       yearlyFeePercentage: 0.5,
 
       // Returner
       returnType: 'dataDrivenReturn' as ReturnType,
+      seedMode: 'default' as MasterSeedMode,
       seed: '1',
       simpleAveragePercentage: '7',
       distributionType: 'normal' as DistributionType,
@@ -326,6 +308,46 @@ ref
       stockExemptionLimit: '67500',
       stockExemptionYearlyIncrease: '1000',
     };
+  }, []);
+
+  const initialAdvancedState = useMemo<{
+    enabled: boolean;
+    paths: string;
+    batchSize: string;
+    inflationAveragePct: number;
+    yearlyFeePercentage: number;
+    returnType: ReturnType;
+    seedMode: MasterSeedMode;
+    seed: string;
+    simpleAveragePercentage: string;
+    distributionType: DistributionType;
+    normalMean: string;
+    normalStdDev: string;
+    brownianDrift: string;
+    brownianVolatility: string;
+    studentMu: string;
+    studentSigma: string;
+    studentNu: string;
+    regimeTickMonths: string;
+    regimes: Array<{
+      distributionType: 'normal' | 'studentT';
+      expectedDurationMonths: string;
+      toRegime0: string;
+      toRegime1: string;
+      toRegime2: string;
+      normalMean: string;
+      normalStdDev: string;
+      studentMu: string;
+      studentSigma: string;
+      studentNu: string;
+    }>;
+    exemptionCardLimit: string;
+    exemptionCardYearlyIncrease: string;
+    stockExemptionTaxRate: string;
+    stockExemptionLimit: string;
+    stockExemptionYearlyIncrease: string;
+  }>(() => {
+    const fallbackDefaults = hardDefaultAdvancedUi;
 
     try {
       const raw = window.localStorage.getItem(ADVANCED_OPTIONS_KEY);
@@ -334,11 +356,25 @@ ref
       }
       const parsed = JSON.parse(raw);
       const enabled = Boolean(parsed?.enabled);
+      const paths = parsed?.paths ?? fallbackDefaults.paths;
+      const batchSize = parsed?.batchSize ?? fallbackDefaults.batchSize;
       const inflationAveragePct = Number.isFinite(Number(parsed?.inflationAveragePct)) ? Number(parsed.inflationAveragePct) : 2;
       const yearlyFeePercentage = Number.isFinite(Number(parsed?.yearlyFeePercentage)) ? Number(parsed.yearlyFeePercentage) : 0.5;
       const returnType = parseReturnType(parsed?.returnType);
       const distributionType = parseDistributionType(parsed?.distributionType);
-      const seed = parsed?.seed ?? fallbackDefaults.seed;
+      const seedRaw = parsed?.seed ?? fallbackDefaults.seed;
+      const seedMode: MasterSeedMode =
+        parsed?.seedMode === 'default' || parsed?.seedMode === 'custom' || parsed?.seedMode === 'random'
+          ? parsed.seedMode
+          : (() => {
+              const n = Number(seedRaw);
+              if (Number.isFinite(n) && n < 0) return 'random';
+              // Back-compat: previously we always stored "1". Treat that as default.
+              if (String(seedRaw) === String(fallbackDefaults.seed)) return 'default';
+              return 'custom';
+            })();
+
+      const seed = seedMode === 'random' ? String(fallbackDefaults.seed) : String(seedRaw);
       const simpleAveragePercentage = parsed?.simpleAveragePercentage ?? fallbackDefaults.simpleAveragePercentage;
 
       const regimesInput: any[] = Array.isArray(parsed?.regimes) ? parsed.regimes : [];
@@ -373,10 +409,13 @@ ref
 
       return {
         enabled,
+        paths: String(paths),
+        batchSize: String(batchSize),
         inflationAveragePct,
         yearlyFeePercentage,
         returnType,
         distributionType,
+        seedMode,
         seed: String(seed),
         simpleAveragePercentage: String(simpleAveragePercentage),
         normalMean: parsed?.normalMean ?? fallbackDefaults.normalMean,
@@ -397,9 +436,11 @@ ref
     } catch {
       return fallbackDefaults;
     }
-  }, []);
+  }, [hardDefaultAdvancedUi]);
 
   const [advancedEnabled, setAdvancedEnabled] = useState<boolean>(initialAdvancedState.enabled);
+  const [paths, setPaths] = useState<string>(String(initialAdvancedState.paths));
+  const [batchSize, setBatchSize] = useState<string>(String(initialAdvancedState.batchSize));
   const [inflationAveragePct, setInflationAveragePct] = useState<number>(initialAdvancedState.inflationAveragePct);
   const [yearlyFeePercentage, setYearlyFeePercentage] = useState<number>(initialAdvancedState.yearlyFeePercentage);
 
@@ -410,7 +451,8 @@ ref
   const [stockExemptionYearlyIncrease, setStockExemptionYearlyIncrease] = useState<string>(String(initialAdvancedState.stockExemptionYearlyIncrease));
 
   const [returnType, setReturnType] = useState<ReturnType>(initialAdvancedState.returnType);
-  const [seed, setSeed] = useState<string>(String(initialAdvancedState.seed ?? ''));
+  const [seedMode, setSeedMode] = useState<MasterSeedMode>(initialAdvancedState.seedMode ?? 'default');
+  const [seed, setSeed] = useState<string>(String(initialAdvancedState.seed ?? '1'));
   const [simpleAveragePercentage, setSimpleAveragePercentage] = useState<string>(String(initialAdvancedState.simpleAveragePercentage ?? ''));
 
   const [distributionType, setDistributionType] = useState<DistributionType>(initialAdvancedState.distributionType);
@@ -439,13 +481,128 @@ ref
   >(initialAdvancedState.regimes);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
+
+  type TemplateDiff = {
+    templateId: SimulationTemplateId;
+    templateLabel: string;
+    normal: Array<{ field: string; touched: boolean; changed: boolean; from: string; to: string }>;
+    advanced: Array<{ field: string; touched: boolean; changed: boolean; from: string; to: string }>;
+  };
+
+  const [templatePickerId, setTemplatePickerId] = useState<SimulationTemplateId>(selectedTemplateId);
+  const [pendingTemplateId, setPendingTemplateId] = useState<SimulationTemplateId | null>(null);
+
+  const [isTemplateDiffOpen, setIsTemplateDiffOpen] = useState(false);
+  const [templateDiffTitle, setTemplateDiffTitle] = useState<'Template preview' | 'What changed?'>('What changed?');
+  const [templateDiffMode, setTemplateDiffMode] = useState<'preview' | 'whatChanged'>('whatChanged');
+  const [templateModalDiff, setTemplateModalDiff] = useState<TemplateDiff | null>(null);
+  const [lastTemplateDiff, setLastTemplateDiff] = useState<TemplateDiff | null>(null);
+  type AdvancedUiSnapshot = {
+    paths: string;
+    batchSize: string;
+    inflationAveragePct: number;
+    yearlyFeePercentage: number;
+    returnType: ReturnType;
+    seedMode: MasterSeedMode;
+    seed: string;
+    simpleAveragePercentage: string;
+    distributionType: DistributionType;
+    normalMean: string;
+    normalStdDev: string;
+    brownianDrift: string;
+    brownianVolatility: string;
+    studentMu: string;
+    studentSigma: string;
+    studentNu: string;
+    regimeTickMonths: string;
+    regimes: typeof regimes;
+    exemptionCardLimit: string;
+    exemptionCardYearlyIncrease: string;
+    stockExemptionTaxRate: string;
+    stockExemptionLimit: string;
+    stockExemptionYearlyIncrease: string;
+  };
+
+  const currentAdvancedUi = useMemo<AdvancedUiSnapshot>(() => ({
+    paths,
+    batchSize,
+    inflationAveragePct,
+    yearlyFeePercentage,
+    returnType,
+    seedMode,
+    seed,
+    simpleAveragePercentage,
+    distributionType,
+    normalMean,
+    normalStdDev,
+    brownianDrift,
+    brownianVolatility,
+    studentMu,
+    studentSigma,
+    studentNu,
+    regimeTickMonths,
+    regimes,
+    exemptionCardLimit,
+    exemptionCardYearlyIncrease,
+    stockExemptionTaxRate,
+    stockExemptionLimit,
+    stockExemptionYearlyIncrease,
+  }), [
+    batchSize,
+    brownianDrift,
+    brownianVolatility,
+    distributionType,
+    exemptionCardLimit,
+    exemptionCardYearlyIncrease,
+    inflationAveragePct,
+    normalMean,
+    normalStdDev,
+    paths,
+    regimeTickMonths,
+    regimes,
+    returnType,
+    seed,
+    seedMode,
+    simpleAveragePercentage,
+    stockExemptionLimit,
+    stockExemptionTaxRate,
+    stockExemptionYearlyIncrease,
+    yearlyFeePercentage,
+  ]);
+
+  const [baselineAdvancedUi, setBaselineAdvancedUi] = useState<AdvancedUiSnapshot>(() => ({
+    paths: String(initialAdvancedState.paths),
+    batchSize: String(initialAdvancedState.batchSize),
+    inflationAveragePct: initialAdvancedState.inflationAveragePct,
+    yearlyFeePercentage: initialAdvancedState.yearlyFeePercentage,
+    returnType: initialAdvancedState.returnType,
+    seedMode: initialAdvancedState.seedMode ?? 'default',
+    seed: String(initialAdvancedState.seed ?? '1'),
+    simpleAveragePercentage: String(initialAdvancedState.simpleAveragePercentage ?? ''),
+    distributionType: initialAdvancedState.distributionType,
+    normalMean: String(initialAdvancedState.normalMean ?? ''),
+    normalStdDev: String(initialAdvancedState.normalStdDev ?? ''),
+    brownianDrift: String(initialAdvancedState.brownianDrift ?? ''),
+    brownianVolatility: String(initialAdvancedState.brownianVolatility ?? ''),
+    studentMu: String(initialAdvancedState.studentMu ?? ''),
+    studentSigma: String(initialAdvancedState.studentSigma ?? ''),
+    studentNu: String(initialAdvancedState.studentNu ?? ''),
+    regimeTickMonths: String(initialAdvancedState.regimeTickMonths ?? ''),
+    regimes: initialAdvancedState.regimes,
+    exemptionCardLimit: String(initialAdvancedState.exemptionCardLimit),
+    exemptionCardYearlyIncrease: String(initialAdvancedState.exemptionCardYearlyIncrease),
+    stockExemptionTaxRate: String(initialAdvancedState.stockExemptionTaxRate),
+    stockExemptionLimit: String(initialAdvancedState.stockExemptionLimit),
+    stockExemptionYearlyIncrease: String(initialAdvancedState.stockExemptionYearlyIncrease),
+  }));
+
   const [baselineRequest, setBaselineRequest] = useState<SimulationRequest>(() => {
-    const seedNum = toNumOrUndef(initialAdvancedState.seed);
+    const seedNum = seedForMode(initialAdvancedState.seedMode ?? 'default', toNumOrUndef(initialAdvancedState.seed));
     return {
       ...initialDefaults,
       startDate: { date: initialDefaults.startDate.date },
       phases: initialDefaults.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
-      ...(seedNum !== undefined ? { seed: seedNum } : {}),
+      seed: seedNum,
     };
   });
 
@@ -458,17 +615,20 @@ ref
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
   const [simulationId, setSimulationId] = useState<string | null>(null);
-  const [lastCompletedRun, setLastCompletedRun] = useState<{ id: string; request: SimulationRequest } | null>(null);
-  const lastRunRequestRef = useRef<SimulationRequest | null>(null);
+  const simulationIdRef = useRef<string | null>(null);
+  const [lastCompletedRun, setLastCompletedRun] = useState<{ id: string; advancedRequest: AdvancedSimulationRequest } | null>(null);
+  const lastStartedRunMetaRef = useRef<StartRunResponse | null>(null);
+  const lastRunRequestRef = useRef<AdvancedSimulationRequest | null>(null);
   const lastRunWasNormalRef = useRef<boolean>(false);
 
   const advancedMode = mode === 'advanced';
 
   const effectiveAdvancedFeatureFlags = useMemo<AdvancedFeatureFlags>(
-    () => advancedFeatureFlags ?? { inflation: true, exemptions: true, returnModel: true, fee: true },
+    () => advancedFeatureFlags ?? { execution: true, inflation: true, exemptions: true, returnModel: true, fee: true },
     [advancedFeatureFlags]
   );
 
+  const executionFeatureOn = effectiveAdvancedFeatureFlags.execution;
   const inflationFeatureOn = effectiveAdvancedFeatureFlags.inflation;
   const feeFeatureOn = effectiveAdvancedFeatureFlags.fee;
   const exemptionsFeatureOn = effectiveAdvancedFeatureFlags.exemptions;
@@ -486,6 +646,79 @@ ref
       return null;
     }
   }, []);
+
+  const didRestoreDraftRef = useRef(false);
+  useEffect(() => {
+    if (didRestoreDraftRef.current) return;
+    if (scenarioParamOnLoad) return;
+
+    try {
+      const raw = window.localStorage.getItem(NORMAL_DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.version !== 1) return;
+
+      const tpl = String(parsed.selectedTemplateId ?? 'starter') as SimulationTemplateId;
+      if (tpl) setSelectedTemplateId(tpl);
+
+      if (typeof parsed.startDate === 'string') setStartDate(parsed.startDate);
+      if (parsed.overallTaxRule === 'CAPITAL' || parsed.overallTaxRule === 'NOTIONAL') setOverallTaxRule(parsed.overallTaxRule);
+      if (typeof parsed.taxPercentage === 'number') setTaxPercentage(parsed.taxPercentage);
+      if (Array.isArray(parsed.phases)) {
+        setPhases(parsed.phases.map((p: any) => ({ ...p, taxRules: p?.taxRules ?? [] })));
+      }
+
+      if (parsed.baselineRequest && typeof parsed.baselineRequest === 'object') {
+        const br = parsed.baselineRequest as SimulationRequest;
+        if (br?.startDate?.date && Array.isArray(br?.phases)) {
+          setBaselineRequest({
+            ...br,
+            startDate: { date: String(br.startDate.date) },
+            phases: br.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+          });
+        }
+      }
+
+      if (parsed.baselineAdvancedUi && typeof parsed.baselineAdvancedUi === 'object') {
+        setBaselineAdvancedUi(parsed.baselineAdvancedUi as any);
+      }
+
+      hasUserEditedRef.current = false;
+      didRestoreDraftRef.current = true;
+    } catch {
+      // ignore
+    }
+  }, [scenarioParamOnLoad]);
+
+  useEffect(() => {
+    if (scenarioParamOnLoad) return;
+    try {
+      window.localStorage.setItem(
+        NORMAL_DRAFT_KEY,
+        JSON.stringify({
+          version: 1,
+          selectedTemplateId,
+          startDate,
+          overallTaxRule,
+          taxPercentage,
+          phases,
+          baselineRequest,
+          baselineAdvancedUi,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [
+    baselineAdvancedUi,
+    baselineRequest,
+    overallTaxRule,
+    phases,
+    scenarioParamOnLoad,
+    selectedTemplateId,
+    startDate,
+    taxPercentage,
+  ]);
 
   const hasUserEditedRef = useRef(false);
   const markUserEdited = useCallback(() => {
@@ -525,17 +758,171 @@ ref
   const overLimit = totalMonths > MAX_MONTHS;
 
   const currentRequest = useMemo<SimulationRequest>(() => {
-    const seedNum = toNumOrUndef(seed);
+    const seedNum = seedForMode(seedMode, toNumOrUndef(seed));
     return {
       startDate: { date: startDate },
       overallTaxRule,
       taxPercentage,
       phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
-      ...(seedNum !== undefined ? { seed: seedNum } : {}),
+      seed: seedNum,
     };
-  }, [startDate, overallTaxRule, taxPercentage, phases, seed]);
+  }, [startDate, overallTaxRule, taxPercentage, phases, seed, seedMode]);
 
-  const isDirty = useMemo(() => !deepEqual(currentRequest, baselineRequest), [currentRequest, baselineRequest]);
+  const currentAdvancedRequest = useMemo<AdvancedSimulationRequest>(() => {
+    const seedNum = seedForMode(seedMode, toNumOrUndef(seed));
+
+    // Base request (always present)
+    const base: AdvancedSimulationRequest = {
+      startDate: { date: startDate },
+      phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      overallTaxRule: mapOverallTaxRuleForAdvanced(overallTaxRule),
+      taxPercentage,
+      seed: seedNum,
+    };
+
+    const clampExec = (v: number | undefined): number | undefined => {
+      if (v === undefined) return undefined;
+      if (!Number.isFinite(v)) return undefined;
+      return Math.max(1, Math.min(100_000, Math.floor(v)));
+    };
+
+    // Execution params should affect runs even when the UI section is hidden.
+    // Backend will clamp/validate and also defaults when missing.
+    const pathsToSend = clampExec(toNumOrUndef(paths));
+    const batchSizeToSend = clampExec(toNumOrUndef(batchSize));
+    const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
+    const yearlyFeePercentageToSend = feeFeatureOn ? (Number(yearlyFeePercentage) || 0) : undefined;
+
+    const exCardLimit = toNumOrUndef(exemptionCardLimit);
+    const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
+    const stockTaxRate = toNumOrUndef(stockExemptionTaxRate);
+    const stockLimit = toNumOrUndef(stockExemptionLimit);
+    const stockInc = toNumOrUndef(stockExemptionYearlyIncrease);
+
+    const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
+      exemptionsFeatureOn && (exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined)
+        ? {
+            exemptionCard: {
+              limit: exCardLimit,
+              yearlyIncrease: exCardInc,
+            },
+            stockExemption: {
+              taxRate: stockTaxRate,
+              limit: stockLimit,
+              yearlyIncrease: stockInc,
+            },
+          }
+        : undefined;
+
+    const returnTypeToSend: ReturnType = returnModelFeatureOn ? returnType : 'dataDrivenReturn';
+
+    const rc: AdvancedSimulationRequest['returnerConfig'] = { seed: seedNum };
+    if (returnModelFeatureOn && returnType === 'simpleReturn') {
+      const avg = toNumOrUndef(simpleAveragePercentage);
+      if (avg !== undefined) rc.simpleAveragePercentage = avg;
+    }
+
+    if (returnModelFeatureOn && returnType === 'distributionReturn') {
+      rc.distribution = { type: distributionType };
+      if (distributionType === 'normal') {
+        rc.distribution.normal = {
+          mean: toNumOrUndef(normalMean),
+          standardDeviation: toNumOrUndef(normalStdDev),
+        };
+      } else if (distributionType === 'brownianMotion') {
+        rc.distribution.brownianMotion = {
+          drift: toNumOrUndef(brownianDrift),
+          volatility: toNumOrUndef(brownianVolatility),
+        };
+      } else if (distributionType === 'studentT') {
+        rc.distribution.studentT = {
+          mu: toNumOrUndef(studentMu),
+          sigma: toNumOrUndef(studentSigma),
+          nu: toNumOrUndef(studentNu),
+        };
+      } else if (distributionType === 'regimeBased') {
+        rc.distribution.regimeBased = {
+          tickMonths: toNumOrUndef(regimeTickMonths),
+          regimes: regimes.map((r) => ({
+            distributionType: r.distributionType,
+            expectedDurationMonths: toNumOrUndef(r.expectedDurationMonths),
+            switchWeights: {
+              toRegime0: toNumOrUndef(r.toRegime0),
+              toRegime1: toNumOrUndef(r.toRegime1),
+              toRegime2: toNumOrUndef(r.toRegime2),
+            },
+            ...(r.distributionType === 'studentT'
+              ? {
+                  studentT: {
+                    mu: toNumOrUndef(r.studentMu),
+                    sigma: toNumOrUndef(r.studentSigma),
+                    nu: toNumOrUndef(r.studentNu),
+                  },
+                }
+              : {
+                  normal: {
+                    mean: toNumOrUndef(r.normalMean),
+                    standardDeviation: toNumOrUndef(r.normalStdDev),
+                  },
+                }),
+          })),
+        };
+      }
+    }
+
+    const hasReturnerConfig =
+      returnModelFeatureOn &&
+      (rc.simpleAveragePercentage !== undefined || rc.distribution?.type !== undefined || rc.seed !== undefined);
+
+    return {
+      ...base,
+      ...(pathsToSend !== undefined ? { paths: pathsToSend } : {}),
+      ...(batchSizeToSend !== undefined ? { batchSize: batchSizeToSend } : {}),
+      ...(inflationFactorToSend !== undefined ? { inflationFactor: inflationFactorToSend } : {}),
+      ...(yearlyFeePercentageToSend !== undefined ? { yearlyFeePercentage: yearlyFeePercentageToSend } : {}),
+      returnType: returnTypeToSend,
+      ...(taxExemptionConfig ? { taxExemptionConfig } : {}),
+      ...(hasReturnerConfig ? { returnerConfig: rc } : {}),
+    };
+  }, [
+    batchSize,
+    brownianDrift,
+    brownianVolatility,
+    distributionType,
+    exemptionCardLimit,
+    exemptionCardYearlyIncrease,
+    executionFeatureOn,
+    exemptionsFeatureOn,
+    feeFeatureOn,
+    inflationAveragePct,
+    inflationFeatureOn,
+    normalMean,
+    normalStdDev,
+    overallTaxRule,
+    paths,
+    phases,
+    regimeTickMonths,
+    regimes,
+    returnModelFeatureOn,
+    returnType,
+    seed,
+    seedMode,
+    simpleAveragePercentage,
+    startDate,
+    stockExemptionLimit,
+    stockExemptionTaxRate,
+    stockExemptionYearlyIncrease,
+    studentMu,
+    studentNu,
+    studentSigma,
+    taxPercentage,
+    yearlyFeePercentage,
+    currentRequest,
+  ]);
+
+  const isDirtyNormal = useMemo(() => !deepEqual(currentRequest, baselineRequest), [currentRequest, baselineRequest]);
+  const isDirtyAdvanced = useMemo(() => !deepEqual(currentAdvancedUi, baselineAdvancedUi), [currentAdvancedUi, baselineAdvancedUi]);
+  const isDirty = useMemo(() => isDirtyNormal || isDirtyAdvanced, [isDirtyAdvanced, isDirtyNormal]);
 
   const applyRequestToForm = useCallback((req: SimulationRequest) => {
     hasUserEditedRef.current = false;
@@ -543,16 +930,37 @@ ref
     setOverallTaxRule(req.overallTaxRule);
     setTaxPercentage(req.taxPercentage);
     setPhases(req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+    let nextSeedMode: MasterSeedMode = 'default';
+    let nextSeed = '1';
+
     if (req.seed !== undefined && req.seed !== null) {
-      setSeed(String(req.seed));
+      const n = Number(req.seed);
+      if (Number.isFinite(n) && n < 0) {
+        nextSeedMode = 'random';
+        nextSeed = '1';
+      } else if (Number.isFinite(n) && Math.trunc(n) === 1) {
+        nextSeedMode = 'default';
+        nextSeed = '1';
+      } else if (Number.isFinite(n)) {
+        nextSeedMode = 'custom';
+        nextSeed = String(Math.trunc(n));
+      } else {
+        nextSeedMode = 'default';
+        nextSeed = '1';
+      }
     } else {
-      setSeed('');
+      nextSeedMode = 'default';
+      nextSeed = '1';
     }
+
+    setSeedMode(nextSeedMode);
+    setSeed(nextSeed);
     setBaselineRequest({
       ...req,
       startDate: { date: req.startDate.date },
       phases: req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
     });
+    setBaselineAdvancedUi((prev) => ({ ...prev, seedMode: nextSeedMode, seed: nextSeed }));
     setSelectedTemplateId('custom');
   }, []);
 
@@ -568,6 +976,15 @@ ref
 
     // If the import doesn't specify enabled, assume advanced inputs imply enabled.
     setAdvancedEnabled(externalLoadAdvanced.enabled ?? true);
+
+    if (externalLoadAdvanced.paths !== undefined) {
+      const p = String(externalLoadAdvanced.paths);
+      if (p !== '') setPaths(p);
+    }
+    if (externalLoadAdvanced.batchSize !== undefined) {
+      const b = String(externalLoadAdvanced.batchSize);
+      if (b !== '') setBatchSize(b);
+    }
 
     if (externalLoadAdvanced.inflationAveragePct !== undefined) {
       const pct = Number(externalLoadAdvanced.inflationAveragePct);
@@ -593,10 +1010,28 @@ ref
     const rt = externalLoadAdvanced.returnType;
     if (rt) setReturnType(parseReturnType(rt));
 
-    if (externalLoadAdvanced.seed !== undefined) setSeed(String(externalLoadAdvanced.seed));
-
     const rc = externalLoadAdvanced.returnerConfig;
-    if (rc?.seed !== undefined) setSeed(String(rc.seed));
+
+    const rawSeed = rc?.seed ?? externalLoadAdvanced.seed;
+    const explicitMode = externalLoadAdvanced.seedMode;
+    const inferredMode: MasterSeedMode =
+      explicitMode === 'default' || explicitMode === 'custom' || explicitMode === 'random'
+        ? explicitMode
+        : (() => {
+            const n = Number(rawSeed);
+            if (Number.isFinite(n) && n < 0) return 'random';
+            if (Number.isFinite(n) && Math.trunc(n) === 1) return 'default';
+            if (Number.isFinite(n)) return 'custom';
+            return 'default';
+          })();
+
+    setSeedMode(inferredMode);
+    if (inferredMode === 'custom') {
+      if (rawSeed !== undefined) setSeed(String(rawSeed));
+    } else {
+      // Preserve a positive seed so Custom can be re-enabled without losing state.
+      if (rawSeed !== undefined && Number(rawSeed) > 0) setSeed(String(rawSeed));
+    }
     if (rc?.simpleAveragePercentage !== undefined) setSimpleAveragePercentage(String(rc.simpleAveragePercentage));
 
     const dist = rc?.distribution;
@@ -642,6 +1077,8 @@ ref
     externalLoadAdvanced,
     externalLoadAdvancedNonce,
     setAdvancedEnabled,
+    setPaths,
+    setBatchSize,
     setInflationAveragePct,
     setYearlyFeePercentage,
     setExemptionCardLimit,
@@ -650,6 +1087,7 @@ ref
     setStockExemptionLimit,
     setStockExemptionYearlyIncrease,
     setReturnType,
+    setSeedMode,
     setSeed,
     setSimpleAveragePercentage,
     setDistributionType,
@@ -670,9 +1108,12 @@ ref
         ADVANCED_OPTIONS_KEY,
         JSON.stringify({
           enabled: advancedEnabled,
+          paths,
+          batchSize,
           inflationAveragePct,
           yearlyFeePercentage,
           returnType,
+          seedMode,
           seed,
           simpleAveragePercentage,
           distributionType,
@@ -697,9 +1138,12 @@ ref
     }
   }, [
     advancedEnabled,
+    paths,
+    batchSize,
     inflationAveragePct,
     yearlyFeePercentage,
     returnType,
+    seedMode,
     seed,
     simpleAveragePercentage,
     distributionType,
@@ -718,6 +1162,35 @@ ref
     stockExemptionLimit,
     stockExemptionYearlyIncrease,
   ]);
+
+  // Baseline advanced defaults (used when applying templates).
+  // Applying a template should reset *all* advanced values to the template defaults,
+  // not keep whatever advanced values the user previously experimented with.
+  const defaultAdvancedUi = useMemo<AdvancedUiSnapshot>(() => ({
+    paths: String(hardDefaultAdvancedUi.paths),
+    batchSize: String(hardDefaultAdvancedUi.batchSize),
+    inflationAveragePct: hardDefaultAdvancedUi.inflationAveragePct,
+    yearlyFeePercentage: hardDefaultAdvancedUi.yearlyFeePercentage,
+    returnType: hardDefaultAdvancedUi.returnType,
+    seedMode: hardDefaultAdvancedUi.seedMode,
+    seed: String(hardDefaultAdvancedUi.seed),
+    simpleAveragePercentage: String(hardDefaultAdvancedUi.simpleAveragePercentage),
+    distributionType: hardDefaultAdvancedUi.distributionType,
+    normalMean: String(hardDefaultAdvancedUi.normalMean),
+    normalStdDev: String(hardDefaultAdvancedUi.normalStdDev),
+    brownianDrift: String(hardDefaultAdvancedUi.brownianDrift),
+    brownianVolatility: String(hardDefaultAdvancedUi.brownianVolatility),
+    studentMu: String(hardDefaultAdvancedUi.studentMu),
+    studentSigma: String(hardDefaultAdvancedUi.studentSigma),
+    studentNu: String(hardDefaultAdvancedUi.studentNu),
+    regimeTickMonths: String(hardDefaultAdvancedUi.regimeTickMonths),
+    regimes: hardDefaultAdvancedUi.regimes,
+    exemptionCardLimit: String(hardDefaultAdvancedUi.exemptionCardLimit),
+    exemptionCardYearlyIncrease: String(hardDefaultAdvancedUi.exemptionCardYearlyIncrease),
+    stockExemptionTaxRate: String(hardDefaultAdvancedUi.stockExemptionTaxRate),
+    stockExemptionLimit: String(hardDefaultAdvancedUi.stockExemptionLimit),
+    stockExemptionYearlyIncrease: String(hardDefaultAdvancedUi.stockExemptionYearlyIncrease),
+  }), [hardDefaultAdvancedUi]);
 
   const refreshSavedScenarios = useCallback(() => {
     setSavedScenarios(listSavedScenarios());
@@ -865,8 +1338,14 @@ ref
 
   const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === selectedScenarioId), [savedScenarios, selectedScenarioId]);
   const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === compareScenarioId), [savedScenarios, compareScenarioId]);
-  const scenarioASummary = useMemo(() => (scenarioA ? summarizeScenario(scenarioA.request) : null), [scenarioA]);
-  const scenarioBSummary = useMemo(() => (scenarioB ? summarizeScenario(scenarioB.request) : null), [scenarioB]);
+  const scenarioASummary = useMemo(
+    () => (scenarioA ? summarizeScenario(scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest)) : null),
+    [scenarioA]
+  );
+  const scenarioBSummary = useMemo(
+    () => (scenarioB ? summarizeScenario(scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest)) : null),
+    [scenarioB]
+  );
 
   const fmtNumber = useMemo(
     () => new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }),
@@ -890,32 +1369,76 @@ ref
     const name = window.prompt('Scenario name?');
     if (!name) return;
 
-    const matchingLastRunId = lastCompletedRun && deepEqual(lastCompletedRun.request, currentRequest)
+    const lastStartedRunMeta = lastStartedRunMetaRef.current;
+    const requestToSave = materializeRandomSeedIfNeeded(
+      currentAdvancedRequest,
+      lastStartedRunMeta?.rngSeed ?? null
+    );
+    const wasRandomRequested = isRandomSeedRequested(currentAdvancedRequest);
+
+    const matchingLastRunId = lastCompletedRun && deepEqual(lastCompletedRun.advancedRequest, requestToSave)
       ? lastCompletedRun.id
       : undefined;
 
+    const lastStartedRunId = simulationIdRef.current;
+
     const resolvedRunId = matchingLastRunId
-      ?? (simulationId
-        ? simulationId
-        : await findRunForInput(currentRequest).catch(() => null));
+      ?? (!wasRandomRequested && lastStartedRunId
+        ? lastStartedRunId
+        : await findRunForInput(requestToSave).catch(() => null));
+
+    const metaMatchesCurrentRequest =
+      Boolean(lastStartedRunMeta) &&
+      Boolean(lastRunRequestRef.current) &&
+      deepEqual(lastRunRequestRef.current, currentAdvancedRequest);
+
+    const metaToStore =
+      lastStartedRunMeta &&
+      (
+        // For deterministic runs: only store meta when it matches the persisted run id.
+        (resolvedRunId && resolvedRunId === lastStartedRunMeta.id) ||
+        // For random-seed requests: store meta when it matches the last submitted payload.
+        (wasRandomRequested && metaMatchesCurrentRequest)
+      )
+        ? {
+            id: lastStartedRunMeta.id,
+            createdAt: lastStartedRunMeta.createdAt,
+            rngSeed: lastStartedRunMeta.rngSeed ?? null,
+            modelAppVersion: lastStartedRunMeta.modelAppVersion ?? null,
+            modelBuildTime: lastStartedRunMeta.modelBuildTime ?? null,
+            modelSpringBootVersion: lastStartedRunMeta.modelSpringBootVersion ?? null,
+            modelJavaVersion: lastStartedRunMeta.modelJavaVersion ?? null,
+          }
+        : undefined;
 
     const existing = findScenarioByName(name);
     if (existing) {
       const ok = window.confirm(`Overwrite existing scenario "${existing.name}"?`);
       if (!ok) return;
-      const saved = saveScenario(existing.name, currentRequest, existing.id, resolvedRunId ?? existing.runId ?? undefined);
+
+      const keepExistingRunId =
+        !wasRandomRequested &&
+        deepEqual(existing.advancedRequest, requestToSave);
+
+      const saved = saveScenario(
+        existing.name,
+        requestToSave,
+        existing.id,
+        resolvedRunId ?? (keepExistingRunId ? existing.runId : undefined),
+        metaToStore ?? existing.lastRunMeta
+      );
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
       return;
     }
 
-    const saved = saveScenario(name, currentRequest, undefined, resolvedRunId ?? undefined);
+    const saved = saveScenario(name, requestToSave, undefined, resolvedRunId ?? undefined, metaToStore);
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
-  }, [currentRequest, refreshSavedScenarios, simulationId, lastCompletedRun]);
+  }, [currentAdvancedRequest, refreshSavedScenarios, lastCompletedRun]);
 
-  const runSimulationWithRequest = useCallback(async (req: SimulationRequest) => {
-    const total = (req.phases ?? []).reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
+  const runSimulationWithRequest = useCallback(async (req: AdvancedSimulationRequest) => {
+    const total = (req.phases ?? []).reduce((s, p: any) => s + (Number(p.durationInMonths) || 0), 0);
     if (total > MAX_MONTHS) {
       alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(total)}).`);
       return;
@@ -923,190 +1446,22 @@ ref
 
     setSimulateInProgress(true);
     setSimulationId(null);
+    simulationIdRef.current = null;
 
     try {
-      const sanitized: SimulationRequest = {
-        ...req,
-        startDate: { date: req.startDate.date },
-        phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
-      };
-      lastRunRequestRef.current = sanitized;
+      // Always track the exact payload we submit, for dedup and scenario-save matching.
+      lastRunRequestRef.current = req;
 
-      if (!advancedEnabled) {
-        const id = await startSimulation(sanitized);
-        lastRunWasNormalRef.current = true;
-        setSimulationId(id);
-        return;
-      }
-
-      // Always honor a provided seed, even if return-model features are off, so reproducibility
-      // works across normal vs advanced modes and dedup hashing differs when the seed differs.
-      const seedNum = toNumOrUndef(seed);
-      const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
-      const yearlyFeePercentageToSend = feeFeatureOn ? (Number(yearlyFeePercentage) || 0) : undefined;
-
-      const exCardLimit = toNumOrUndef(exemptionCardLimit);
-      const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
-      const stockTaxRate = toNumOrUndef(stockExemptionTaxRate);
-      const stockLimit = toNumOrUndef(stockExemptionLimit);
-      const stockInc = toNumOrUndef(stockExemptionYearlyIncrease);
-
-      const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
-        exemptionsFeatureOn && (exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined)
-          ? {
-              exemptionCard: {
-                limit: exCardLimit,
-                yearlyIncrease: exCardInc,
-              },
-              stockExemption: {
-                taxRate: stockTaxRate,
-                limit: stockLimit,
-                yearlyIncrease: stockInc,
-              },
-            }
-          : undefined;
-
-      const returnTypeToSend: ReturnType = returnModelFeatureOn ? returnType : 'dataDrivenReturn';
-
-      const rc: AdvancedSimulationRequest['returnerConfig'] = {};
-      if (returnModelFeatureOn && seedNum !== undefined) rc.seed = seedNum;
-
-      if (returnModelFeatureOn && returnType === 'simpleReturn') {
-        const avg = toNumOrUndef(simpleAveragePercentage);
-        if (avg !== undefined) rc.simpleAveragePercentage = avg;
-      }
-
-      if (returnModelFeatureOn && returnType === 'distributionReturn') {
-        const distCfg: NonNullable<AdvancedSimulationRequest['returnerConfig']>['distribution'] = {
-          type: distributionType,
-        };
-
-        if (distributionType === 'normal') {
-          distCfg.normal = {
-            mean: toNumOrUndef(normalMean),
-            standardDeviation: toNumOrUndef(normalStdDev),
-          };
-        } else if (distributionType === 'brownianMotion') {
-          distCfg.brownianMotion = {
-            drift: toNumOrUndef(brownianDrift),
-            volatility: toNumOrUndef(brownianVolatility),
-          };
-        } else if (distributionType === 'studentT') {
-          distCfg.studentT = {
-            mu: toNumOrUndef(studentMu),
-            sigma: toNumOrUndef(studentSigma),
-            nu: toNumOrUndef(studentNu),
-          };
-        } else if (distributionType === 'regimeBased') {
-          distCfg.regimeBased = {
-            tickMonths: toNumOrUndef(regimeTickMonths),
-            regimes: regimes.map((r) => ({
-              distributionType: r.distributionType,
-              expectedDurationMonths: toNumOrUndef(r.expectedDurationMonths),
-              switchWeights: {
-                toRegime0: toNumOrUndef(r.toRegime0),
-                toRegime1: toNumOrUndef(r.toRegime1),
-                toRegime2: toNumOrUndef(r.toRegime2),
-              },
-              normal: {
-                mean: toNumOrUndef(r.normalMean),
-                standardDeviation: toNumOrUndef(r.normalStdDev),
-              },
-              studentT: {
-                mu: toNumOrUndef(r.studentMu),
-                sigma: toNumOrUndef(r.studentSigma),
-                nu: toNumOrUndef(r.studentNu),
-              },
-            })),
-          };
-        }
-
-        rc.distribution = distCfg;
-      }
-
-      const hasReturnerConfig =
-        (rc.seed !== undefined) ||
-        (returnModelFeatureOn && (
-          rc.simpleAveragePercentage !== undefined ||
-          rc.distribution?.type !== undefined
-        ));
-
-      const inflationEquivalentToNormal = !inflationFeatureOn || (inflationFactorToSend !== undefined && Math.abs(inflationFactorToSend - 1.02) < 1e-12);
-      const yearlyFeeEquivalentToNormal = !feeFeatureOn || (yearlyFeePercentageToSend !== undefined && Math.abs(yearlyFeePercentageToSend) < 1e-12);
-      const returnerEquivalentToNormal =
-        returnTypeToSend === 'dataDrivenReturn' &&
-        seedNum === undefined &&
-        !hasReturnerConfig;
-      const taxEquivalentToNormal = !exemptionsFeatureOn || taxExemptionConfig === undefined;
-
-      // Backend dedup is based on the *input DTO* (normal vs advanced), so even if the
-      // internal run-spec ends up identical, calling /start-advanced will not dedup with /start.
-      // When advanced options don't change anything beyond the normal endpoint defaults,
-      // route through /start so we hit dedup.
-      const shouldUseNormalEndpointForDedup =
-        taxEquivalentToNormal &&
-        returnerEquivalentToNormal &&
-        inflationEquivalentToNormal &&
-        yearlyFeeEquivalentToNormal;
-
-      if (shouldUseNormalEndpointForDedup) {
-        const id = await startSimulation(sanitized);
-        lastRunWasNormalRef.current = true;
-        setSimulationId(id);
-        return;
-      }
-
-      const advReq: AdvancedSimulationRequest = {
-        startDate: { date: sanitized.startDate.date },
-        phases: sanitized.phases,
-        overallTaxRule: mapOverallTaxRuleForAdvanced(sanitized.overallTaxRule),
-        taxPercentage: sanitized.taxPercentage,
-        ...((returnModelFeatureOn || seedNum !== undefined)
-          ? {
-              returnType: returnTypeToSend,
-              seed: seedNum,
-              returnerConfig: hasReturnerConfig ? rc : undefined,
-            }
-          : {}),
-        ...(exemptionsFeatureOn ? { taxExemptionConfig } : {}),
-        ...(inflationFeatureOn ? { inflationFactor: inflationFactorToSend } : {}),
-        ...(feeFeatureOn ? { yearlyFeePercentage: yearlyFeePercentageToSend } : {}),
-      };
-
-      const id = await startAdvancedSimulation(advReq);
-      lastRunWasNormalRef.current = false;
-      setSimulationId(id);
+      const started = await startAdvancedSimulation(req);
+      lastStartedRunMetaRef.current = started;
+      lastRunWasNormalRef.current = !advancedEnabled;
+      setSimulationId(started.id);
+      simulationIdRef.current = started.id;
     } catch (err) {
       alert((err as Error).message);
       setSimulateInProgress(false);
     }
-  }, [
-    advancedEnabled,
-    inflationFeatureOn,
-    feeFeatureOn,
-    exemptionsFeatureOn,
-    returnModelFeatureOn,
-    inflationAveragePct,
-    yearlyFeePercentage,
-    returnType,
-    seed,
-    simpleAveragePercentage,
-    distributionType,
-    normalMean,
-    normalStdDev,
-    brownianDrift,
-    brownianVolatility,
-    studentMu,
-    studentSigma,
-    studentNu,
-    regimeTickMonths,
-    regimes,
-    exemptionCardLimit,
-    exemptionCardYearlyIncrease,
-    stockExemptionTaxRate,
-    stockExemptionLimit,
-    stockExemptionYearlyIncrease,
-  ]);
+  }, [advancedEnabled]);
 
   const handleLoadScenario = useCallback((scenarioId: string) => {
     if (!scenarioId) return;
@@ -1116,9 +1471,10 @@ ref
       const ok = window.confirm('Loading a scenario will overwrite your current inputs. Continue?');
       if (!ok) return;
     }
-    applyRequestToForm(scenario.request);
+    const reqForForm = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
+    applyRequestToForm(reqForForm);
     setSelectedScenarioId(scenario.id);
-    void runSimulationWithRequest(scenario.request);
+    void runSimulationWithRequest(scenario.advancedRequest);
     closeScenarioModal();
   }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
 
@@ -1132,7 +1488,8 @@ ref
     );
     if (!ok) return;
 
-    const param = encodeScenarioToShareParam(scenario.request);
+    const reqForShare = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
+    const param = encodeScenarioToShareParam(reqForShare);
     const url = new URL(window.location.href);
     url.pathname = '/simulation';
     url.searchParams.set('scenario', param);
@@ -1162,43 +1519,376 @@ ref
     setSelectedScenarioId('');
   }, [refreshSavedScenarios, selectedScenarioId]);
 
-  const selectedTemplate = useMemo(() => getTemplateById(selectedTemplateId), [selectedTemplateId]);
+  const selectedTemplate = useMemo(() => getTemplateById(templatePickerId), [templatePickerId]);
 
   useEffect(() => {
-    if (selectedTemplateId !== 'custom' && isDirty) {
+    if (pendingTemplateId != null) return;
+    setTemplatePickerId(selectedTemplateId);
+  }, [pendingTemplateId, selectedTemplateId]);
+
+  useEffect(() => {
+    if (selectedTemplateId !== 'custom' && isDirty && hasUserEditedRef.current) {
       setSelectedTemplateId('custom');
     }
   }, [isDirty, selectedTemplateId]);
 
-  const applyTemplate = useCallback((templateId: SimulationTemplateId, opts?: { confirmOverwrite?: boolean }) => {
-    const template = getTemplateById(templateId);
+  const closeTemplateDiff = useCallback(() => {
+    // If we're previewing a template, closing acts like cancel.
+    if (templateDiffMode === 'preview' && pendingTemplateId != null) {
+      setPendingTemplateId(null);
+      setTemplatePickerId(selectedTemplateId);
+      setTemplateModalDiff(null);
+    }
+    setIsTemplateDiffOpen(false);
+  }, [pendingTemplateId, selectedTemplateId, templateDiffMode]);
 
-    const shouldConfirm = opts?.confirmOverwrite !== false;
-    if (shouldConfirm && templateId !== 'custom' && isDirty && hasUserEditedRef.current) {
-      const ok = window.confirm('Applying a template will overwrite your current inputs. Continue?');
-      if (!ok) return;
+  const coerceTemplateAdvancedPatch = useCallback((adv?: TemplateAdvancedDefaults | null): Partial<AdvancedUiSnapshot> => {
+    if (!adv) return {};
+    const patch: Partial<AdvancedUiSnapshot> = {};
+
+    if (adv.paths !== undefined) patch.paths = String(adv.paths);
+    if (adv.batchSize !== undefined) patch.batchSize = String(adv.batchSize);
+    if (adv.inflationAveragePct !== undefined) patch.inflationAveragePct = Number(adv.inflationAveragePct);
+    if (adv.yearlyFeePercentage !== undefined) patch.yearlyFeePercentage = Number(adv.yearlyFeePercentage);
+
+    if (adv.returnType !== undefined) patch.returnType = adv.returnType as ReturnType;
+    if (adv.seedMode !== undefined) patch.seedMode = adv.seedMode;
+    if (adv.seed !== undefined) patch.seed = String(Math.trunc(Number(adv.seed)));
+
+    if (adv.exemptionCardLimit !== undefined) patch.exemptionCardLimit = String(adv.exemptionCardLimit);
+    if (adv.exemptionCardYearlyIncrease !== undefined) patch.exemptionCardYearlyIncrease = String(adv.exemptionCardYearlyIncrease);
+    if (adv.stockExemptionTaxRate !== undefined) patch.stockExemptionTaxRate = String(adv.stockExemptionTaxRate);
+    if (adv.stockExemptionLimit !== undefined) patch.stockExemptionLimit = String(adv.stockExemptionLimit);
+    if (adv.stockExemptionYearlyIncrease !== undefined) patch.stockExemptionYearlyIncrease = String(adv.stockExemptionYearlyIncrease);
+
+    return patch;
+  }, []);
+
+  const buildTemplateDiff = useCallback((templateId: SimulationTemplateId) => {
+    const template = getTemplateById(templateId);
+    const resolved = resolveTemplateToRequest(template);
+    const advPatch = coerceTemplateAdvancedPatch(template.advanced);
+    const targetAdvancedUi: AdvancedUiSnapshot = { ...defaultAdvancedUi, ...advPatch, regimes: advPatch.regimes ?? defaultAdvancedUi.regimes };
+
+    const phaseTouched = Boolean(template.patch?.phases);
+    const fromPhases = phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] }));
+    const toPhases = resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] }));
+
+    const fmt = (v: unknown): string => {
+      if (v === null || v === undefined) return '—';
+      const s = String(v);
+      return s.trim() === '' ? '—' : s;
+    };
+
+    const fmtTaxRules = (rules?: Array<string> | null): string => {
+      if (!rules || rules.length === 0) return '—';
+      return rules.join(', ');
+    };
+
+    const phaseDetailRows: Array<{ field: string; touched: boolean; changed: boolean; from: string; to: string }> = [];
+    if (phaseTouched) {
+      const max = Math.max(fromPhases.length, toPhases.length);
+      for (let i = 0; i < max; i++) {
+        const a = fromPhases[i];
+        const b = toPhases[i];
+        const phaseLabel = `Phase ${i + 1}`;
+
+        if (!a && b) {
+          phaseDetailRows.push({
+            field: `${phaseLabel}: Added`,
+            touched: true,
+            changed: true,
+            from: '—',
+            to: `${b.phaseType} (${fmt(b.durationInMonths)} months)`,
+          });
+          continue;
+        }
+        if (a && !b) {
+          phaseDetailRows.push({
+            field: `${phaseLabel}: Removed`,
+            touched: true,
+            changed: true,
+            from: `${a.phaseType} (${fmt(a.durationInMonths)} months)`,
+            to: '—',
+          });
+          continue;
+        }
+        if (!a || !b) continue;
+
+        const fields: Array<{ key: keyof PhaseRequest; label: string; format?: (v: any) => string }> = [
+          { key: 'phaseType', label: 'Type', format: (v) => fmt(v) },
+          { key: 'durationInMonths', label: 'Duration (months)', format: (v) => fmt(v) },
+          { key: 'initialDeposit', label: 'Initial deposit', format: (v) => fmt(v) },
+          { key: 'monthlyDeposit', label: 'Monthly deposit', format: (v) => fmt(v) },
+          { key: 'yearlyIncreaseInPercentage', label: 'Yearly increase (%)', format: (v) => fmt(v) },
+          { key: 'withdrawRate', label: 'Withdraw rate', format: (v) => fmt(v) },
+          { key: 'withdrawAmount', label: 'Withdraw amount', format: (v) => fmt(v) },
+          { key: 'lowerVariationPercentage', label: 'Lower variation (%)', format: (v) => fmt(v) },
+          { key: 'upperVariationPercentage', label: 'Upper variation (%)', format: (v) => fmt(v) },
+          { key: 'taxRules', label: 'Tax exemptions', format: (v) => fmtTaxRules(v) },
+        ];
+
+        for (const f of fields) {
+          const av = (a as any)[f.key];
+          const bv = (b as any)[f.key];
+          const aStr = f.format ? f.format(av) : fmt(av);
+          const bStr = f.format ? f.format(bv) : fmt(bv);
+          if (aStr === bStr) continue;
+          phaseDetailRows.push({
+            field: `${phaseLabel}: ${f.label}`,
+            touched: true,
+            changed: true,
+            from: aStr,
+            to: bStr,
+          });
+        }
+      }
     }
 
-    setSelectedTemplateId(templateId);
+    const normalRows: Array<{ field: string; touched: boolean; changed: boolean; from: string; to: string }> = [
+      {
+        field: 'Start date',
+        touched: Boolean(template.patch?.startDate),
+        changed: startDate !== resolved.startDate.date,
+        from: startDate,
+        to: resolved.startDate.date,
+      },
+      {
+        field: 'Tax rule',
+        touched: Boolean(template.patch?.overallTaxRule),
+        changed: overallTaxRule !== resolved.overallTaxRule,
+        from: String(overallTaxRule),
+        to: String(resolved.overallTaxRule),
+      },
+      {
+        field: 'Tax %',
+        touched: typeof template.patch?.taxPercentage === 'number',
+        changed: Number(taxPercentage) !== Number(resolved.taxPercentage),
+        from: String(taxPercentage),
+        to: String(resolved.taxPercentage),
+      },
+      {
+        field: 'Phases',
+        touched: phaseTouched,
+        changed: !deepEqual(fromPhases, toPhases),
+        from: `${phases.length} phase(s)`,
+        to: `${resolved.phases.length} phase(s)`,
+      },
+      ...phaseDetailRows,
+    ];
 
+    // Only show model-specific fields when the *target* template uses that model.
+    // Otherwise the diff becomes noisy with defaults for other return models.
+    const advFields: Array<keyof AdvancedUiSnapshot> = [
+      'seedMode',
+      'seed',
+      'returnType',
+      'paths',
+      'batchSize',
+      'inflationAveragePct',
+      'yearlyFeePercentage',
+      'exemptionCardLimit',
+      'exemptionCardYearlyIncrease',
+      'stockExemptionTaxRate',
+      'stockExemptionLimit',
+      'stockExemptionYearlyIncrease',
+    ];
+
+    if (targetAdvancedUi.returnType === 'simpleReturn') {
+      advFields.push('simpleAveragePercentage');
+    }
+
+    if (targetAdvancedUi.returnType === 'distributionReturn') {
+      advFields.push('distributionType');
+      if (targetAdvancedUi.distributionType === 'normal') {
+        advFields.push('normalMean', 'normalStdDev');
+      } else if (targetAdvancedUi.distributionType === 'brownianMotion') {
+        advFields.push('brownianDrift', 'brownianVolatility');
+      } else if (targetAdvancedUi.distributionType === 'studentT') {
+        advFields.push('studentMu', 'studentSigma', 'studentNu');
+      } else if (targetAdvancedUi.distributionType === 'regimeBased') {
+        advFields.push('regimeTickMonths');
+      }
+    }
+
+    const advLabel: Record<string, string> = {
+      seedMode: 'Master seed mode',
+      seed: 'Master seed',
+      returnType: 'Return model',
+      simpleAveragePercentage: 'Simple return (avg %/year)',
+      distributionType: 'Distribution type',
+      normalMean: 'Normal mean',
+      normalStdDev: 'Normal std dev',
+      brownianDrift: 'Brownian drift',
+      brownianVolatility: 'Brownian volatility',
+      studentMu: 'Student-t mu',
+      studentSigma: 'Student-t sigma',
+      studentNu: 'Student-t nu',
+      regimeTickMonths: 'Regime tick (months)',
+      paths: 'Paths (runs)',
+      batchSize: 'Batch size',
+      inflationAveragePct: 'Inflation (avg %/year)',
+      yearlyFeePercentage: 'Fee (avg %/year)',
+      exemptionCardLimit: 'Exemption card limit',
+      exemptionCardYearlyIncrease: 'Exemption card yearly increase',
+      stockExemptionTaxRate: 'Stock exemption tax rate',
+      stockExemptionLimit: 'Stock exemption limit',
+      stockExemptionYearlyIncrease: 'Stock exemption yearly increase',
+    };
+
+    const touchedKeys = new Set(Object.keys(advPatch));
+    const advancedRows = advFields.map((k) => {
+      const fromV = (currentAdvancedUi as any)[k];
+      const toV = (targetAdvancedUi as any)[k];
+      const fromS = typeof fromV === 'string' ? fromV : String(fromV);
+      const toS = typeof toV === 'string' ? toV : String(toV);
+      return {
+        field: advLabel[String(k)] ?? String(k),
+        touched: touchedKeys.has(String(k)),
+        changed: fromS !== toS,
+        from: fromS,
+        to: toS,
+      };
+    });
+
+    return {
+      templateId,
+      templateLabel: template.label,
+      normal: normalRows,
+      advanced: advancedRows,
+      resolved,
+      targetAdvancedUi,
+    };
+  }, [coerceTemplateAdvancedPatch, defaultAdvancedUi, overallTaxRule, phases, startDate, taxPercentage]);
+
+  const applyTemplateConfirmed = useCallback((templateId: SimulationTemplateId) => {
     if (templateId === 'custom') {
+      setSelectedTemplateId('custom');
+      setLastTemplateDiff(null);
       return;
     }
 
-    const resolved = resolveTemplateToRequest(template);
+    const d = buildTemplateDiff(templateId);
+
     hasUserEditedRef.current = false;
-    const seedNum = toNumOrUndef(seed);
-    setStartDate(resolved.startDate.date);
-    setOverallTaxRule(resolved.overallTaxRule);
-    setTaxPercentage(resolved.taxPercentage);
-    setPhases(resolved.phases);
+    setSelectedTemplateId(templateId);
+
+    // Apply normal fields
+    setStartDate(d.resolved.startDate.date);
+    setOverallTaxRule(d.resolved.overallTaxRule);
+    setTaxPercentage(d.resolved.taxPercentage);
+    setPhases(d.resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+
+    // Apply advanced template defaults (do not change UI mode)
+    const adv = d.targetAdvancedUi;
+    setPaths(String(adv.paths));
+    setBatchSize(String(adv.batchSize));
+    setInflationAveragePct(Number(adv.inflationAveragePct));
+    setYearlyFeePercentage(Number(adv.yearlyFeePercentage));
+
+    setReturnType(adv.returnType);
+    setSeedMode(adv.seedMode);
+    setSeed(String(adv.seed));
+    setSimpleAveragePercentage(String(adv.simpleAveragePercentage));
+
+    setDistributionType(adv.distributionType);
+    setNormalMean(String(adv.normalMean));
+    setNormalStdDev(String(adv.normalStdDev));
+    setBrownianDrift(String(adv.brownianDrift));
+    setBrownianVolatility(String(adv.brownianVolatility));
+    setStudentMu(String(adv.studentMu));
+    setStudentSigma(String(adv.studentSigma));
+    setStudentNu(String(adv.studentNu));
+
+    setRegimeTickMonths(String(adv.regimeTickMonths));
+    setRegimes(adv.regimes);
+
+    setExemptionCardLimit(String(adv.exemptionCardLimit));
+    setExemptionCardYearlyIncrease(String(adv.exemptionCardYearlyIncrease));
+    setStockExemptionTaxRate(String(adv.stockExemptionTaxRate));
+    setStockExemptionLimit(String(adv.stockExemptionLimit));
+    setStockExemptionYearlyIncrease(String(adv.stockExemptionYearlyIncrease));
+
+    // Update baselines so template doesn't instantly flip back to custom.
+    const baselineSeedMode = adv.seedMode;
+    const baselineSeed = adv.seed;
+    const seedNum = seedForMode(baselineSeedMode, toNumOrUndef(baselineSeed));
     setBaselineRequest({
-      ...resolved,
-      startDate: { date: resolved.startDate.date },
-      phases: resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
-      ...(seedNum !== undefined ? { seed: seedNum } : {}),
+      startDate: { date: d.resolved.startDate.date },
+      overallTaxRule: d.resolved.overallTaxRule,
+      taxPercentage: d.resolved.taxPercentage,
+      phases: d.resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      seed: seedNum,
     });
-  }, [isDirty, seed]);
+    setBaselineAdvancedUi(adv);
+
+    setLastTemplateDiff({
+      templateId: d.templateId,
+      templateLabel: d.templateLabel,
+      normal: d.normal,
+      advanced: d.advanced,
+    });
+  }, [buildTemplateDiff]);
+
+  const openTemplatePreview = useCallback((templateId: SimulationTemplateId) => {
+    // Selecting "Custom" applies immediately.
+    if (templateId === 'custom') {
+      setPendingTemplateId(null);
+      setTemplatePickerId('custom');
+      setTemplateModalDiff(null);
+      applyTemplateConfirmed('custom');
+      setIsTemplateDiffOpen(false);
+      return;
+    }
+
+    // Preview first; only apply on confirmation.
+    setPendingTemplateId(templateId);
+    setTemplatePickerId(templateId);
+
+    const d = buildTemplateDiff(templateId);
+    const diffForUi: TemplateDiff = {
+      templateId: d.templateId,
+      templateLabel: d.templateLabel,
+      normal: d.normal,
+      advanced: d.advanced,
+    };
+
+    setTemplateDiffMode('preview');
+    setTemplateDiffTitle('Template preview');
+    setTemplateModalDiff(diffForUi);
+    setIsTemplateDiffOpen(true);
+  }, [applyTemplateConfirmed, buildTemplateDiff]);
+
+  const confirmTemplatePreview = useCallback(() => {
+    if (!pendingTemplateId) return;
+    applyTemplateConfirmed(pendingTemplateId);
+    setPendingTemplateId(null);
+    setTemplatePickerId(pendingTemplateId);
+    setTemplateModalDiff(null);
+    setIsTemplateDiffOpen(false);
+  }, [applyTemplateConfirmed, pendingTemplateId]);
+
+  const cancelTemplatePreview = useCallback(() => {
+    setPendingTemplateId(null);
+    setTemplatePickerId(selectedTemplateId);
+    setTemplateModalDiff(null);
+    setIsTemplateDiffOpen(false);
+  }, [selectedTemplateId]);
+
+  const openWhatChanged = useCallback(() => {
+    if (selectedTemplateId === 'custom') return;
+    // Show the changes that were applied when the template was last confirmed.
+    // Recomputing based on current state will often yield an empty diff right after apply.
+    const diffForUi: TemplateDiff | null =
+      lastTemplateDiff && lastTemplateDiff.templateId === selectedTemplateId
+        ? lastTemplateDiff
+        : null;
+    if (!diffForUi) return;
+    setTemplateDiffMode('whatChanged');
+    setTemplateDiffTitle('What changed?');
+    setTemplateModalDiff(diffForUi);
+    setIsTemplateDiffOpen(true);
+  }, [lastTemplateDiff, selectedTemplateId]);
 
   const hasAppliedInitialTemplateRef = useRef(false);
   useEffect(() => {
@@ -1206,8 +1896,19 @@ ref
     hasAppliedInitialTemplateRef.current = true;
 
     if (scenarioParamOnLoad) return;
-    applyTemplate(selectedTemplateId, { confirmOverwrite: false }); // Apply starter template on first load
-  }, [applyTemplate, scenarioParamOnLoad, selectedTemplateId]);
+    if (didRestoreDraftRef.current) return;
+
+    // Do not auto-apply template defaults when the user has persisted advanced options;
+    // those represent explicit user preferences and should win unless the user
+    // explicitly applies a template.
+    try {
+      const raw = window.localStorage.getItem(ADVANCED_OPTIONS_KEY);
+      if (raw) return;
+    } catch {
+      // ignore
+    }
+    applyTemplateConfirmed(selectedTemplateId); // Apply starter template on first load
+  }, [applyTemplateConfirmed, scenarioParamOnLoad, selectedTemplateId]);
 
   const hasAppliedScenarioFromUrlRef = useRef(false);
   useEffect(() => {
@@ -1239,7 +1940,7 @@ ref
 
     applyRequestToForm(decoded);
     setSelectedScenarioId('');
-    void runSimulationWithRequest(decoded);
+    void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded));
     hasAppliedScenarioFromUrlRef.current = true;
   }, [applyRequestToForm, isDirty, runSimulationWithRequest, scenarioParamOnLoad]);
 
@@ -1249,12 +1950,7 @@ ref
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    void runSimulationWithRequest({
-      startDate: { date: startDate },
-      overallTaxRule,
-      taxPercentage,
-      phases,
-    });
+    void runSimulationWithRequest(currentAdvancedRequest);
   };
 
   // --- tutorial stepper (only if steps provided) ---
@@ -1299,6 +1995,106 @@ ref
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', maxWidth: 400, margin: '0 auto', gap: 12 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {advancedEnabled && (
+          <div style={cardStyle}>
+            <div style={cardTitleStyle}>Engine Settings</div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
+                <span className="fc-field-label">Master seed</span>
+                <div style={rowStyle}>
+                  <select
+                    value={seedMode}
+                    onChange={(e) => {
+                      markUserEdited();
+                      const next = e.target.value as MasterSeedMode;
+                      setSeedMode(next);
+                      if (next === 'custom') {
+                        const n = toNumOrUndef(seed);
+                        if (!n || n <= 0) setSeed('1');
+                      }
+                    }}
+                    disabled={simulateInProgress}
+                    style={inputStyle}
+                  >
+                    <option value="default">Default (fixed, deduplicates)</option>
+                    <option value="custom">Custom (fixed, deduplicates)</option>
+                    <option value="random">Random (not stored)</option>
+                  </select>
+                  <InfoTooltip label="(i)">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div><b>Default</b>: uses seed 1. Deterministic; same inputs reuse the same run.</div>
+                      <div><b>Custom</b>: uses the seed you enter. Deterministic; same inputs + seed reuse the same run.</div>
+                      <div><b>Random</b>: uses a fresh seed each time. Results vary; runs are not reused or stored.</div>
+                    </div>
+                  </InfoTooltip>
+                </div>
+
+                {seedMode === 'custom' && (
+                  <div style={{ ...rowStyle, marginTop: 6 }}>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={seed}
+                      onChange={(e) => {
+                        markUserEdited();
+                        setSeed(e.target.value);
+                      }}
+                      disabled={simulateInProgress}
+                      style={inputStyle}
+                    />
+                  </div>
+                )}
+              </label>
+
+              {executionFeatureOn && (
+                <>
+                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span className="fc-field-label">Paths (runs)</span>
+                    <div style={rowStyle}>
+                      <input
+                        type="number"
+                        min={1000}
+                        max={100000}
+                        step={1000}
+                        value={paths}
+                        onChange={(e) => { markUserEdited(); setPaths(e.target.value); }}
+                        disabled={simulateInProgress}
+                        style={inputStyle}
+                      />
+                      <InfoTooltip label="(i)">
+                        Monte Carlo paths / runs. Higher values reduce noise but take longer.
+                        Capped at 100,000.
+                      </InfoTooltip>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span className="fc-field-label">Batch size</span>
+                    <div style={rowStyle}>
+                      <input
+                        type="number"
+                        min={1000}
+                        max={100000}
+                        step={1000}
+                        value={batchSize}
+                        onChange={(e) => { markUserEdited(); setBatchSize(e.target.value); }}
+                        disabled={simulateInProgress}
+                        style={inputStyle}
+                      />
+                      <InfoTooltip label="(i)">
+                        Work chunk size for progress updates. Smaller batches update more often; larger batches can be faster.
+                        Capped at 100,000.
+                      </InfoTooltip>
+                    </div>
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={cardStyle}>
           <div style={cardTitleStyle}>General Options</div>
 
@@ -1306,8 +2102,8 @@ ref
             <span className="fc-field-label">Template</span>
             <div style={rowStyle}>
               <select
-                value={selectedTemplateId}
-                onChange={(e) => applyTemplate(e.target.value as SimulationTemplateId)}
+                value={templatePickerId}
+                onChange={(e) => openTemplatePreview(e.target.value as SimulationTemplateId)}
                 disabled={simulateInProgress}
                 style={inputStyle}
               >
@@ -1318,8 +2114,21 @@ ref
                 ))}
               </select>
               <InfoTooltip label="Info: Template">
-                A template fills in a complete example scenario (phases + taxes). Selecting a new template overwrites the current inputs.
+                Selecting a template previews changes. Click Apply to confirm.
               </InfoTooltip>
+
+              {lastTemplateDiff && selectedTemplateId !== 'custom' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    openWhatChanged();
+                  }}
+                  disabled={simulateInProgress}
+                  style={btn('ghost')}
+                >
+                  What changed?
+                </button>
+              )}
             </div>
             <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 4 }} role="note">
               {selectedTemplate.description}
@@ -1349,7 +2158,7 @@ ref
                   type="number"
                   step="0.01"
                   value={inflationAveragePct}
-                  onChange={(e) => setInflationAveragePct(Number(e.target.value))}
+                  onChange={(e) => { markUserEdited(); setInflationAveragePct(Number(e.target.value)); }}
                   disabled={simulateInProgress}
                   style={inputStyle}
                 />
@@ -1369,7 +2178,7 @@ ref
                   type="number"
                   step="0.01"
                   value={yearlyFeePercentage}
-                  onChange={(e) => setYearlyFeePercentage(Number(e.target.value))}
+                  onChange={(e) => { markUserEdited(); setYearlyFeePercentage(Number(e.target.value)); }}
                   disabled={simulateInProgress}
                   style={inputStyle}
                 />
@@ -1432,7 +2241,7 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Limit</span>
                     <div className="fc-field-control">
-                      <input type="number" value={exemptionCardLimit} onChange={(e) => setExemptionCardLimit(e.target.value)} style={inputStyle} />
+                      <input type="number" value={exemptionCardLimit} onChange={(e) => { markUserEdited(); setExemptionCardLimit(e.target.value); }} style={inputStyle} />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -1445,7 +2254,7 @@ ref
                   <label className="fc-field-row">
                     <span className="fc-field-label">Yearly increase</span>
                     <div className="fc-field-control">
-                      <input type="number" value={exemptionCardYearlyIncrease} onChange={(e) => setExemptionCardYearlyIncrease(e.target.value)} style={inputStyle} />
+                      <input type="number" value={exemptionCardYearlyIncrease} onChange={(e) => { markUserEdited(); setExemptionCardYearlyIncrease(e.target.value); }} style={inputStyle} />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -1462,7 +2271,7 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Tax rate %</span>
                     <div className="fc-field-control">
-                      <input type="number" step="0.01" value={stockExemptionTaxRate} onChange={(e) => setStockExemptionTaxRate(e.target.value)} style={inputStyle} />
+                      <input type="number" step="0.01" value={stockExemptionTaxRate} onChange={(e) => { markUserEdited(); setStockExemptionTaxRate(e.target.value); }} style={inputStyle} />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -1475,7 +2284,7 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Limit</span>
                     <div className="fc-field-control">
-                      <input type="number" value={stockExemptionLimit} onChange={(e) => setStockExemptionLimit(e.target.value)} style={inputStyle} />
+                      <input type="number" value={stockExemptionLimit} onChange={(e) => { markUserEdited(); setStockExemptionLimit(e.target.value); }} style={inputStyle} />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -1488,7 +2297,7 @@ ref
                   <label className="fc-field-row">
                     <span className="fc-field-label">Yearly increase</span>
                     <div className="fc-field-control">
-                      <input type="number" value={stockExemptionYearlyIncrease} onChange={(e) => setStockExemptionYearlyIncrease(e.target.value)} style={inputStyle} />
+                      <input type="number" value={stockExemptionYearlyIncrease} onChange={(e) => { markUserEdited(); setStockExemptionYearlyIncrease(e.target.value); }} style={inputStyle} />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -1511,7 +2320,7 @@ ref
             <label className="fc-field-row" style={{ marginBottom: 10 }}>
               <span className="fc-field-label">Return type</span>
               <div className="fc-field-control">
-                <select value={returnType} onChange={(e) => setReturnType(parseReturnType(e.target.value))} style={inputStyle}>
+                <select value={returnType} onChange={(e) => { markUserEdited(); setReturnType(parseReturnType(e.target.value)); }} style={inputStyle}>
                   <option value="dataDrivenReturn">Data-driven (historical)</option>
                   <option value="distributionReturn">Distribution-based</option>
                   <option value="simpleReturn">Simple average</option>
@@ -1525,26 +2334,11 @@ ref
               </div>
             </label>
             
-            {returnType != 'simpleReturn' && (
-              <label className="fc-field-row" style={{ marginBottom: 10 }}>
-                <span className="fc-field-label">RNG seed (optional)</span>
-                <div className="fc-field-control">
-                  <input type="number" step="1" value={seed} onChange={(e) => { markUserEdited(); setSeed(e.target.value); }} style={inputStyle} />
-                </div>
-                <div className="fc-field-info">
-                  <InfoTooltip label="(i)">
-                    Optional random seed for return generation.
-                    Non-negative values make results deterministic for the same inputs; negative forces a fresh random stream each run.
-                  </InfoTooltip>
-                </div>
-              </label>
-            )}
-
             {returnType === 'simpleReturn' && (
               <label className="fc-field-row" style={{ marginBottom: 10 }}>
                 <span className="fc-field-label">Return % / year</span>
                 <div className="fc-field-control">
-                  <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => setSimpleAveragePercentage(e.target.value)} style={inputStyle} />
+                  <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => { markUserEdited(); setSimpleAveragePercentage(e.target.value); }} style={inputStyle} />
                 </div>
                 <div className="fc-field-info">
                   <InfoTooltip label="(i)">
@@ -1560,7 +2354,7 @@ ref
                 <label className="fc-field-row" style={{ marginBottom: 10 }}>
                   <span className="fc-field-label">Distribution</span>
                   <div className="fc-field-control">
-                    <select value={distributionType} onChange={(e) => setDistributionType(parseDistributionType(e.target.value))} style={inputStyle}>
+                    <select value={distributionType} onChange={(e) => { markUserEdited(); setDistributionType(parseDistributionType(e.target.value)); }} style={inputStyle}>
                       <option value="normal">Normal</option>
                       <option value="brownianMotion">Brownian motion</option>
                       <option value="studentT">Student t</option>
@@ -1580,7 +2374,7 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Mean</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={normalMean} onChange={(e) => setNormalMean(e.target.value)} style={inputStyle} />
+                        <input type="number" step="0.0001" value={normalMean} onChange={(e) => { markUserEdited(); setNormalMean(e.target.value); }} style={inputStyle} />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -1891,16 +2685,16 @@ ref
 
       {footerBelow}
 
-      {simulateInProgress && simulationId && (
+      {simulationId && (
         <SimulationProgress
           simulationId={simulationId}
+          onDismiss={() => setSimulationId(null)}
           onComplete={(result) => {
             const completedId = simulationId;
             setSimulateInProgress(false);
-            setSimulationId(null);
 
             if (completedId && lastRunRequestRef.current) {
-              setLastCompletedRun({ id: completedId, request: lastRunRequestRef.current });
+              setLastCompletedRun({ id: completedId, advancedRequest: lastRunRequestRef.current });
             }
 
             const inflationFactorPerYear = inflationFeatureOn
@@ -2199,8 +2993,8 @@ ref
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       {(
                         [
-                          { id: 'a', req: scenarioA.request, label: scenarioA.name },
-                          { id: 'b', req: scenarioB.request, label: scenarioB.name },
+                          { id: 'a', req: scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest), label: scenarioA.name },
+                          { id: 'b', req: scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest), label: scenarioB.name },
                         ] as const
                       ).map((x) => {
                         const segments = getTimelineSegments(x.req);
@@ -2296,6 +3090,109 @@ ref
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {isTemplateDiffOpen && templateModalDiff && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={templateDiffTitle}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000001,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeTemplateDiff();
+          }}
+        >
+          <div
+            style={{
+              width: 'min(560px, 95vw)',
+              background: '#111',
+              color: '#fff',
+              border: '1px solid #333',
+              borderRadius: 12,
+              padding: 14,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontWeight: 800 }}>{templateDiffTitle} ({templateModalDiff.templateLabel})</div>
+              <button type="button" onClick={closeTemplateDiff} style={btn('ghost')} aria-label="Close template changes">✕</button>
+            </div>
+
+            {(() => {
+              const normalChanged = templateModalDiff.normal.filter((r) => r.changed);
+              const advancedChanged = templateModalDiff.advanced.filter((r) => r.changed);
+              const hasAny = normalChanged.length > 0 || advancedChanged.length > 0;
+
+              if (!hasAny) {
+                return (
+                  <div style={{ padding: 10, borderRadius: 10, border: '1px solid #333', background: '#0e0e0e' }}>
+                    No fields changed.
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
+                    <div style={{ fontWeight: 750, marginBottom: 8 }}>Normal</div>
+                    {normalChanged.length === 0 ? (
+                      <div style={{ fontSize: 13, opacity: 0.85 }}>No changes.</div>
+                    ) : (
+                      normalChanged.map((r) => (
+                        <div key={r.field} style={{ fontSize: 13, padding: '6px 0', borderBottom: '1px solid #222' }}>
+                          <div style={{ opacity: 0.9 }}>{r.field}</div>
+                          <div style={{ opacity: 0.85 }}>{`${r.from} → ${r.to}`}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
+                    <div style={{ fontWeight: 750, marginBottom: 8 }}>Advanced</div>
+                    {advancedChanged.length === 0 ? (
+                      <div style={{ fontSize: 13, opacity: 0.85 }}>No changes.</div>
+                    ) : (
+                      advancedChanged.map((r) => (
+                        <div key={r.field} style={{ fontSize: 13, padding: '6px 0', borderBottom: '1px solid #222' }}>
+                          <div style={{ opacity: 0.9 }}>{r.field}</div>
+                          <div style={{ opacity: 0.85 }}>{`${r.from} → ${r.to}`}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {templateDiffMode === 'preview' && (
+              <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
+                Applying this template will overwrite the following changes.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+              {templateDiffMode === 'preview' ? (
+                <>
+                  <button type="button" onClick={cancelTemplatePreview} style={btn('ghost')}>Cancel</button>
+                  <button type="button" onClick={confirmTemplatePreview} style={btn('primary')}>Apply template</button>
+                </>
+              ) : (
+                <button type="button" onClick={closeTemplateDiff} style={btn('primary')}>Close</button>
+              )}
+            </div>
           </div>
         </div>
       )}
