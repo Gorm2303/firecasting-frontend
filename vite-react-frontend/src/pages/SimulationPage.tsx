@@ -14,6 +14,7 @@ const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
 const ADVANCED_FEATURE_FLAGS_KEY = 'firecasting:simulation:advancedFeatureFlags:v1';
 
 const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
+  execution: true,
   inflation: true,
   fee: true,
   exemptions: true,
@@ -44,6 +45,8 @@ const toIsoDateString = (v: any): string | null => {
 
 type ExternalAdvancedLoad = {
   enabled?: boolean;
+  paths?: number | string;
+  batchSize?: number | string;
   inflationAveragePct?: number;
   yearlyFeePercentage?: number;
   taxExemptionConfig?: any;
@@ -148,6 +151,7 @@ const SimulationPage: React.FC = () => {
       if (!raw) return DEFAULT_ADVANCED_FEATURE_FLAGS;
       const parsed = JSON.parse(raw);
       return {
+        execution: Boolean(parsed?.execution ?? false),
         inflation: Boolean(parsed?.inflation ?? true),
         fee: Boolean(parsed?.fee ?? true),
         exemptions: Boolean(parsed?.exemptions ?? true),
@@ -307,6 +311,8 @@ const SimulationPage: React.FC = () => {
                 const yearlyFeePercentage = Number(raw?.yearlyFeePercentage);
                 setExternalAdvancedLoad({
                   enabled: true,
+                  paths: raw?.paths,
+                  batchSize: raw?.batchSize,
                   inflationAveragePct,
                   yearlyFeePercentage: Number.isFinite(yearlyFeePercentage) ? yearlyFeePercentage : undefined,
                   taxExemptionConfig: raw?.taxExemptionConfig,
@@ -563,6 +569,14 @@ const SimulationPage: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={pendingAdvancedFeatureFlags.execution}
+                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, execution: e.target.checked }))}
+                  />
+                  <span>Engine settings (paths & batch size)</span>
+                </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input
                     type="checkbox"

@@ -1,14 +1,76 @@
 import type { SimulationRequest } from '../models/types';
+import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
+import { advancedToNormalRequest, normalToAdvancedWithDefaults } from '../models/advancedSimulation';
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+export function isRandomSeedRequested(req: AdvancedSimulationRequest | null | undefined): boolean {
+  if (!req) return false;
+  const seed = (req as any)?.seed ?? (req as any)?.returnerConfig?.seed;
+  return isFiniteNumber(seed) ? seed < 0 : Number(seed) < 0;
+}
+
+export function generateFixedSeed(): number {
+  const c: any = (globalThis as any).crypto;
+  if (c && typeof c.getRandomValues === 'function') {
+    const arr = new Uint32Array(1);
+    c.getRandomValues(arr);
+    // Keep within signed 32-bit range for safety across systems.
+    return 1 + (arr[0] % 2_147_483_647);
+  }
+  // Fallback: not cryptographically strong, but stable enough for non-security use.
+  return 1 + Math.floor(Math.random() * 2_147_483_647);
+}
+
+export function withPinnedSeed(req: AdvancedSimulationRequest, seed: number): AdvancedSimulationRequest {
+  const pinned = Math.max(1, Math.trunc(seed));
+  return {
+    ...req,
+    seed: pinned,
+    returnerConfig: {
+      ...(req.returnerConfig ?? {}),
+      seed: pinned,
+    },
+  };
+}
+
+/**
+ * Converts a random-seed request (seed < 0) into a fixed deterministic seed.
+ * Preference order: preferredSeed (if > 0) else a newly generated seed.
+ */
+export function materializeRandomSeedIfNeeded(
+  req: AdvancedSimulationRequest,
+  preferredSeed?: number | null
+): AdvancedSimulationRequest {
+  if (!isRandomSeedRequested(req)) return req;
+  const candidate = isFiniteNumber(preferredSeed) && preferredSeed > 0 ? Math.trunc(preferredSeed) : generateFixedSeed();
+  return withPinnedSeed(req, candidate);
+}
 
 export type SavedScenario = {
   id: string;
   name: string;
   savedAt: string;
-  request: SimulationRequest;
+  /** Canonical scenario footprint used for reruns/diff and to match backend persistence. */
+  advancedRequest: AdvancedSimulationRequest;
+  /** Backward-compatible subset for older UI flows / share links. */
+  request?: SimulationRequest;
   runId?: string | null;
+  /** Best-effort metadata from the last execution started from this scenario (may be non-persisted). */
+  lastRunMeta?: {
+    id: string;
+    createdAt?: string;
+    rngSeed?: number | null;
+    modelAppVersion?: string | null;
+    modelBuildTime?: string | null;
+    modelSpringBootVersion?: string | null;
+    modelJavaVersion?: string | null;
+  };
 };
 
-const STORAGE_KEY = 'firecasting:savedScenarios:v1';
+const STORAGE_KEY = 'firecasting:savedScenarios:v2';
 
 function newId(): string {
   const c: any = (globalThis as any).crypto;
@@ -32,12 +94,46 @@ function toArray(value: unknown): any[] {
 export function listSavedScenarios(): SavedScenario[] {
   if (typeof window === 'undefined') return [];
   const raw = safeParse(window.localStorage.getItem(STORAGE_KEY));
-  return toArray(raw)
+
+  const v2 = toArray(raw)
     .map((x) => x as SavedScenario)
+    .filter((x) => !!x && typeof x.id === 'string' && typeof x.name === 'string' && !!x.advancedRequest);
+
+  if (v2.length > 0) return v2;
+
+  // Backward-compat: migrate v1 entries stored under the old key.
+  const rawV1 = safeParse(window.localStorage.getItem('firecasting:savedScenarios:v1'));
+  const v1 = toArray(rawV1)
+    .map((x) => x as any)
     .filter((x) => !!x && typeof x.id === 'string' && typeof x.name === 'string' && !!x.request);
+
+  const migrated: SavedScenario[] = v1.map((s) => {
+    const normalReq = s.request as SimulationRequest;
+    const advancedRequest = normalToAdvancedWithDefaults(normalReq);
+    return {
+      id: String(s.id),
+      name: String(s.name),
+      savedAt: String(s.savedAt ?? new Date().toISOString()),
+      advancedRequest,
+      request: normalReq,
+      runId: s.runId ?? undefined,
+    };
+  });
+
+  if (migrated.length > 0) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+  }
+
+  return migrated;
 }
 
-export function saveScenario(name: string, request: SimulationRequest, id?: string, runId?: string | null): SavedScenario {
+export function saveScenario(
+  name: string,
+  advancedRequest: AdvancedSimulationRequest,
+  id?: string,
+  runId?: string | null,
+  lastRunMeta?: SavedScenario['lastRunMeta']
+): SavedScenario {
   if (typeof window === 'undefined') throw new Error('Cannot save scenario outside browser');
 
   const trimmed = name.trim();
@@ -50,14 +146,34 @@ export function saveScenario(name: string, request: SimulationRequest, id?: stri
     id: id ?? newId(),
     name: trimmed,
     savedAt: now,
-    request,
+    advancedRequest,
+    request: advancedToNormalRequest(advancedRequest),
     runId: runId ?? undefined,
+    ...(lastRunMeta ? { lastRunMeta } : {}),
   };
 
   const withoutSameId = scenarios.filter((s) => s.id !== scenario.id);
   const next = [scenario, ...withoutSameId].slice(0, 50);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return scenario;
+}
+
+export function updateScenarioRunMeta(
+  scenarioId: string,
+  meta: SavedScenario['lastRunMeta'],
+  runId?: string | null
+): void {
+  if (typeof window === 'undefined') return;
+  const scenarios = listSavedScenarios();
+  const next = scenarios.map((s) => {
+    if (s.id !== scenarioId) return s;
+    return {
+      ...s,
+      ...(runId !== undefined ? { runId } : {}),
+      lastRunMeta: meta,
+    };
+  });
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
 export function deleteScenario(id: string): void {

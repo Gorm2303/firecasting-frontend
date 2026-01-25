@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
-    startAdvancedSimulation: vi.fn().mockResolvedValue('test-sim-id'),
+    startAdvancedSimulation: vi.fn().mockResolvedValue({ id: 'test-sim-id', createdAt: '2026-01-01T00:00:00Z', rngSeed: 123 }),
     exportSimulationCsv: vi.fn(),
     findRunForInput: vi.fn().mockResolvedValue(null),
   };
@@ -18,7 +18,7 @@ vi.mock('qrcode.react', () => {
   };
 });
 
-import { startSimulation } from '../../api/simulation';
+import { startAdvancedSimulation } from '../../api/simulation';
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 
@@ -98,10 +98,10 @@ describe('NormalInputForm share links', () => {
     render(<SimulationForm />);
 
     await waitFor(() => {
-      expect(startSimulation).toHaveBeenCalled();
+      expect(startAdvancedSimulation).toHaveBeenCalled();
     });
 
-    expect(startSimulation).toHaveBeenCalledWith(
+    expect(startAdvancedSimulation).toHaveBeenCalledWith(
       expect.objectContaining({
         startDate: { date: '2033-02-03' },
       })

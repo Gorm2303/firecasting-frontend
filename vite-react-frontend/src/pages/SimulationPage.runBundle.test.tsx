@@ -97,6 +97,10 @@ describe('SimulationPage run bundle import', () => {
   it('imports an advanced run bundle and populates all advanced fields', async () => {
     ensureFileTextPolyfill();
     window.localStorage.clear();
+    window.localStorage.setItem(
+      'firecasting:simulation:advancedFeatureFlags:v1',
+      JSON.stringify({ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true })
+    );
 
     render(
       <MemoryRouter initialEntries={['/simulation']}>
@@ -174,7 +178,11 @@ describe('SimulationPage run bundle import', () => {
 
     // Return model
     expect((screen.getByLabelText(/Return type/i) as HTMLSelectElement).value).toBe('distributionReturn');
-    expect((screen.getByLabelText(/RNG seed/i) as HTMLInputElement).value).toBe('123');
+    expect((screen.getByLabelText(/Master seed/i) as HTMLSelectElement).value).toBe('custom');
+    const seedLabel = screen.getByText(/Master seed/i).closest('label');
+    const seedInput = seedLabel?.querySelector('input[type="number"]') as HTMLInputElement | null;
+    expect(seedInput).toBeTruthy();
+    expect((seedInput as HTMLInputElement).value).toBe('123');
     expect((screen.getByLabelText(/^Distribution$/i) as HTMLSelectElement).value).toBe('studentT');
     expect((screen.getByLabelText(/^mu$/i) as HTMLInputElement).value).toBe('0.042');
     expect((screen.getByLabelText(/^sigma$/i) as HTMLInputElement).value).toBe('0.609');

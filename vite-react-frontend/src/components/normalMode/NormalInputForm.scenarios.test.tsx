@@ -16,7 +16,15 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
-    startAdvancedSimulation: vi.fn().mockResolvedValue('test-sim-id'),
+    startAdvancedSimulation: vi.fn().mockResolvedValue({
+      id: 'test-sim-id',
+      createdAt: '2026-01-01T00:00:00Z',
+      rngSeed: 123,
+      modelAppVersion: '1.0.0',
+      modelBuildTime: '2026-01-01T00:00:00Z',
+      modelSpringBootVersion: '3.4.0',
+      modelJavaVersion: '23',
+    }),
     exportSimulationCsv: vi.fn(),
     findRunForInput: vi.fn().mockResolvedValue(null),
   };
@@ -34,7 +42,8 @@ vi.mock('../SimulationProgress', () => {
 
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { saveScenario } from '../../config/savedScenarios';
-import { startSimulation } from '../../api/simulation';
+import { startAdvancedSimulation } from '../../api/simulation';
+import { normalToAdvancedWithDefaults } from '../../models/advancedSimulation';
 
 describe('NormalInputForm scenarios', () => {
   it('saves and reloads a scenario with identical inputs', async () => {
@@ -111,7 +120,8 @@ describe('NormalInputForm scenarios', () => {
       ],
     };
 
-    saveScenario('Maximal scenario', request as any);
+    const advanced = normalToAdvancedWithDefaults(request as any);
+    saveScenario('Maximal scenario', advanced as any);
 
     const ref = React.createRef<NormalInputFormHandle>();
     render(<SimulationForm ref={ref} />);
@@ -132,11 +142,11 @@ describe('NormalInputForm scenarios', () => {
 
     // Loading a scenario auto-runs the simulation; assert payload equality — this is the core "all fields" contract.
     await waitFor(() => {
-      expect(startSimulation).toHaveBeenCalled();
+      expect(startAdvancedSimulation).toHaveBeenCalled();
     });
 
-    const lastCallArg = (startSimulation as any).mock.calls.at(-1)[0];
-    expect(lastCallArg).toEqual(request);
+    const lastCallArg = (startAdvancedSimulation as any).mock.calls.at(-1)[0];
+    expect(lastCallArg).toEqual(advanced);
   });
 
   it('navigates to diff page with two saved scenarios', async () => {
@@ -145,7 +155,7 @@ describe('NormalInputForm scenarios', () => {
 
     saveScenario(
       'Scenario A',
-      {
+      normalToAdvancedWithDefaults({
         startDate: { date: '2033-02-03' },
         overallTaxRule: 'NOTIONAL',
         taxPercentage: 25,
@@ -153,11 +163,11 @@ describe('NormalInputForm scenarios', () => {
           { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 500, monthlyDeposit: 50 },
           { phaseType: 'PASSIVE', durationInMonths: 6 },
         ],
-      } as any
+      } as any) as any
     );
     saveScenario(
       'Scenario B',
-      {
+      normalToAdvancedWithDefaults({
         startDate: { date: '2034-03-04' },
         overallTaxRule: 'CAPITAL',
         taxPercentage: 30,
@@ -165,7 +175,7 @@ describe('NormalInputForm scenarios', () => {
           { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 700, monthlyDeposit: 40 },
           { phaseType: 'WITHDRAW', durationInMonths: 12, withdrawAmount: 1000 },
         ],
-      } as any
+      } as any) as any
     );
 
     const ref = React.createRef<NormalInputFormHandle>();
@@ -218,7 +228,7 @@ describe('NormalInputForm scenarios', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
 
     await waitFor(() => {
-      expect(startSimulation).toHaveBeenCalled();
+      expect(startAdvancedSimulation).toHaveBeenCalled();
     });
 
     act(() => {
@@ -229,9 +239,12 @@ describe('NormalInputForm scenarios', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save scenario/i }));
     promptSpy.mockRestore();
 
-    const raw = window.localStorage.getItem('firecasting:savedScenarios:v1');
-    expect(raw).toBeTruthy();
-    const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>
+    await waitFor(() => {
+      expect(window.localStorage.getItem('firecasting:savedScenarios:v2')).toBeTruthy();
+    });
+
+    const raw = window.localStorage.getItem('firecasting:savedScenarios:v2');
+    const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>;
     expect(scenarios[0]?.runId).toBe('test-sim-id');
   });
 });
