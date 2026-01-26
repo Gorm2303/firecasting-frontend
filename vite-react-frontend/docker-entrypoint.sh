@@ -10,7 +10,7 @@ escape_js() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-API_BASE="${VITE_API_BASE_URL:-}"
+API_BASE="${VITE_API_BASE_URL:-/api/simulation/v3}"
 
 cat > /app/dist/env.js <<EOF
 // Generated at container startup
