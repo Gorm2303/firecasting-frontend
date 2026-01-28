@@ -486,6 +486,45 @@ const RunDiffPage: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', padding: 16, maxWidth: 980, margin: '0 auto' }}>
+      <style>{`
+        /* Match the /info collapsible-card look */
+        details.info-section {
+          border: 1px solid #3a3a3a;
+          border-radius: 14px;
+          overflow: hidden;
+          background: rgba(255,255,255,0.02);
+          margin: 12px 0;
+        }
+        details.info-section > summary.info-section-summary {
+          list-style: none;
+          cursor: pointer;
+          padding: 10px 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          background: linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+          font-weight: 800;
+        }
+        details.info-section > summary.info-section-summary::-webkit-details-marker {
+          display: none;
+        }
+        details.info-section > summary.info-section-summary::after {
+          content: '▸';
+          opacity: 0.8;
+          transform: rotate(0deg);
+          transition: transform 140ms ease-out;
+          flex: 0 0 auto;
+        }
+        details.info-section[open] > summary.info-section-summary::after {
+          transform: rotate(90deg);
+        }
+        .info-section-body {
+          padding: 10px 14px 14px 14px;
+        }
+      `}</style>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0 }}>Simulation diff</h2>
         <Link to="/simulation" style={{ textDecoration: 'none' }}>← Back</Link>
@@ -897,8 +936,10 @@ const RunDiffPage: React.FC = () => {
             />
           </div>
 
-          <details open style={{ marginTop: 12 }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 800, marginBottom: 8 }}>Inputs</summary>
+          <details open className="info-section">
+            <summary className="info-section-summary">Inputs</summary>
+
+            <div className="info-section-body">
 
             {(inputSummaryA || inputSummaryB) ? (
               <>
@@ -978,9 +1019,10 @@ const RunDiffPage: React.FC = () => {
                 </div>
 
                 {(inputSummaryA?.advancedMode || inputSummaryB?.advancedMode) && (
-                  <details open style={{ marginTop: 10 }}>
-                    <summary style={{ cursor: 'pointer', fontWeight: 800 }}>Advanced mode details</summary>
-                    <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden', marginTop: 10 }}>
+                  <details open className="info-section">
+                    <summary className="info-section-summary">Advanced mode details</summary>
+                    <div className="info-section-body" style={{ paddingTop: 10 }}>
+                      <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
                       {/* Return type */}
                       <MetricRow
                         label="Return type"
@@ -1154,15 +1196,17 @@ const RunDiffPage: React.FC = () => {
                     </>
                   )}
 
-                </div>
+                      </div>
+                    </div>
               </details>
-            )}
+                )}
 
             {/* Phase-by-phase breakdown */}
             {(inputSummaryA?.phases ?? []).length > 0 || (inputSummaryB?.phases ?? []).length > 0 ? (
-              <details open style={{ marginTop: 10 }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 800 }}>Per-phase details</summary>
-                <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden', marginTop: 10 }}>
+              <details open className="info-section">
+                <summary className="info-section-summary">Per-phase details</summary>
+                <div className="info-section-body" style={{ paddingTop: 10 }}>
+                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
                   {Array.from({ length: Math.max(inputSummaryA?.phases.length ?? 0, inputSummaryB?.phases.length ?? 0) }).map((_, phaseIdx) => {
                     const phaseA = inputSummaryA?.phases[phaseIdx];
                     const phaseB = inputSummaryB?.phases[phaseIdx];
@@ -1284,21 +1328,24 @@ const RunDiffPage: React.FC = () => {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </details>
             ) : null}
 
-          </>
-        ) : (
-          <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>
-        )}
+              </>
+            ) : (
+              <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>
+            )}
+            </div>
       </details>
 
           <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
 
-          <details open>
-            <summary style={{ cursor: 'pointer', fontWeight: 800, marginBottom: 8 }}>Outputs</summary>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
+          <details open className="info-section">
+            <summary className="info-section-summary">Outputs</summary>
+            <div className="info-section-body">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
               <div>
                 <div style={{ fontSize: 13, opacity: 0.85 }}>exactMatch</div>
                 <div style={{ fontWeight: 700 }}>{String(Boolean(diff.output?.exactMatch))}</div>
@@ -1314,6 +1361,7 @@ const RunDiffPage: React.FC = () => {
               <div>
                 <div style={{ fontSize: 13, opacity: 0.85 }}>max |Δ|</div>
                 <div style={{ fontWeight: 700 }}>{fmt(diff.output?.maxAbsDiff) || '0'}</div>
+              </div>
               </div>
             </div>
           </details>
@@ -1482,13 +1530,13 @@ const RunDiffPage: React.FC = () => {
                       </select>
                     </div>
 
-                    <details key={activeGroup.id} open style={{ border: '1px solid #333', borderRadius: 12, padding: '8px 10px' }}>
-                      <summary style={{ cursor: 'pointer', fontWeight: 750 }}>
+                    <details key={activeGroup.id} open className="info-section">
+                      <summary className="info-section-summary" style={{ fontWeight: 750 }}>
                         {activeGroup.title}
                         <span style={{ opacity: 0.7, fontSize: 12, marginLeft: 8 }}>({metricNames.length})</span>
                       </summary>
 
-                      <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
+                      <div className="info-section-body" style={{ marginTop: 0, display: 'grid', gap: 12 }}>
                         {metricNames.map((name) => {
                           const pair = activeGroup.metrics.get(name) ?? {};
                           return (
@@ -1509,9 +1557,10 @@ const RunDiffPage: React.FC = () => {
           {(runSummariesA && runSummariesB) && (
             <>
               <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
-              <details open>
-                <summary style={{ cursor: 'pointer', fontWeight: 800, marginBottom: 8 }}>Charts</summary>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
+              <details open className="info-section">
+                <summary className="info-section-summary">Charts</summary>
+                <div className="info-section-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
                   <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                     <div style={{ fontWeight: 750, marginBottom: 6 }}>Run A</div>
                     <MultiPhaseOverview data={runSummariesA} timeline={null} />
@@ -1519,6 +1568,7 @@ const RunDiffPage: React.FC = () => {
                   <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                     <div style={{ fontWeight: 750, marginBottom: 6 }}>Run B</div>
                     <MultiPhaseOverview data={runSummariesB} timeline={null} />
+                  </div>
                   </div>
                 </div>
               </details>
