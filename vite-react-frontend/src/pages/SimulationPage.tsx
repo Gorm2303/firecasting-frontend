@@ -565,7 +565,7 @@ const SimulationPage: React.FC = () => {
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-                Choose which advanced sections are visible and included in the request.
+                Choose which advanced sections are visible, keep in mind everything invisible is still included in the request.
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>

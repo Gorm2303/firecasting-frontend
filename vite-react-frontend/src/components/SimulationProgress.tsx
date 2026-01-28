@@ -32,8 +32,6 @@ interface SimulationProgressProps {
   onComplete: (result: YearlySummary[]) => void;
   /** 'auto' (default) respects document dark class or prefers-color-scheme */
   theme?: "auto" | "light" | "dark";
-  /** Optional: allow the parent to hide this progress panel. */
-  onDismiss?: () => void;
 }
 
 const API_BASE = getApiBaseUrl();
@@ -42,7 +40,6 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
   simulationId,
   onComplete,
   theme = "auto",
-  onDismiss,
 }) => {
   const [status, setStatus] = useState<"open" | "queued" | "running" | "done" | "error">("open");
   const [queuePos0, setQueuePos0] = useState<number | null>(null); // 0 = next in line (from server)
@@ -327,7 +324,7 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: "flex-start",
         gap: 10,
         marginBottom: opts?.withinSummary ? 0 : 8,
         width: "100%",
@@ -361,31 +358,6 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
           </span>
         )}
       </div>
-
-      {onDismiss ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDismiss();
-          }}
-          style={{
-            border: `1px solid ${colors.border}`,
-            background: "transparent",
-            color: colors.text,
-            borderRadius: 999,
-            padding: "2px 8px",
-            fontSize: 12,
-            cursor: "pointer",
-            opacity: 0.9,
-          }}
-          aria-label="Hide progress"
-          title="Hide"
-        >
-          Hide
-        </button>
-      ) : null}
     </div>
   );
 
@@ -594,6 +566,13 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
               cursor: pointer;
               padding: 0;
               margin: 0;
+              display: flex;
+              align-items: center;
+              white-space: nowrap;
+            }
+            details.sp-completed-panel > summary > * {
+              min-width: 0;
+              flex: 1 1 auto;
             }
             details.sp-completed-panel > summary::-webkit-details-marker {
               display: none;
@@ -601,10 +580,9 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
             details.sp-completed-panel > summary::after {
               content: '▸';
               opacity: 0.8;
-              float: right;
+              margin-left: auto;
               transform: rotate(0deg);
               transition: transform 140ms ease-out;
-              margin-top: 2px;
             }
             details.sp-completed-panel[open] > summary::after {
               transform: rotate(90deg);
