@@ -51,8 +51,18 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
   const [headline, setHeadline] = useState<string>("Waiting for updates…");
   const [meta, setMeta] = useState<SimulationMeta | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [completedPanelOpen, setCompletedPanelOpen] = useState(true);
   const esRef = useRef<EventSource | null>(null);
   const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    setCompletedPanelOpen(true);
+    setDetailsOpen(false);
+  }, [simulationId]);
+
+  useEffect(() => {
+    if (status === "done") setCompletedPanelOpen(false);
+  }, [status]);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -310,70 +320,87 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
     return rows.filter((r) => r.always || shouldShowOptionalStage(r.ms)).map(({ label, ms }) => ({ label, ms }));
   }, [meta]);
 
-  return (
-    <div style={{ marginTop: "1rem" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            style={{
-              display: "inline-block",
-              padding: "2px 8px",
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 600,
-              color: "white",
-              background: badgeBg,
-            }}
-          >
-            {status.toUpperCase()}
+  const showRunDetails = status === "done" || detailsOpen;
+
+  const headerEl = (opts?: { withinSummary?: boolean }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        marginBottom: opts?.withinSummary ? 0 : 8,
+        width: "100%",
+        maxWidth: 520,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span
+          style={{
+            display: "inline-block",
+            padding: "2px 8px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "white",
+            background: badgeBg,
+          }}
+        >
+          {status.toUpperCase()}
+        </span>
+
+        {status === "done" ? <span style={{ fontSize: 13, color: colors.subtext }}>Completed</span> : null}
+
+        {status === "queued" && (
+          <span style={{ fontSize: 13, color: colors.subtext }}>
+            {queuePos0 != null
+              ? queuePos0 === 0
+                ? "You’re next in line"
+                : `Queue position: ${queuePos0 + 1}`
+              : "Queued"}
           </span>
-
-          {status === "queued" && (
-            <span style={{ fontSize: 13, color: colors.subtext }}>
-              {queuePos0 != null
-                ? queuePos0 === 0
-                  ? "You’re next in line"
-                  : `Queue position: ${queuePos0 + 1}`
-                : "Queued"}
-            </span>
-          )}
-        </div>
-
-        {onDismiss ? (
-          <button
-            type="button"
-            onClick={onDismiss}
-            style={{
-              border: `1px solid ${colors.border}`,
-              background: "transparent",
-              color: colors.text,
-              borderRadius: 999,
-              padding: "2px 8px",
-              fontSize: 12,
-              cursor: "pointer",
-              opacity: 0.9,
-            }}
-            aria-label="Hide progress"
-            title="Hide"
-          >
-            Hide
-          </button>
-        ) : null}
+        )}
       </div>
 
-      {/* Fixed-size card (visual) */}
-      <div
-        style={{
-          border: `1px solid ${colors.border}`,
-          borderRadius: 8,
-          padding: 12,
-          background: colors.cardBg,
-          boxShadow: colors.shadow,
-          width: "100%",
-          maxWidth: 520,
-        }}
-      >
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDismiss();
+          }}
+          style={{
+            border: `1px solid ${colors.border}`,
+            background: "transparent",
+            color: colors.text,
+            borderRadius: 999,
+            padding: "2px 8px",
+            fontSize: 12,
+            cursor: "pointer",
+            opacity: 0.9,
+          }}
+          aria-label="Hide progress"
+          title="Hide"
+        >
+          Hide
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const cardEl = (
+    <div
+      style={{
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        padding: 12,
+        background: colors.cardBg,
+        boxShadow: colors.shadow,
+        width: "100%",
+        maxWidth: 520,
+      }}
+    >
         {/* Single-line (fixed height) headline; replaces content instead of appending */}
         <div
           style={{
@@ -472,25 +499,26 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
                   ? "New run"
                   : "Run info"}
               </span>
-
-              <button
-                type="button"
-                onClick={() => setDetailsOpen((v) => !v)}
-                style={{
-                  border: `1px solid ${colors.border}`,
-                  background: colors.track,
-                  color: colors.text,
-                  borderRadius: 999,
-                  padding: "2px 8px",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-                aria-expanded={detailsOpen}
-                aria-label={detailsOpen ? "Hide run details" : "Show run details"}
-              >
-                Details {detailsOpen ? "▴" : "▾"}
-              </button>
+              {status !== "done" ? (
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((v) => !v)}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    background: colors.track,
+                    color: colors.text,
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  aria-expanded={detailsOpen}
+                  aria-label={detailsOpen ? "Hide run details" : "Show run details"}
+                >
+                  Details {detailsOpen ? "▴" : "▾"}
+                </button>
+              ) : null}
             </div>
 
             {meta.persisted != null ? (
@@ -503,7 +531,7 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
               </div>
             ) : null}
 
-            {detailsOpen ? (
+            {showRunDetails ? (
               <div
                 role="region"
                 aria-label="Run details"
@@ -549,7 +577,55 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
             ) : null}
           </div>
         ) : null}
-      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      {status === "done" ? (
+        <>
+          <style>{`
+            details.sp-completed-panel {
+              width: 100%;
+              max-width: 520px;
+            }
+            details.sp-completed-panel > summary {
+              list-style: none;
+              cursor: pointer;
+              padding: 0;
+              margin: 0;
+            }
+            details.sp-completed-panel > summary::-webkit-details-marker {
+              display: none;
+            }
+            details.sp-completed-panel > summary::after {
+              content: '▸';
+              opacity: 0.8;
+              float: right;
+              transform: rotate(0deg);
+              transition: transform 140ms ease-out;
+              margin-top: 2px;
+            }
+            details.sp-completed-panel[open] > summary::after {
+              transform: rotate(90deg);
+            }
+          `}</style>
+
+          <details
+            className="sp-completed-panel"
+            open={completedPanelOpen}
+            onToggle={(e) => setCompletedPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
+          >
+            <summary>{headerEl({ withinSummary: true })}</summary>
+            <div style={{ marginTop: 8 }}>{cardEl}</div>
+          </details>
+        </>
+      ) : (
+        <>
+          {headerEl()}
+          {cardEl}
+        </>
+      )}
     </div>
   );
 };
