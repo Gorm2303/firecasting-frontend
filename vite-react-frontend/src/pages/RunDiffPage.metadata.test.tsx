@@ -46,6 +46,11 @@ vi.mock('../api/simulation', async () => {
       },
     }),
     getRunSummaries: vi.fn().mockResolvedValue([]),
+    getStandardResultsV3: vi.fn().mockImplementation(async (id: string) => ({
+      simulationId: id,
+      yearlySummaries: [],
+      metricSummaries: [],
+    })),
   };
 });
 

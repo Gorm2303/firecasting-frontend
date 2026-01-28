@@ -1235,7 +1235,6 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
         {simulationId && (
           <SimulationProgress
             simulationId={simulationId}
-            onDismiss={() => setSimulationId(null)}
             onComplete={(result) => {
               const completedId = simulationId;
               setSubmitting(false);

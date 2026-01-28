@@ -44,6 +44,8 @@ export type StartRunResponse = {
   id: string;
   createdAt?: string;
   rngSeed?: number | null;
+  /** String form to avoid JS number precision loss. Prefer this for display/storage. */
+  rngSeedText?: string | null;
   modelAppVersion?: string | null;
   modelBuildTime?: string | null;
   modelSpringBootVersion?: string | null;
@@ -72,6 +74,8 @@ export type RunListItem = {
   id: string;
   createdAt?: string;
   rngSeed?: number | null;
+  /** String form to avoid JS number precision loss. Prefer this for display/storage. */
+  rngSeedText?: string | null;
   modelAppVersion?: string | null;
   modelBuildTime?: string | null;
   modelSpringBootVersion?: string | null;
@@ -102,6 +106,28 @@ export type RunDiffResponse = {
     mismatches?: number;
     maxAbsDiff?: number;
   };
+};
+
+export type MetricSummaryScope = 'YEARLY' | 'PHASE_TOTAL' | 'OVERALL_TOTAL';
+
+export type MetricSummary = {
+  metric?: string;
+  scope?: MetricSummaryScope;
+  phaseName?: string | null;
+  year?: number | null;
+  p5?: number | null;
+  p10?: number | null;
+  p25?: number | null;
+  p50?: number | null;
+  p75?: number | null;
+  p90?: number | null;
+  p95?: number | null;
+};
+
+export type StandardResultsV3Response = {
+  simulationId?: string;
+  yearlySummaries?: YearlySummary[];
+  metricSummaries?: MetricSummary[];
 };
 
 export async function getCompletedSummaries(simulationId: string): Promise<YearlySummary[] | null> {
@@ -141,11 +167,28 @@ export async function startAdvancedSimulation(req: AdvancedSimulationRequest): P
   const id = String(raw?.id ?? '');
   if (!id) throw new Error('No simulation id returned');
 
-  const parsedSeed = raw?.rngSeed;
-  const rngSeed =
-    parsedSeed === null || parsedSeed === undefined || parsedSeed === ''
-      ? null
-      : (Number(parsedSeed) as any);
+  const toSeedText = (v: any): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    return /^-?\d+$/.test(s) ? s : null;
+  };
+
+  const seedText = toSeedText(raw?.rngSeedText ?? raw?.rngSeed);
+  const toSafeNumber = (s: string | null): number | null => {
+    if (!s) return null;
+    try {
+      const bi = BigInt(s);
+      const max = BigInt(Number.MAX_SAFE_INTEGER);
+      const min = -max;
+      if (bi > max || bi < min) return null;
+      return Number(bi);
+    } catch {
+      return null;
+    }
+  };
+
+  const rngSeed = toSafeNumber(seedText);
 
   const toNullIfEmpty = (v: any): string | null => {
     if (v === null || v === undefined) return null;
@@ -156,6 +199,7 @@ export async function startAdvancedSimulation(req: AdvancedSimulationRequest): P
   return {
     id,
     ...(raw?.createdAt ? { createdAt: String(raw.createdAt) } : {}),
+    ...(seedText ? { rngSeedText: seedText } : {}),
     ...(rngSeed === null || Number.isFinite(rngSeed) ? { rngSeed } : {}),
     ...(raw?.modelAppVersion !== undefined ? { modelAppVersion: toNullIfEmpty(raw.modelAppVersion) } : {}),
     ...(raw?.modelBuildTime !== undefined ? { modelBuildTime: toNullIfEmpty(raw.modelBuildTime) } : {}),
@@ -243,6 +287,16 @@ export async function diffRuns(runAId: string, runBId: string): Promise<RunDiffR
   if (res.status === 404) throw new Error('One or both runs were not found (or not persisted).');
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as RunDiffResponse;
+}
+
+export async function getStandardResultsV3(simulationId: string): Promise<StandardResultsV3Response | null> {
+  const res = await fetch(`${BASE_URL}/results/${encodeURIComponent(simulationId)}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as StandardResultsV3Response;
 }
 
 export const exportSimulationCsv = async (simulationId?: string | null): Promise<void> => {

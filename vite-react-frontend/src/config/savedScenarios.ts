@@ -63,6 +63,8 @@ export type SavedScenario = {
     id: string;
     createdAt?: string;
     rngSeed?: number | null;
+    /** String form to avoid JS number precision loss (preferred when present). */
+    rngSeedText?: string | null;
     modelAppVersion?: string | null;
     modelBuildTime?: string | null;
     modelSpringBootVersion?: string | null;

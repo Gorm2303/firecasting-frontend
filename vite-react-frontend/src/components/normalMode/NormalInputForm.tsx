@@ -1370,9 +1370,26 @@ ref
     if (!name) return;
 
     const lastStartedRunMeta = lastStartedRunMetaRef.current;
+    const preferredSeed = (() => {
+      const text = (lastStartedRunMeta as any)?.rngSeedText;
+      if (typeof text === 'string' && /^-?\d+$/.test(text.trim())) {
+        try {
+          const bi = BigInt(text.trim());
+          const max = BigInt(Number.MAX_SAFE_INTEGER);
+          const min = -max;
+          if (bi > max || bi < min) return null;
+          const n = Number(bi);
+          return Number.isSafeInteger(n) ? n : null;
+        } catch {
+          return null;
+        }
+      }
+      const n = lastStartedRunMeta?.rngSeed;
+      return Number.isSafeInteger(n) ? (n ?? null) : null;
+    })();
     const requestToSave = materializeRandomSeedIfNeeded(
       currentAdvancedRequest,
-      lastStartedRunMeta?.rngSeed ?? null
+      preferredSeed
     );
     const wasRandomRequested = isRandomSeedRequested(currentAdvancedRequest);
 
@@ -1404,6 +1421,7 @@ ref
             id: lastStartedRunMeta.id,
             createdAt: lastStartedRunMeta.createdAt,
             rngSeed: lastStartedRunMeta.rngSeed ?? null,
+            rngSeedText: (lastStartedRunMeta as any)?.rngSeedText ?? (lastStartedRunMeta.rngSeed !== null && lastStartedRunMeta.rngSeed !== undefined ? String(lastStartedRunMeta.rngSeed) : null),
             modelAppVersion: lastStartedRunMeta.modelAppVersion ?? null,
             modelBuildTime: lastStartedRunMeta.modelBuildTime ?? null,
             modelSpringBootVersion: lastStartedRunMeta.modelSpringBootVersion ?? null,
@@ -2688,7 +2706,6 @@ ref
       {simulationId && (
         <SimulationProgress
           simulationId={simulationId}
-          onDismiss={() => setSimulationId(null)}
           onComplete={(result) => {
             const completedId = simulationId;
             setSimulateInProgress(false);
