@@ -507,6 +507,13 @@ const RunDiffPage: React.FC = () => {
           border-bottom: 1px solid rgba(255,255,255,0.06);
           font-weight: 800;
         }
+        details.info-section > summary.info-section-summary.metric-table-summary {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr 1fr 0.9fr;
+          align-items: center;
+          justify-content: initial;
+          gap: 10px;
+        }
         details.info-section > summary.info-section-summary::-webkit-details-marker {
           display: none;
         }
@@ -809,6 +816,10 @@ const RunDiffPage: React.FC = () => {
             <span>inputsChanged: {String(Boolean(diff.attribution?.inputsChanged))}</span>
             <span>randomnessChanged: {String(Boolean(diff.attribution?.randomnessChanged))}</span>
             <span>modelVersionChanged: {String(Boolean(diff.attribution?.modelVersionChanged))}</span>
+            <span>exactMatch: {String(Boolean(diff.output?.exactMatch))}</span>
+            <span>withinTolerance: {String(Boolean(diff.output?.withinTolerance))}</span>
+            <span>mismatches: {fmt(diff.output?.mismatches) || '0'}</span>
+            <span>max|Δ|: {fmt(diff.output?.maxAbsDiff) || '0'}</span>
           </div>
 
           <div style={{ marginTop: 10, border: '1px solid #333', borderRadius: 12, overflow: 'hidden' }}>
@@ -936,17 +947,17 @@ const RunDiffPage: React.FC = () => {
             />
           </div>
 
-          <details open className="info-section">
-            <summary className="info-section-summary">Inputs</summary>
-
-            <div className="info-section-body">
-
-            {(inputSummaryA || inputSummaryB) ? (
-              <>
-                <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden', marginTop: 10 }}>
-                  <div style={{ padding: '8px 10px', background: 'rgba(100, 150, 255, 0.05)', fontSize: 12, fontWeight: 700 }}>
-                    Overview
-                  </div>
+          {(inputSummaryA || inputSummaryB) ? (
+            <>
+              <details open className="info-section">
+                <summary className="info-section-summary metric-table-summary">
+                  <div>Inputs overview</div>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>Run A</div>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>Run B</div>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>Δ</div>
+                </summary>
+                <div className="info-section-body">
+                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
                   <MetricRow
                     label="Start date"
                     a={inputSummaryA?.startDate || '—'}
@@ -1017,12 +1028,19 @@ const RunDiffPage: React.FC = () => {
                     different={Boolean(inputSummaryA && inputSummaryB && inputSummaryA.totalWithdrawAmount !== inputSummaryB.totalWithdrawAmount)}
                   />
                 </div>
+                </div>
+              </details>
 
-                {(inputSummaryA?.advancedMode || inputSummaryB?.advancedMode) && (
-                  <details open className="info-section">
-                    <summary className="info-section-summary">Advanced mode details</summary>
-                    <div className="info-section-body" style={{ paddingTop: 10 }}>
-                      <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+              {(inputSummaryA?.advancedMode || inputSummaryB?.advancedMode) && (
+                <details open className="info-section">
+                  <summary className="info-section-summary metric-table-summary">
+                    <div>Advanced mode details</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Run A</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Run B</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Δ</div>
+                  </summary>
+                  <div className="info-section-body">
+                    <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
                       {/* Return type */}
                       <MetricRow
                         label="Return type"
@@ -1196,17 +1214,22 @@ const RunDiffPage: React.FC = () => {
                     </>
                   )}
 
-                      </div>
-                    </div>
-              </details>
-                )}
+                          </div>
+                        </div>
+                      </details>
+                    )}
 
             {/* Phase-by-phase breakdown */}
-            {(inputSummaryA?.phases ?? []).length > 0 || (inputSummaryB?.phases ?? []).length > 0 ? (
-              <details open className="info-section">
-                <summary className="info-section-summary">Per-phase details</summary>
-                <div className="info-section-body" style={{ paddingTop: 10 }}>
-                  <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
+              {(inputSummaryA?.phases ?? []).length > 0 || (inputSummaryB?.phases ?? []).length > 0 ? (
+                <details open className="info-section">
+                  <summary className="info-section-summary metric-table-summary">
+                    <div>Per-phase details</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Run A</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Run B</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Δ</div>
+                  </summary>
+                  <div className="info-section-body">
+                    <div style={{ border: '1px solid #333', borderRadius: 12, padding: 0, overflow: 'hidden' }}>
                   {Array.from({ length: Math.max(inputSummaryA?.phases.length ?? 0, inputSummaryB?.phases.length ?? 0) }).map((_, phaseIdx) => {
                     const phaseA = inputSummaryA?.phases[phaseIdx];
                     const phaseB = inputSummaryB?.phases[phaseIdx];
@@ -1328,43 +1351,14 @@ const RunDiffPage: React.FC = () => {
                       </div>
                     );
                   })}
+                    </div>
                   </div>
-                </div>
-              </details>
-            ) : null}
-
-              </>
-            ) : (
-              <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>
-            )}
-            </div>
-      </details>
-
-          <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
-
-          <details open className="info-section">
-            <summary className="info-section-summary">Outputs</summary>
-            <div className="info-section-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>exactMatch</div>
-                <div style={{ fontWeight: 700 }}>{String(Boolean(diff.output?.exactMatch))}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>withinTolerance</div>
-                <div style={{ fontWeight: 700 }}>{String(Boolean(diff.output?.withinTolerance))}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>mismatches</div>
-                <div style={{ fontWeight: 700 }}>{fmt(diff.output?.mismatches) || '0'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>max |Δ|</div>
-                <div style={{ fontWeight: 700 }}>{fmt(diff.output?.maxAbsDiff) || '0'}</div>
-              </div>
-              </div>
-            </div>
-          </details>
+                </details>
+              ) : null}
+            </>
+          ) : (
+            <div style={{ fontSize: 13, opacity: 0.85 }}>Input summary unavailable.</div>
+          )}
 
           {(runSummariesA && runSummariesB) && (
             <>
