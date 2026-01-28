@@ -516,10 +516,7 @@ const RunDiffPage: React.FC = () => {
       : null;
   const singleMode = Boolean(singleModeSide);
 
-  const showAttributionFlags = Boolean(
-    !singleMode &&
-      (diff?.attribution?.inputsChanged || diff?.attribution?.randomnessChanged || diff?.attribution?.modelVersionChanged)
-  );
+  const showAttributionFlags = !singleMode;
 
   const attributionLine = (d: RunDiffResponse | null): string | null => {
     const s = d?.attribution?.summary;
