@@ -86,7 +86,6 @@ export type RunListItem = {
 export type RunDetails = RunListItem & {
   computeMs?: number | null;
   aggregateMs?: number | null;
-  gridsMs?: number | null;
   persistMs?: number | null;
   totalMs?: number | null;
 };

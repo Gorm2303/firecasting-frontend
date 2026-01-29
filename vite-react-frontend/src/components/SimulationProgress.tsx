@@ -12,7 +12,6 @@ type SimulationMeta = {
   queueMs?: number;
   computeMs?: number;
   aggregateMs?: number;
-  gridsMs?: number;
   persistMs?: number;
   totalMs?: number;
 };
@@ -286,7 +285,6 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
       "queueMs",
       "computeMs",
       "aggregateMs",
-      "gridsMs",
       "persistMs",
       "totalMs",
     ]);
@@ -301,7 +299,6 @@ const SimulationProgress: React.FC<SimulationProgressProps> = ({
       { label: "Queue", ms: meta.queueMs, always: true },
       { label: "Running", ms: meta.computeMs, always: true },
       { label: "Aggregation", ms: meta.aggregateMs, always: true },
-      { label: "Grids", ms: meta.gridsMs, always: false },
       { label: "Persist", ms: meta.persistMs, always: false },
     ];
 
