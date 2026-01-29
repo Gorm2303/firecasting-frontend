@@ -647,6 +647,28 @@ ref
     }
   }, []);
 
+  const scenarioAutoLoadOnLoad = useMemo(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get('scenarioAuto');
+      return v === '1' || v === 'true';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const clearScenarioFromUrl = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('scenario');
+      url.searchParams.delete('scenarioAuto');
+      // Keep any other params intact.
+      const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
+      window.history.replaceState({}, '', next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const didRestoreDraftRef = useRef(false);
   useEffect(() => {
     if (didRestoreDraftRef.current) return;
@@ -1940,12 +1962,14 @@ ref
       return;
     }
 
-    const okPrivacy = window.confirm(
-      'This link contains a scenario encoded in the URL. Anyone with the link can decode it. Load and run it now?'
-    );
-    if (!okPrivacy) {
-      hasAppliedScenarioFromUrlRef.current = true;
-      return;
+    if (!scenarioAutoLoadOnLoad) {
+      const okPrivacy = window.confirm(
+        'This link contains a scenario encoded in the URL. Anyone with the link can decode it. Load and run it now?'
+      );
+      if (!okPrivacy) {
+        hasAppliedScenarioFromUrlRef.current = true;
+        return;
+      }
     }
 
     if (isDirty) {
@@ -1960,7 +1984,14 @@ ref
     setSelectedScenarioId('');
     void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded));
     hasAppliedScenarioFromUrlRef.current = true;
-  }, [applyRequestToForm, isDirty, runSimulationWithRequest, scenarioParamOnLoad]);
+
+    // If this scenario came from an internal navigation (e.g. Explore -> Clone to form),
+    // remove the scenario payload from the URL to avoid re-running on refresh and to
+    // prevent users from accidentally copying a sensitive/huge URL.
+    if (scenarioAutoLoadOnLoad) {
+      clearScenarioFromUrl();
+    }
+  }, [applyRequestToForm, clearScenarioFromUrl, isDirty, runSimulationWithRequest, scenarioAutoLoadOnLoad, scenarioParamOnLoad]);
 
   const handleAddDefaultPhase = () => {
     handleAddPhase(createDefaultPhase('DEPOSIT'));
