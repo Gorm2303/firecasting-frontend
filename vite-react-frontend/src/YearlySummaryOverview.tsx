@@ -20,6 +20,8 @@ const formatNumber = (value: number): string =>
 
 interface YearlySummaryOverviewProps {
   data: YearlySummary[];
+  /** If provided, Recharts will synchronize hover/tooltip/cursor across charts with the same syncId. */
+  syncId?: string;
   /** ISO simulation start date (YYYY-MM-DD). Used to compute real-vs-nominal conversion. */
   simulationStartDateIso?: string;
   /** Yearly inflation factor (e.g. 1.02). Used to compute real-vs-nominal conversion. */
@@ -166,6 +168,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
 
 const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
   data,
+  syncId,
   simulationStartDateIso,
   inflationFactorPerYear,
   capitalView = 'nominal',
@@ -249,6 +252,8 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
           <ComposedChart
             data={stackedDataWithMode}
             margin={{ top: 0, right: 20, bottom: 0, left: 50 }}
+            syncId={syncId}
+            syncMethod="value"
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis

@@ -50,8 +50,8 @@ function lerpYearly(a: YearlySummary, b: YearlySummary, phaseName: string, year:
  * For each phase and year, generates 12 monthly records interpolating linearly
  * from year N values to year N+1 values.
  *
- * Example: if year 2025 has avg capital 100 and year 2026 has 110,
- * then Jan 2025 ≈ 100.83, Feb 2025 ≈ 101.67, ..., Dec 2025 ≈ 109.17
+ * Example: if year 2025 has avg capital 1.00 and year 2026 has 1.10,
+ * then Jan 2025 ≈ 1.0083, Feb 2025 ≈ 1.0167, ..., Dec 2025 ≈ 1.0917
  */
 export function transformYearlyToMonthly(yearly: YearlySummary[], options?: TransformOptions): MonthlySummary[] {
   if (yearly.length === 0) return [];

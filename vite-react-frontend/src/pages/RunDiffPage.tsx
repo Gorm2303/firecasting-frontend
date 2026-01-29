@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useId } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { diffRuns, findRunForInput, getCompletedSummaries, getRunInput, getRunSummaries, getStandardResultsV3, listRuns, startAdvancedSimulation, type MetricSummary, type MetricSummaryScope, type RunDiffResponse, type RunListItem, type StartRunResponse } from '../api/simulation';
+import CompareMetricExplorer from '../components/CompareMetricExplorer';
 import SimulationProgress from '../components/SimulationProgress';
 import { isRandomSeedRequested, listSavedScenarios, materializeRandomSeedIfNeeded, saveScenario, updateScenarioRunMeta, type SavedScenario } from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
 import { deepEqual } from '../utils/deepEqual';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
+import { metricColor, moneyStoryStepColor, type MoneyStoryStepKey } from '../utils/metricColors';
 
 const fmt = (v: any): string => {
   if (v === null || v === undefined) return '';
@@ -34,7 +36,7 @@ const pickLastEntry = (data: YearlySummary[], preferredPhase?: string): YearlySu
   );
 };
 
-const MetricRow: React.FC<{ label: string; a?: string; b?: string; delta?: string; different?: boolean }> = ({
+const MetricRow: React.FC<{ label: string; a?: React.ReactNode; b?: React.ReactNode; delta?: React.ReactNode; different?: boolean }> = ({
   label,
   a,
   b,
@@ -61,11 +63,33 @@ const MetricRow: React.FC<{ label: string; a?: string; b?: string; delta?: strin
   );
 };
 
+const coloredValue = (metricName: string, value: React.ReactNode, opts: { bold?: boolean } = {}): React.ReactNode => {
+  const c = metricColor(metricName);
+  if (!c) return value;
+  return (
+    <span style={{ color: c, fontWeight: opts.bold ? 900 : 700 }}>
+      {value}
+    </span>
+  );
+};
+
 const formatMoney0 = (v: number | null | undefined): string => {
   if (v === null || v === undefined) return '—';
   const n = Number(v);
   if (!Number.isFinite(n)) return '—';
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
+};
+
+const formatMoneyCompact = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  // Produces 1.2K / 3.4M / 5.6B
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(n);
 };
 
 const formatInflation = (v: number | null | undefined): string => {
@@ -97,6 +121,9 @@ const formatMetricDelta = (metricName: string, v: number | null | undefined): st
 };
 
 const percentileOrder: Array<keyof MetricSummary> = ['p5', 'p10', 'p25', 'p50', 'p75', 'p90', 'p95'];
+
+type SummaryPercentile = 'p5' | 'p10' | 'p25' | 'p50' | 'p75' | 'p90' | 'p95';
+const summaryPercentiles: SummaryPercentile[] = ['p5', 'p10', 'p25', 'p50', 'p75', 'p90', 'p95'];
 
 const getPercentileValue = (m: MetricSummary | null | undefined, p: keyof MetricSummary): number | null => {
   if (!m) return null;
@@ -156,15 +183,68 @@ const bandText = (metricName: string, b: Band): { main: string; band: string } =
 };
 
 type WaterfallStep = {
-  key: string;
+  key: MoneyStoryStepKey;
   label: string;
   value: number;
   color: string;
+  hint?: string;
 };
 
-const WaterfallChart: React.FC<{ title: string; steps: WaterfallStep[]; height?: number }> = ({ title, steps, height = 220 }) => {
+const withYearlySumMetrics = (metrics: MetricSummary[]): MetricSummary[] => {
+  const flows = new Set(['deposit', 'return', 'withdraw', 'tax', 'fee']);
+  const byPhaseMetric = new Map<string, Map<string, MetricSummary[]>>();
+
+  for (const m of metrics) {
+    if (!m) continue;
+    if (String(m.scope ?? '') !== 'YEARLY') continue;
+    const y = m.year === null || m.year === undefined ? null : Number(m.year);
+    if (y === null || !Number.isFinite(y) || y < 0) continue;
+    const metric = String(m.metric ?? '').toLowerCase();
+    if (!flows.has(metric)) continue;
+    const phase = String(m.phaseName ?? '');
+    const mm = byPhaseMetric.get(phase) ?? new Map<string, MetricSummary[]>();
+    const arr = mm.get(metric) ?? [];
+    arr.push(m);
+    mm.set(metric, arr);
+    byPhaseMetric.set(phase, mm);
+  }
+
+  const synthetic: MetricSummary[] = [];
+  for (const [phase, mm] of byPhaseMetric.entries()) {
+    for (const [metric, arr] of mm.entries()) {
+      const s: MetricSummary = {
+        metric,
+        scope: 'YEARLY',
+        phaseName: phase || null,
+        year: -1,
+      };
+
+      for (const p of percentileOrder) {
+        let any = false;
+        let total = 0;
+        for (const it of arr) {
+          const v: any = (it as any)[p];
+          if (v === null || v === undefined) continue;
+          const n = Number(v);
+          if (!Number.isFinite(n)) continue;
+          any = true;
+          total += n;
+        }
+        (s as any)[p] = any ? total : null;
+      }
+
+      synthetic.push(s);
+    }
+  }
+
+  return synthetic.length ? [...metrics, ...synthetic] : metrics;
+};
+
+const WaterfallChart: React.FC<{ title?: string; steps: WaterfallStep[]; height?: number }> = ({ title, steps, height = 220 }) => {
   // Waterfall: first and last steps are treated as totals.
   if (!steps.length) return null;
+
+  const ariaTitle = title && title.trim() ? title : 'Waterfall chart';
 
   const w = 520;
   const h = height;
@@ -222,7 +302,7 @@ const WaterfallChart: React.FC<{ title: string; steps: WaterfallStep[]; height?:
       const y1 = y(s.value);
       const top = Math.min(y0, y1);
       const bh = Math.max(1, Math.abs(y0 - y1));
-      return { x: x0, y: top, w: barW, h: bh, color: s.color, label: s.label, value: s.value };
+      return { x: x0, y: top, w: barW, h: bh, color: s.color, label: s.label, value: s.value, hint: s.hint };
     }
 
     const prev = cum[i - 1];
@@ -231,18 +311,38 @@ const WaterfallChart: React.FC<{ title: string; steps: WaterfallStep[]; height?:
     const y1 = y(next);
     const top = Math.min(y0, y1);
     const bh = Math.max(1, Math.abs(y0 - y1));
-    return { x: x0, y: top, w: barW, h: bh, color: s.color, label: s.label, value: s.value };
+    return { x: x0, y: top, w: barW, h: bh, color: s.color, label: s.label, value: s.value, hint: s.hint };
   });
+
+  const valueLabel = (value: number, isTotal: boolean): string => {
+    if (isTotal) return formatMoneyCompact(value);
+    const prefix = value >= 0 ? '+' : '';
+    return `${prefix}${formatMoneyCompact(value)}`;
+  };
 
   return (
     <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10, background: 'rgba(0,0,0,0.15)' }}>
-      <div style={{ fontWeight: 800, marginBottom: 8 }}>{title}</div>
-      <svg width="100%" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={title}>
-        <text x={padL} y={18} fontSize={12} fill="#cfcfcf" fontWeight={700}>{title}</text>
+      {title && title.trim() ? <div style={{ fontWeight: 800, marginBottom: 8 }}>{title}</div> : null}
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={ariaTitle}>
+        {title && title.trim() ? <text x={padL} y={18} fontSize={12} fill="#cfcfcf" fontWeight={700}>{title}</text> : null}
         <line x1={padL} x2={w - padR} y1={axisY} y2={axisY} stroke="#3a3a3a" strokeWidth={1} />
         {bars.map((b, i) => (
           <g key={String(i)}>
-            <rect x={b.x} y={b.y} width={b.w} height={b.h} fill={b.color} rx={6} />
+            <rect x={b.x} y={b.y} width={b.w} height={b.h} fill={b.color} rx={6}>
+              <title>
+                {`${b.label}: ${formatMoney0(b.value)}${b.hint ? `\n\n${b.hint}` : ''}`}
+              </title>
+            </rect>
+            {(() => {
+              const isTotal = i === 0 || i === bars.length - 1;
+              const isUp = b.value >= 0;
+              const yy = isUp ? Math.max(12, b.y - 4) : Math.min(h - 52, b.y + b.h + 12);
+              return (
+                <text x={b.x + b.w / 2} y={yy} fontSize={10} fill="#e5e5e5" textAnchor="middle" style={{ opacity: 0.92 }}>
+                  {valueLabel(b.value, isTotal)}
+                </text>
+              );
+            })()}
             <text x={b.x + b.w / 2} y={h - 18} fontSize={10} fill="#cfcfcf" textAnchor="middle">
               {b.label}
             </text>
@@ -521,6 +621,7 @@ const compareOutputs = (a: YearlySummary[], b: YearlySummary[]): { exactMatch: b
 
 const RunDiffPage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const chartsSyncId = useId();
 
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const refreshSavedScenarios = useCallback(() => setSavedScenarios(listSavedScenarios()), []);
@@ -555,6 +656,8 @@ const RunDiffPage: React.FC = () => {
 
   const [selectedMetricGroupId, setSelectedMetricGroupId] = useState<string>('');
 
+  const [summaryPercentile, setSummaryPercentile] = useState<SummaryPercentile>('p50');
+
   const [inputSummaryA, setInputSummaryA] = useState<ScenarioSummary | null>(null);
   const [inputSummaryB, setInputSummaryB] = useState<ScenarioSummary | null>(null);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
@@ -574,8 +677,8 @@ const RunDiffPage: React.FC = () => {
   };
 
   const detailedMetricGroups = useMemo((): { groups: MetricGroup[]; byId: Map<string, MetricGroup> } => {
-    const a = metricSummariesA ?? [];
-    const b = metricSummariesB ?? [];
+    const a = withYearlySumMetrics(metricSummariesA ?? []);
+    const b = withYearlySumMetrics(metricSummariesB ?? []);
 
     const groupIdFor = (m: MetricSummary): Omit<MetricGroup, 'metrics'> => {
       const scope = String(m?.scope ?? '');
@@ -591,6 +694,10 @@ const RunDiffPage: React.FC = () => {
       }
       if (scope === 'YEARLY') {
         const y = Number(year || 0);
+        if (y === -1) {
+          const t = phase ? `YEARLY / ${phase} / all years (sum)` : 'YEARLY / all years (sum)';
+          return { id: `YEARLY|${phase}|ALL`, title: t, scope, scopeOrder: 2, sortPhase: phase, sortYear: -1 };
+        }
         const t = phase ? `YEARLY / ${phase} / year ${y || year || '—'}` : `YEARLY / year ${y || year || '—'}`;
         return { id: `YEARLY|${phase}|${year}`, title: t, scope, scopeOrder: 2, sortPhase: phase, sortYear: y };
       }
@@ -791,6 +898,26 @@ const RunDiffPage: React.FC = () => {
         .kpi-value { font-size: 18px; font-weight: 900; margin-top: 4px; }
         .kpi-sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
 
+        .summary-kpis-sides {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          align-items: start;
+        }
+        @media (max-width: 980px) {
+          .summary-kpis-sides { grid-template-columns: 1fr; }
+        }
+        .summary-kpis-side {
+          border: 1px solid #333;
+          border-radius: 14px;
+          padding: 10px;
+          background: rgba(0,0,0,0.10);
+        }
+        .summary-kpis-side-title {
+          font-weight: 900;
+          margin-bottom: 10px;
+        }
+
         .summary-waterfalls {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -803,12 +930,9 @@ const RunDiffPage: React.FC = () => {
 
         .phase-cards {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: 1fr;
           gap: 12px;
           margin-top: 12px;
-        }
-        @media (max-width: 980px) {
-          .phase-cards { grid-template-columns: 1fr; }
         }
         .phase-card {
           border: 1px solid #333;
@@ -1398,76 +1522,117 @@ const RunDiffPage: React.FC = () => {
 
           {/* Summary */}
           {(() => {
-            const capA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'capital'));
-            const capB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'capital'));
+            const capAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'capital');
+            const capBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'capital');
+            const depAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'deposit');
+            const depBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'deposit');
+            const retAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'return');
+            const retBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'return');
+            const wAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'withdraw');
+            const wBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'withdraw');
+            const taxAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'tax');
+            const taxBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'tax');
+            const feeAS = getMetric(metricSummariesA, 'OVERALL_TOTAL', 'fee');
+            const feeBS = getMetric(metricSummariesB, 'OVERALL_TOTAL', 'fee');
 
-            const depA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'deposit'));
-            const depB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'deposit'));
-
-            const retA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'return'));
-            const retB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'return'));
-
-            const wA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'withdraw'));
-            const wB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'withdraw'));
-
-            const taxA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'tax'));
-            const taxB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'tax'));
-
-            const feeA = getBand(getMetric(metricSummariesA, 'OVERALL_TOTAL', 'fee'));
-            const feeB = getBand(getMetric(metricSummariesB, 'OVERALL_TOTAL', 'fee'));
+            const capA = getBand(capAS);
+            const capB = getBand(capBS);
+            const depA = getBand(depAS);
+            const depB = getBand(depBS);
+            const wA = getBand(wAS);
+            const wB = getBand(wBS);
 
             const startA = Number(inputSummaryA?.totalInitialDeposit ?? 0);
             const startB = Number(inputSummaryB?.totalInitialDeposit ?? 0);
 
-            const endA = Number(capA.p50 ?? 0);
-            const endB = Number(capB.p50 ?? 0);
+            const endA = Number(getPercentileValue(capAS, summaryPercentile) ?? 0);
+            const endB = Number(getPercentileValue(capBS, summaryPercentile) ?? 0);
 
-            const impliedEndA = startA + Number(depA.p50 ?? 0) + Number(retA.p50 ?? 0) - Number(wA.p50 ?? 0) - Number(taxA.p50 ?? 0) - Number(feeA.p50 ?? 0);
-            const impliedEndB = startB + Number(depB.p50 ?? 0) + Number(retB.p50 ?? 0) - Number(wB.p50 ?? 0) - Number(taxB.p50 ?? 0) - Number(feeB.p50 ?? 0);
+            const impliedEndA =
+              startA +
+              Number(getPercentileValue(depAS, summaryPercentile) ?? 0) +
+              Number(getPercentileValue(retAS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(wAS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(taxAS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(feeAS, summaryPercentile) ?? 0);
+            const impliedEndB =
+              startB +
+              Number(getPercentileValue(depBS, summaryPercentile) ?? 0) +
+              Number(getPercentileValue(retBS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(wBS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(taxBS, summaryPercentile) ?? 0) -
+              Number(getPercentileValue(feeBS, summaryPercentile) ?? 0);
 
             const residualA = endA - impliedEndA;
             const residualB = endB - impliedEndB;
 
-            const showDelta = !singleModeSide && Boolean(metricSummariesA && metricSummariesB);
-
             const mkStorySteps = (start: number, dep: number, ret: number, wd: number, tax: number, fee: number, residual: number, end: number): WaterfallStep[] => {
+              const otherHint = 'This leftover happens because we’re adding separate percentile values (numbers from different runs and not one single “end = start + …” number).';
               const steps: WaterfallStep[] = [
-                { key: 'start', label: 'Start', value: start, color: '#888' },
-                { key: 'deposit', label: 'Deposits', value: dep, color: '#2ecc71' },
-                { key: 'return', label: 'Returns', value: ret, color: '#4da3ff' },
-                { key: 'withdraw', label: 'Withdraw', value: -Math.abs(wd), color: '#ff6b6b' },
-                { key: 'tax', label: 'Taxes', value: -Math.abs(tax), color: '#ffb86b' },
-                { key: 'fee', label: 'Fees', value: -Math.abs(fee), color: '#f5d76e' },
+                { key: 'start', label: 'Start', value: start, color: moneyStoryStepColor('start') },
+                { key: 'deposit', label: 'Deposits', value: dep, color: moneyStoryStepColor('deposit') },
+                { key: 'return', label: 'Returns', value: ret, color: moneyStoryStepColor('return') },
+                { key: 'withdraw', label: 'Withdraw', value: -Math.abs(wd), color: moneyStoryStepColor('withdraw') },
+                { key: 'tax', label: 'Taxes', value: -Math.abs(tax), color: moneyStoryStepColor('tax') },
+                { key: 'fee', label: 'Fees', value: -Math.abs(fee), color: moneyStoryStepColor('fee') },
               ];
-              if (Math.abs(residual) > 1e-6) steps.push({ key: 'residual', label: 'Other', value: residual, color: '#666' });
-              steps.push({ key: 'end', label: 'End', value: end, color: '#cfcfcf' });
+              if (Math.abs(residual) > 1e-6) steps.push({ key: 'other', label: 'Other', value: residual, color: moneyStoryStepColor('other'), hint: otherHint });
+              steps.push({ key: 'end', label: 'End', value: end, color: moneyStoryStepColor('end') });
               return steps;
             };
 
-            const stepsA = mkStorySteps(startA, Number(depA.p50 ?? 0), Number(retA.p50 ?? 0), Number(wA.p50 ?? 0), Number(taxA.p50 ?? 0), Number(feeA.p50 ?? 0), residualA, endA);
-            const stepsB = mkStorySteps(startB, Number(depB.p50 ?? 0), Number(retB.p50 ?? 0), Number(wB.p50 ?? 0), Number(taxB.p50 ?? 0), Number(feeB.p50 ?? 0), residualB, endB);
-
-            const stepsD = mkStorySteps(
-              startB - startA,
-              Number(depB.p50 ?? 0) - Number(depA.p50 ?? 0),
-              Number(retB.p50 ?? 0) - Number(retA.p50 ?? 0),
-              Number(wB.p50 ?? 0) - Number(wA.p50 ?? 0),
-              Number(taxB.p50 ?? 0) - Number(taxA.p50 ?? 0),
-              Number(feeB.p50 ?? 0) - Number(feeA.p50 ?? 0),
-              residualB - residualA,
-              endB - endA
+            const stepsA = mkStorySteps(
+              startA,
+              Number(getPercentileValue(depAS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(retAS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(wAS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(taxAS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(feeAS, summaryPercentile) ?? 0),
+              residualA,
+              endA
+            );
+            const stepsB = mkStorySteps(
+              startB,
+              Number(getPercentileValue(depBS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(retBS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(wBS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(taxBS, summaryPercentile) ?? 0),
+              Number(getPercentileValue(feeBS, summaryPercentile) ?? 0),
+              residualB,
+              endB
             );
 
-            const terminalA = bandText('capital', capA);
-            const terminalB = bandText('capital', capB);
-            const withdrawA = bandText('withdraw', wA);
-            const withdrawB = bandText('withdraw', wB);
-            const taxAT = bandText('tax', taxA);
-            const taxBT = bandText('tax', taxB);
-            const feeAT = bandText('fee', feeA);
-            const feeBT = bandText('fee', feeB);
-            const depAT = bandText('deposit', depA);
-            const depBT = bandText('deposit', depB);
+            const terminalA = { main: formatMetricValue('capital', getPercentileValue(capAS, summaryPercentile)), band: bandText('capital', capA).band };
+            const terminalB = { main: formatMetricValue('capital', getPercentileValue(capBS, summaryPercentile)), band: bandText('capital', capB).band };
+            const returnsA = { main: formatMetricValue('return', getPercentileValue(retAS, summaryPercentile)), band: '' };
+            const returnsB = { main: formatMetricValue('return', getPercentileValue(retBS, summaryPercentile)), band: '' };
+            const withdrawA = { main: formatMetricValue('withdraw', getPercentileValue(wAS, summaryPercentile)), band: bandText('withdraw', wA).band };
+            const withdrawB = { main: formatMetricValue('withdraw', getPercentileValue(wBS, summaryPercentile)), band: bandText('withdraw', wB).band };
+            const depAT = { main: formatMetricValue('deposit', getPercentileValue(depAS, summaryPercentile)), band: bandText('deposit', depA).band };
+            const depBT = { main: formatMetricValue('deposit', getPercentileValue(depBS, summaryPercentile)), band: bandText('deposit', depB).band };
+
+            const taxAVal = Number(getPercentileValue(taxAS, summaryPercentile) ?? 0);
+            const feeAVal = Number(getPercentileValue(feeAS, summaryPercentile) ?? 0);
+            const taxBVal = Number(getPercentileValue(taxBS, summaryPercentile) ?? 0);
+            const feeBVal = Number(getPercentileValue(feeBS, summaryPercentile) ?? 0);
+
+            const taxFeesA = formatMoney0(taxAVal + feeAVal);
+            const taxFeesB = formatMoney0(taxBVal + feeBVal);
+
+            const taxesPlusFeesMainA = (
+              <span>
+                {coloredValue('tax', formatMoney0(taxAVal), { bold: true })}
+                <span style={{ opacity: 0.75 }}> + </span>
+                {coloredValue('fee', formatMoney0(feeAVal), { bold: true })}
+              </span>
+            );
+            const taxesPlusFeesMainB = (
+              <span>
+                {coloredValue('tax', formatMoney0(taxBVal), { bold: true })}
+                <span style={{ opacity: 0.75 }}> + </span>
+                {coloredValue('fee', formatMoney0(feeBVal), { bold: true })}
+              </span>
+            );
 
             const uncWidthA = capA.p5 !== null && capA.p95 !== null ? capA.p95 - capA.p5 : null;
             const uncWidthB = capB.p5 !== null && capB.p95 !== null ? capB.p95 - capB.p5 : null;
@@ -1478,55 +1643,80 @@ const RunDiffPage: React.FC = () => {
               { key: 'withdraw', label: 'Withdraw phase', metricPhase: 'withdraw' },
             ];
 
-            const mkPhaseCard = (phase: string) => {
-              const cap = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'capital', { phaseName: phase }));
-              const dep = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'deposit', { phaseName: phase }));
-              const ret = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'return', { phaseName: phase }));
-              const wd = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'withdraw', { phaseName: phase }));
-              const tax = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'tax', { phaseName: phase }));
-              const fee = getBand(getMetric(metricSummariesA, 'PHASE_TOTAL', 'fee', { phaseName: phase }));
-              const end = Number(cap.p50 ?? 0);
-              const start = end - Number(dep.p50 ?? 0) - Number(ret.p50 ?? 0) + Number(wd.p50 ?? 0) + Number(tax.p50 ?? 0) + Number(fee.p50 ?? 0);
-              return {
-                cap,
-                dep,
-                ret,
-                wd,
-                tax,
-                fee,
-                start,
-                end,
-                steps: mkStorySteps(start, Number(dep.p50 ?? 0), Number(ret.p50 ?? 0), Number(wd.p50 ?? 0), Number(tax.p50 ?? 0), Number(fee.p50 ?? 0), 0, end),
-              };
+            const getPhaseValue = (metrics: MetricSummary[] | null, metric: string, phase: string): number => {
+              const m = getMetric(metrics, 'PHASE_TOTAL', metric, { phaseName: phase });
+              return Number(getPercentileValue(m, summaryPercentile) ?? 0);
             };
 
-            const mkPhaseCardB = (phase: string) => {
-              const cap = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'capital', { phaseName: phase }));
-              const dep = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'deposit', { phaseName: phase }));
-              const ret = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'return', { phaseName: phase }));
-              const wd = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'withdraw', { phaseName: phase }));
-              const tax = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'tax', { phaseName: phase }));
-              const fee = getBand(getMetric(metricSummariesB, 'PHASE_TOTAL', 'fee', { phaseName: phase }));
-              const end = Number(cap.p50 ?? 0);
-              const start = end - Number(dep.p50 ?? 0) - Number(ret.p50 ?? 0) + Number(wd.p50 ?? 0) + Number(tax.p50 ?? 0) + Number(fee.p50 ?? 0);
-              return {
-                cap,
-                dep,
-                ret,
-                wd,
-                tax,
-                fee,
-                start,
-                end,
-                steps: mkStorySteps(start, Number(dep.p50 ?? 0), Number(ret.p50 ?? 0), Number(wd.p50 ?? 0), Number(tax.p50 ?? 0), Number(fee.p50 ?? 0), 0, end),
-              };
+            const getPhaseEndCapital = (metrics: MetricSummary[] | null, phase: string): number | null => {
+              const m = getMetric(metrics, 'PHASE_TOTAL', 'capital', { phaseName: phase });
+              const v = getPercentileValue(m, summaryPercentile);
+              return v === null ? null : Number(v);
             };
 
-            const kpiTile = (label: string, main: string, sub: string) => (
+            const phasesA = phaseDefs.map((pd) => ({
+              label: pd.label,
+              dep: getPhaseValue(metricSummariesA, 'deposit', pd.metricPhase),
+              ret: getPhaseValue(metricSummariesA, 'return', pd.metricPhase),
+              wd: getPhaseValue(metricSummariesA, 'withdraw', pd.metricPhase),
+              tax: getPhaseValue(metricSummariesA, 'tax', pd.metricPhase),
+              fee: getPhaseValue(metricSummariesA, 'fee', pd.metricPhase),
+            }));
+
+            const phasesB = phaseDefs.map((pd) => ({
+              label: pd.label,
+              dep: getPhaseValue(metricSummariesB, 'deposit', pd.metricPhase),
+              ret: getPhaseValue(metricSummariesB, 'return', pd.metricPhase),
+              wd: getPhaseValue(metricSummariesB, 'withdraw', pd.metricPhase),
+              tax: getPhaseValue(metricSummariesB, 'tax', pd.metricPhase),
+              fee: getPhaseValue(metricSummariesB, 'fee', pd.metricPhase),
+            }));
+
+            const phaseStories = (() => {
+              let runningA = startA;
+              let runningB = startB;
+              const stories = phaseDefs.map((pd, idx) => {
+                const phA = phasesA[idx];
+                const phB = phasesB[idx];
+
+                const startA0 = runningA;
+                const endAFromCapital = getPhaseEndCapital(metricSummariesA, pd.metricPhase);
+                const endA0 = endAFromCapital ?? (startA0 + phA.dep + phA.ret - Math.abs(phA.wd) - Math.abs(phA.tax) - Math.abs(phA.fee));
+                runningA = endA0;
+
+                const startB0 = runningB;
+                const endBFromCapital = getPhaseEndCapital(metricSummariesB, pd.metricPhase);
+                const endB0 = endBFromCapital ?? (startB0 + phB.dep + phB.ret - Math.abs(phB.wd) - Math.abs(phB.tax) - Math.abs(phB.fee));
+                runningB = endB0;
+
+                return {
+                  pd,
+                  a: { start: startA0, end: endA0, dep: phA.dep, ret: phA.ret, wd: phA.wd, tax: phA.tax, fee: phA.fee },
+                  b: { start: startB0, end: endB0, dep: phB.dep, ret: phB.ret, wd: phB.wd, tax: phB.tax, fee: phB.fee },
+                };
+              });
+
+              return stories.map((s) => {
+                const aImplied = s.a.start + s.a.dep + s.a.ret - Math.abs(s.a.wd) - Math.abs(s.a.tax) - Math.abs(s.a.fee);
+                const bImplied = s.b.start + s.b.dep + s.b.ret - Math.abs(s.b.wd) - Math.abs(s.b.tax) - Math.abs(s.b.fee);
+                const aResidual = s.a.end - aImplied;
+                const bResidual = s.b.end - bImplied;
+                const aSteps = mkStorySteps(s.a.start, s.a.dep, s.a.ret, s.a.wd, s.a.tax, s.a.fee, aResidual, s.a.end);
+                const bSteps = mkStorySteps(s.b.start, s.b.dep, s.b.ret, s.b.wd, s.b.tax, s.b.fee, bResidual, s.b.end);
+                return {
+                  pd: s.pd,
+                  a: { start: s.a.start, end: s.a.end, steps: aSteps },
+                  b: { start: s.b.start, end: s.b.end, steps: bSteps },
+                };
+              });
+            })();
+
+
+            const kpiTile = (label: string, main: React.ReactNode, sub: string) => (
               <div className="kpi-tile">
                 <div className="kpi-label">{label}</div>
                 <div className="kpi-value">{main}</div>
-                <div className="kpi-sub">{sub}</div>
+                {sub ? <div className="kpi-sub">{sub}</div> : null}
               </div>
             );
 
@@ -1537,108 +1727,137 @@ const RunDiffPage: React.FC = () => {
               <details open className="info-section">
                 <summary className="info-section-summary">Summary</summary>
                 <div className="info-section-body">
-                  <div style={{ fontWeight: 800, marginBottom: 8 }}>What’s going on?</div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 800 }}>What’s going on?</div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 700 }}>Percentile</div>
+                      <select
+                        value={summaryPercentile}
+                        onChange={(e) => setSummaryPercentile(e.target.value as SummaryPercentile)}
+                        style={{ padding: '6px 8px', borderRadius: 10, border: '1px solid #444', background: '#111', color: '#fff' }}
+                      >
+                        {summaryPercentiles.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
                   <div style={{ display: 'grid', gap: 10 }}>
                     {singleModeSide ? (
                       <div className="summary-kpis">
                         {singleModeSide === 'A' ? (
                           <>
-                            {kpiTile('Terminal capital (p50)', terminalA.main, `p5–p95: ${terminalA.band}`)}
-                            {kpiTile('Total withdrawals (p50)', withdrawA.main, `p5–p95: ${withdrawA.band}`)}
-                            {kpiTile('Total taxes (p50)', taxAT.main, `p5–p95: ${taxAT.band}`)}
-                            {kpiTile('Total fees (p50)', feeAT.main, `p5–p95: ${feeAT.band}`)}
-                            {kpiTile('Total deposits (p50)', depAT.main, `p5–p95: ${depAT.band}`)}
-                            {kpiTile('Uncertainty width', formatMoney0(uncWidthA), 'p95–p5 of terminal capital')}
+                            {kpiTile(`Total deposits (${summaryPercentile})`, coloredValue('deposit', depAT.main, { bold: true }), '')}
+                            {kpiTile(`Total returns (${summaryPercentile})`, coloredValue('return', returnsA.main, { bold: true }), '')}
+                            {kpiTile(`Total withdrawals (${summaryPercentile})`, coloredValue('withdraw', withdrawA.main, { bold: true }), '')}
+                            {kpiTile(`Total taxes + fees (${summaryPercentile})`, taxesPlusFeesMainA, `Total: ${taxFeesA}`)}
+                            {kpiTile(`End capital (${summaryPercentile})`, coloredValue('capital', terminalA.main, { bold: true }), '')}
+                            {kpiTile('Uncertainty width', coloredValue('capital', formatMoney0(uncWidthA), { bold: true }), 'p95–p5 of terminal capital')}
                           </>
                         ) : (
                           <>
-                            {kpiTile('Terminal capital (p50)', terminalB.main, `p5–p95: ${terminalB.band}`)}
-                            {kpiTile('Total withdrawals (p50)', withdrawB.main, `p5–p95: ${withdrawB.band}`)}
-                            {kpiTile('Total taxes (p50)', taxBT.main, `p5–p95: ${taxBT.band}`)}
-                            {kpiTile('Total fees (p50)', feeBT.main, `p5–p95: ${feeBT.band}`)}
-                            {kpiTile('Total deposits (p50)', depBT.main, `p5–p95: ${depBT.band}`)}
-                            {kpiTile('Uncertainty width', formatMoney0(uncWidthB), 'p95–p5 of terminal capital')}
+                            {kpiTile(`Total deposits (${summaryPercentile})`, coloredValue('deposit', depBT.main, { bold: true }), '')}
+                            {kpiTile(`Total returns (${summaryPercentile})`, coloredValue('return', returnsB.main, { bold: true }), '')}
+                            {kpiTile(`Total withdrawals (${summaryPercentile})`, coloredValue('withdraw', withdrawB.main, { bold: true }), '')}
+                            {kpiTile(`Total taxes + fees (${summaryPercentile})`, taxesPlusFeesMainB, `Total: ${taxFeesB}`)}
+                            {kpiTile(`End capital (${summaryPercentile})`, coloredValue('capital', terminalB.main, { bold: true }), '')}
+                            {kpiTile('Uncertainty width', coloredValue('capital', formatMoney0(uncWidthB), { bold: true }), 'p95–p5 of terminal capital')}
                           </>
                         )}
                       </div>
                     ) : (
-                      <div className="summary-kpis">
-                        {kpiTile('Terminal capital A (p50)', terminalA.main, `p5–p95: ${terminalA.band}`)}
-                        {kpiTile('Terminal capital B (p50)', terminalB.main, `p5–p95: ${terminalB.band}`)}
-                        {kpiTile('Withdrawals A (p50)', withdrawA.main, `p5–p95: ${withdrawA.band}`)}
-                        {kpiTile('Withdrawals B (p50)', withdrawB.main, `p5–p95: ${withdrawB.band}`)}
-                        {kpiTile('Uncertainty width A', formatMoney0(uncWidthA), 'p95–p5 terminal capital')}
-                        {kpiTile('Uncertainty width B', formatMoney0(uncWidthB), 'p95–p5 terminal capital')}
+                      <div className="summary-kpis-sides">
+                        <div className="summary-kpis-side">
+                          <div className="summary-kpis-side-title">Run A</div>
+                          <div className="summary-kpis" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                            {kpiTile(`Deposits (${summaryPercentile})`, coloredValue('deposit', depAT.main, { bold: true }), '')}
+                            {kpiTile(`Returns (${summaryPercentile})`, coloredValue('return', returnsA.main, { bold: true }), '')}
+                            {kpiTile(`Withdrawals (${summaryPercentile})`, coloredValue('withdraw', withdrawA.main, { bold: true }), '')}
+                            {kpiTile(`Taxes + fees (${summaryPercentile})`, taxesPlusFeesMainA, `Total: ${taxFeesA}`)}
+                            {kpiTile(`End capital (${summaryPercentile})`, coloredValue('capital', terminalA.main, { bold: true }), '')}
+                            {kpiTile('Uncertainty width', coloredValue('capital', formatMoney0(uncWidthA), { bold: true }), 'p95–p5 terminal capital')}
+                          </div>
+                        </div>
+                        <div className="summary-kpis-side">
+                          <div className="summary-kpis-side-title">Run B</div>
+                          <div className="summary-kpis" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                            {kpiTile(`Deposits (${summaryPercentile})`, coloredValue('deposit', depBT.main, { bold: true }), '')}
+                            {kpiTile(`Returns (${summaryPercentile})`, coloredValue('return', returnsB.main, { bold: true }), '')}
+                            {kpiTile(`Withdrawals (${summaryPercentile})`, coloredValue('withdraw', withdrawB.main, { bold: true }), '')}
+                            {kpiTile(`Taxes + fees (${summaryPercentile})`, taxesPlusFeesMainB, `Total: ${taxFeesB}`)}
+                            {kpiTile(`End capital (${summaryPercentile})`, coloredValue('capital', terminalB.main, { bold: true }), '')}
+                            {kpiTile('Uncertainty width', coloredValue('capital', formatMoney0(uncWidthB), { bold: true }), 'p95–p5 terminal capital')}
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     <div style={{ marginTop: 8 }}>
                       <div style={{ fontWeight: 800, marginBottom: 6 }}>Money story</div>
                       <div style={{ opacity: 0.85, fontSize: 13, marginBottom: 8 }}>
-                        Start capital + deposits + returns − withdrawals − taxes − fees = end capital
+                        Start + deposits + returns − withdrawals − taxes − fees = end. “Other” is whatever amount is needed to make the chart land exactly on the End value.
+                        This leftover happens because we’re adding separate percentile values (numbers from different runs and not one single “end = start + …” number).
                       </div>
 
-                      <div className="summary-waterfalls" style={{ gridTemplateColumns: showDelta ? '1fr 1fr 1fr' : '1fr 1fr' }}>
-                        {showA && <WaterfallChart title="Run A" steps={stepsA} />}
-                        {showB && <WaterfallChart title="Run B" steps={stepsB} />}
-                        {showDelta && <WaterfallChart title="Δ (B − A)" steps={stepsD.map((s) => ({ ...s, color: '#888' }))} />}
+                      <div className="summary-waterfalls" style={{ gridTemplateColumns: showA && showB ? '1fr 1fr' : '1fr' }}>
+                        {showA && <WaterfallChart title={`Run A (${summaryPercentile})`} steps={stepsA} height={260} />}
+                        {showB && <WaterfallChart title={`Run B (${summaryPercentile})`} steps={stepsB} height={260} />}
                       </div>
                     </div>
 
                     {(!singleModeSide && metricSummariesA && metricSummariesB) && (
                       <>
-                        <div style={{ marginTop: 8, fontWeight: 800 }}>Phases</div>
+                        <div style={{ marginTop: 8, fontWeight: 800 }}>Phases breakdown</div>
+                        <div style={{ opacity: 0.85, fontSize: 13, marginBottom: 8 }}>
+                          Phase starts/ends are chained (end of a phase becomes the next phase start).
+                        </div>
+
                         <div className="phase-cards">
-                          {phaseDefs.map((pd) => {
-                            const a = mkPhaseCard(pd.metricPhase);
-                            const b = mkPhaseCardB(pd.metricPhase);
-                            const capA0 = bandText('capital', a.cap);
-                            const capB0 = bandText('capital', b.cap);
-                            const groupId = `PHASE_TOTAL|${pd.metricPhase}`;
+                          {phaseStories.map(({ pd, a, b }) => {
                             return (
-                              <div
-                                key={pd.key}
-                                className="phase-card"
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setSelectedMetricGroupId(groupId);
-                                  const el = document.getElementById('detailed-metrics');
-                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    setSelectedMetricGroupId(groupId);
-                                    const el = document.getElementById('detailed-metrics');
-                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
-                                  <div style={{ fontWeight: 900 }}>{pd.label}</div>
-                                  <div style={{ fontSize: 12, opacity: 0.75 }}>Click for phase detail</div>
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-                                  <div>
-                                    <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 700 }}>End capital A (p50)</div>
-                                    <div style={{ fontWeight: 900, fontSize: 16 }}>{capA0.main}</div>
-                                    <div style={{ fontSize: 12, opacity: 0.75 }}>p5–p95: {capA0.band}</div>
+                              <details key={pd.key} className="phase-card">
+                                <summary
+                                  style={{
+                                    cursor: 'pointer',
+                                    listStyle: 'none',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+                                    <div style={{ fontWeight: 900 }}>{pd.label}</div>
+                                    <div style={{ fontSize: 12, opacity: 0.75 }} />
                                   </div>
-                                  <div>
-                                    <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 700 }}>End capital B (p50)</div>
-                                    <div style={{ fontWeight: 900, fontSize: 16 }}>{capB0.main}</div>
-                                    <div style={{ fontSize: 12, opacity: 0.75 }}>p5–p95: {capB0.band}</div>
+                                </summary>
+
+                                <div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+                                    <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 800 }}>Run A</div>
+                                    <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 800 }}>Run B</div>
+                                  </div>
+
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                                    <div>
+                                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 700 }}>Start → End ({summaryPercentile})</div>
+                                      <div style={{ fontWeight: 900, fontSize: 14 }}>
+                                        {coloredValue('capital', `${formatMetricValue('capital', a.start)} → ${formatMetricValue('capital', a.end)}`, { bold: true })}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 700 }}>Start → End ({summaryPercentile})</div>
+                                      <div style={{ fontWeight: 900, fontSize: 14 }}>
+                                        {coloredValue('capital', `${formatMetricValue('capital', b.start)} → ${formatMetricValue('capital', b.end)}`, { bold: true })}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                    <WaterfallChart title="" steps={a.steps} height={220} />
+                                    <WaterfallChart title="" steps={b.steps} height={220} />
                                   </div>
                                 </div>
-
-                                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                  <WaterfallChart title="A" steps={a.steps} height={160} />
-                                  <WaterfallChart title="B" steps={b.steps} height={160} />
-                                </div>
-                              </div>
+                              </details>
                             );
                           })}
                         </div>
@@ -2229,44 +2448,44 @@ const RunDiffPage: React.FC = () => {
                     <MetricRow label="End point (phase/year)" a={aEnd} b={bEnd} different={endDifferent} />
                     <MetricRow
                       label="End average capital"
-                      a={formatMoney0(avgA)}
-                      b={formatMoney0(avgB)}
-                      delta={formatDeltaMoney0(dAvg)}
+                      a={coloredValue('capital', formatMoney0(avgA))}
+                      b={coloredValue('capital', formatMoney0(avgB))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dAvg), { bold: true })}
                       different={Boolean(dAvg && Math.abs(dAvg) > 1e-6)}
                     />
                     <MetricRow
                       label="End median capital"
-                      a={formatMoney0(medA)}
-                      b={formatMoney0(medB)}
-                      delta={formatDeltaMoney0(dMed)}
+                      a={coloredValue('capital', formatMoney0(medA))}
+                      b={coloredValue('capital', formatMoney0(medB))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dMed), { bold: true })}
                       different={Boolean(dMed && Math.abs(dMed) > 1e-6)}
                     />
                     <MetricRow
                       label="End worst-case (5th percentile)"
-                      a={formatMoney0(q05A)}
-                      b={formatMoney0(q05B)}
-                      delta={formatDeltaMoney0(dQ05)}
+                      a={coloredValue('capital', formatMoney0(q05A))}
+                      b={coloredValue('capital', formatMoney0(q05B))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dQ05), { bold: true })}
                       different={Boolean(dQ05 && Math.abs(dQ05) > 1e-6)}
                     />
                     <MetricRow
                       label="End best-case (95th percentile)"
-                      a={formatMoney0(q95A)}
-                      b={formatMoney0(q95B)}
-                      delta={formatDeltaMoney0(dQ95)}
+                      a={coloredValue('capital', formatMoney0(q95A))}
+                      b={coloredValue('capital', formatMoney0(q95B))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dQ95), { bold: true })}
                       different={Boolean(dQ95 && Math.abs(dQ95) > 1e-6)}
                     />
                     <MetricRow
                       label="End VaR"
-                      a={formatMoney0(varA)}
-                      b={formatMoney0(varB)}
-                      delta={formatDeltaMoney0(dVar)}
+                      a={coloredValue('capital', formatMoney0(varA))}
+                      b={coloredValue('capital', formatMoney0(varB))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dVar), { bold: true })}
                       different={Boolean(dVar && Math.abs(dVar) > 1e-6)}
                     />
                     <MetricRow
                       label="End CVaR"
-                      a={formatMoney0(cvarA)}
-                      b={formatMoney0(cvarB)}
-                      delta={formatDeltaMoney0(dCvar)}
+                      a={coloredValue('capital', formatMoney0(cvarA))}
+                      b={coloredValue('capital', formatMoney0(cvarB))}
+                      delta={coloredValue('capital', formatDeltaMoney0(dCvar), { bold: true })}
                       different={Boolean(dCvar && Math.abs(dCvar) > 1e-6)}
                     />
                     <MetricRow
@@ -2286,6 +2505,35 @@ const RunDiffPage: React.FC = () => {
             <>
               <hr style={{ margin: '12px 0', border: 0, borderTop: '1px solid #444' }} />
               <div id="detailed-metrics" style={{ fontWeight: 800, marginBottom: 8 }}>Detailed Yearly Metrics</div>
+
+              {(metricSummariesA || metricSummariesB) && (
+                <details open className="info-section">
+                  <summary className="info-section-summary">Compare</summary>
+                  <div className="info-section-body">
+                    {(() => {
+                      const a = singleModeSide === 'B' ? (metricSummariesB ?? []) : (metricSummariesA ?? []);
+                      const b = singleModeSide ? null : (metricSummariesB ?? []);
+                      const aLabel = singleModeSide === 'B' ? 'Run B' : (singleModeSide === 'A' ? 'Run A' : 'Run A');
+                      const bLabel = 'Run B';
+
+                      return (
+                        <CompareMetricExplorer
+                          a={a}
+                          b={b}
+                          mode={singleModeSide ? 'single' : 'diff'}
+                          aLabel={aLabel}
+                          bLabel={bLabel}
+                          onOpenGroup={(groupId) => {
+                            setSelectedMetricGroupId(groupId);
+                            const el = document.getElementById('detailed-metrics');
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
+                </details>
+              )}
 
               {(() => {
                 const groups = detailedMetricGroups.groups;
@@ -2313,9 +2561,9 @@ const RunDiffPage: React.FC = () => {
                           <MetricRow
                             key={String(p)}
                             label={String(p)}
-                            a={formatMetricValue(metricName, va)}
-                            b={formatMetricValue(metricName, vb)}
-                            delta={formatMetricDelta(metricName, d)}
+                            a={coloredValue(metricName, formatMetricValue(metricName, va))}
+                            b={coloredValue(metricName, formatMetricValue(metricName, vb))}
+                            delta={coloredValue(metricName, formatMetricDelta(metricName, d), { bold: true })}
                             different={Boolean(d && Math.abs(d) > 1e-9)}
                           />
                         );
@@ -2326,39 +2574,39 @@ const RunDiffPage: React.FC = () => {
 
                 return (
                   <div style={{ display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                      <div style={{ fontWeight: 650, opacity: 0.9 }}>Show:</div>
-                      <select
-                        value={activeGroup.id}
-                        onChange={(e) => setSelectedMetricGroupId(String(e.target.value))}
-                        style={{
-                          padding: '6px 8px',
-                          borderRadius: 10,
-                          border: '1px solid #444',
-                          background: '#111',
-                          color: '#fff',
-                          minWidth: 320,
-                        }}
-                      >
-                        {groups.map((g) => {
-                          const count = g.metrics.size;
-                          const label = `${g.title} (${count})`;
-                          return (
-                            <option key={g.id} value={g.id}>
-                              {label}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-
-                    <details key={activeGroup.id} open className="info-section">
+                    <details key={activeGroup.id} className="info-section">
                       <summary className="info-section-summary" style={{ fontWeight: 750 }}>
                         {activeGroup.title}
                         <span style={{ opacity: 0.7, fontSize: 12, marginLeft: 8 }}>({metricNames.length})</span>
                       </summary>
 
                       <div className="info-section-body" style={{ marginTop: 0, display: 'grid', gap: 12 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                          <div style={{ fontWeight: 650, opacity: 0.9 }}>Show:</div>
+                          <select
+                            value={activeGroup.id}
+                            onChange={(e) => setSelectedMetricGroupId(String(e.target.value))}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: 10,
+                              border: '1px solid #444',
+                              background: '#111',
+                              color: '#fff',
+                              minWidth: 320,
+                            }}
+                          >
+                            {groups.map((g) => {
+                              const count = g.metrics.size;
+                              const label = `${g.title} (${count})`;
+                              return (
+                                <option key={g.id} value={g.id}>
+                                  {label}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
                         {metricNames.map((name) => {
                           const pair = activeGroup.metrics.get(name) ?? {};
                           return (
@@ -2386,25 +2634,25 @@ const RunDiffPage: React.FC = () => {
                     <div style={{ marginTop: 8 }}>
                       <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                         <div style={{ fontWeight: 750, marginBottom: 6 }}>Run A</div>
-                        <MultiPhaseOverview data={runSummariesA} timeline={timelineA} />
+                        <MultiPhaseOverview data={runSummariesA} timeline={timelineA} syncId={chartsSyncId} />
                       </div>
                     </div>
                   ) : singleModeSide === 'B' ? (
                     <div style={{ marginTop: 8 }}>
                       <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                         <div style={{ fontWeight: 750, marginBottom: 6 }}>Run B</div>
-                        <MultiPhaseOverview data={runSummariesB!} timeline={timelineB} />
+                        <MultiPhaseOverview data={runSummariesB!} timeline={timelineB} syncId={chartsSyncId} />
                       </div>
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
                       <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                         <div style={{ fontWeight: 750, marginBottom: 6 }}>Run A</div>
-                        <MultiPhaseOverview data={runSummariesA} timeline={timelineA} />
+                        <MultiPhaseOverview data={runSummariesA} timeline={timelineA} syncId={chartsSyncId} />
                       </div>
                       <div style={{ border: '1px solid #333', borderRadius: 12, padding: 10 }}>
                         <div style={{ fontWeight: 750, marginBottom: 6 }}>Run B</div>
-                        <MultiPhaseOverview data={runSummariesB!} timeline={timelineB} />
+                        <MultiPhaseOverview data={runSummariesB!} timeline={timelineB} syncId={chartsSyncId} />
                       </div>
                     </div>
                   )}

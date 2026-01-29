@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useId } from 'react';
 import { YearlySummary } from './models/YearlySummary';
 import { SimulationTimelineContext } from './models/types';
 import YearlySummaryOverview from './YearlySummaryOverview';
@@ -7,11 +7,15 @@ import { addMonthsClamped, parseIsoDateLocal, toIsoDateLocal } from './utils/pha
 interface MultiPhaseOverviewProps {
   data: YearlySummary[];
   timeline?: SimulationTimelineContext | null;
+  /** If set, sync hover/tooltip across multiple MultiPhaseOverview instances (e.g., Run A + Run B). */
+  syncId?: string;
 }
 
 type CapitalView = 'nominal' | 'real';
 
-const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline }) => {
+const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline, syncId }) => {
+  const internalSyncId = useId();
+  const effectiveSyncId = syncId ?? internalSyncId;
   const normalized = data.map((s) => ({ ...s, phaseName: (s.phaseName ?? '').toUpperCase() }));
 
   const canShowReal = useMemo(() => {
@@ -203,6 +207,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                   </h2>
                   <YearlySummaryOverview
                     data={groupData}
+                    syncId={effectiveSyncId}
                     simulationStartDateIso={timeline!.startDate}
                     inflationFactorPerYear={timeline!.inflationFactorPerYear}
                     capitalView={capitalView}
@@ -220,6 +225,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
               <h2 style={{ textAlign: 'center' }}>{g.title.charAt(0) + g.title.slice(1).toLowerCase()}</h2>
               <YearlySummaryOverview
                 data={g.data}
+                syncId={effectiveSyncId}
                 simulationStartDateIso={timeline?.startDate}
                 inflationFactorPerYear={timeline?.inflationFactorPerYear}
                 capitalView={capitalView}
