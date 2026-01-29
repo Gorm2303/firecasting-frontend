@@ -1,6 +1,6 @@
 // src/pages/ExplorePage.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
@@ -8,15 +8,163 @@ import { advancedToNormalRequest } from '../models/advancedSimulation';
 import { encodeScenarioToShareParam } from '../utils/shareScenarioLink';
 import { saveScenario } from '../config/savedScenarios';
 import MultiPhaseOverview from '../MultiPhaseOverview';
+import { METRIC_COLORS, moneyStoryStepColor } from '../utils/metricColors';
 import {
   exportSimulationCsv,
   getRunInput,
   getRunSummaries,
+  getStandardResultsV3,
   listRuns,
+  type MetricSummary,
   type RunListItem,
 } from '../api/simulation';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type SortMode = 'newest' | 'oldest' | 'seed' | 'medianDesc' | 'failureDesc' | 'depositDesc';
+
+type TagTone = 'capital' | 'deposit' | 'return' | 'withdraw' | 'tax' | 'fee' | 'inflation' | 'neutral';
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const h = String(hex || '').replace('#', '').trim();
+  if (h.length !== 6) return `rgba(255,255,255,${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (![r, g, b].every(Number.isFinite)) return `rgba(255,255,255,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
+const toneColor = (tone: TagTone): string => {
+  if (tone === 'neutral') return '#777';
+  if (tone === 'inflation') return METRIC_COLORS.inflation;
+  return moneyStoryStepColor(tone as any);
+};
+
+const Tag: React.FC<{ children: React.ReactNode; tone?: TagTone; title?: string }> = ({
+  children,
+  tone = 'neutral',
+  title,
+}) => {
+  const c = toneColor(tone);
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '2px 10px',
+        borderRadius: 999,
+        border: `1px solid ${hexToRgba(c, 0.45)}`,
+        fontSize: 12,
+        background: hexToRgba(c, 0.12),
+        color: '#e6e6e6',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+};
+
+const FilterChip: React.FC<{ children: React.ReactNode; onRemove?: () => void; tone?: TagTone }> = ({
+  children,
+  onRemove,
+  tone = 'neutral',
+}) => {
+  const c = toneColor(tone);
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '2px 10px',
+        borderRadius: 999,
+        border: `1px solid ${hexToRgba(c, 0.45)}`,
+        fontSize: 12,
+        marginRight: 8,
+        marginBottom: 6,
+        background: hexToRgba(c, 0.12),
+        color: '#e6e6e6',
+      }}
+    >
+      <span>{children}</span>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove filter"
+          style={{
+            border: `1px solid ${hexToRgba(c, 0.55)}`,
+            background: 'transparent',
+            color: '#ddd',
+            borderRadius: 999,
+            padding: '0 6px',
+            cursor: 'pointer',
+            lineHeight: '18px',
+            height: 18,
+            fontSize: 12,
+          }}
+        >
+          ×
+        </button>
+      ) : null}
+    </span>
+  );
+};
+
+const money = (v?: number | null) =>
+  typeof v === 'number'
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(v)
+    : '—';
+
+const moneyCompact = (v?: number | null) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—';
+  try {
+    const s = new Intl.NumberFormat(undefined, {
+      notation: 'compact',
+      compactDisplay: 'short',
+      maximumFractionDigits: 1,
+    }).format(v);
+    return s.replace('K', 'k');
+  } catch {
+    return money(v);
+  }
+};
+
+const pctVal = (v?: number | null) =>
+  typeof v === 'number'
+    ? `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+    : '—';
+
+const pct2 = (v?: number | null) => {
+  if (v === null || v === undefined) return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+};
+
+const fmtDate = (iso: string) => {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getFullYear());
+    return `${dd}-${mm}-${yyyy}`;
+  } catch {
+    return iso;
+  }
+};
+
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return String(iso);
+  }
+};
 
 const toIsoDateString = (v: any): string | null => {
   if (!v) return null;
@@ -51,6 +199,9 @@ const toIsoDateString = (v: any): string | null => {
   return null;
 };
 
+const sumMonths = (phases: any[]) =>
+  phases.reduce((s, p) => s + (Number(p?.durationInMonths) || 0), 0);
+
 const buildTimelineFromAdvancedRequest = (req: any): SimulationTimelineContext | null => {
   try {
     const startDate = toIsoDateString(req?.startDate);
@@ -76,257 +227,639 @@ const buildTimelineFromAdvancedRequest = (req: any): SimulationTimelineContext |
   }
 };
 
-const thBase: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 8px',
-  borderBottom: '1px solid #3a3a3a',
-  position: 'sticky',
-  top: 0,
-  background: 'inherit',
+type RunComputed = {
+  totalYears?: number;
+  shape?: Array<{ phaseType: string; years: number }>;
+  overallTaxRule?: string;
+  taxPercentage?: number | null;
+  returnType?: string | null;
+  yearlyFeePercentage?: number | null;
+  inflationFactor?: number | null;
+  usedTaxRules?: Set<string>;
+  cardExemption?: { limit?: number | null; yearlyIncrease?: number | null } | null;
+  stockExemption?: { taxRate?: number | null; limit?: number | null; yearlyIncrease?: number | null } | null;
+  depositInitial?: number | null;
+  depositMonthly?: number | null;
+  depositYearlyIncreasePct?: number | null;
+  lastYear?: YearlySummary | null;
 };
 
-const tdBase: React.CSSProperties = {
-  padding: '10px 8px',
-  borderBottom: '1px solid #3a3a3a',
-  verticalAlign: 'top',
+const computeFromInputAndSummaries = (
+  input: AdvancedSimulationRequest | null,
+  summaries: YearlySummary[] | null
+): RunComputed => {
+  const phases = Array.isArray((input as any)?.phases) ? (input as any).phases : [];
+  const shape = phases
+    .map((p: any) => {
+      const phaseType = String(p?.phaseType ?? p?.type ?? '').toUpperCase();
+      const months = Number(p?.durationInMonths) || 0;
+      const years = Math.floor(months / 12);
+      return phaseType ? { phaseType, years } : null;
+    })
+    .filter(Boolean) as Array<{ phaseType: string; years: number }>;
+
+  const lastYear = Array.isArray(summaries) && summaries.length
+    ? summaries.reduce((best, s) => (s.year > best.year ? s : best), summaries[0])
+    : null;
+
+  const taxPercentageRaw = Number((input as any)?.taxPercentage);
+  const taxPercentage = Number.isFinite(taxPercentageRaw) ? taxPercentageRaw : null;
+
+  const returnTypeRaw = (input as any)?.returnType;
+  const returnType = returnTypeRaw === null || returnTypeRaw === undefined ? null : String(returnTypeRaw);
+
+  const feeRaw = (input as any)?.yearlyFeePercentage;
+  const feeNum = feeRaw === null || feeRaw === undefined ? null : Number(feeRaw);
+  const yearlyFeePercentage = Number.isFinite(feeNum as number) ? (feeNum as number) : null;
+
+  const inflRaw = (input as any)?.inflationFactor;
+  const inflNum = inflRaw === null || inflRaw === undefined ? null : Number(inflRaw);
+  const inflationFactor = Number.isFinite(inflNum as number) ? (inflNum as number) : null;
+
+  const usedTaxRules: Set<string> = new Set(
+    phases
+      .flatMap((p: any) => (Array.isArray(p?.taxRules) ? p.taxRules : []))
+      .map((r: any) => String(r ?? '').toUpperCase())
+      .filter(Boolean)
+  );
+
+  const defaultExemptionCard = { limit: 51600, yearlyIncrease: 1000 };
+  const defaultStockExemption = { taxRate: 27, limit: 67500, yearlyIncrease: 1000 };
+  const cardCfgRaw = (input as any)?.taxExemptionConfig?.exemptionCard ?? {};
+  const stockCfgRaw = (input as any)?.taxExemptionConfig?.stockExemption ?? {};
+
+  const cardLimitNum = Number(cardCfgRaw?.limit ?? defaultExemptionCard.limit);
+  const cardIncNum = Number(cardCfgRaw?.yearlyIncrease ?? defaultExemptionCard.yearlyIncrease);
+
+  const stockTaxNum = Number(stockCfgRaw?.taxRate ?? defaultStockExemption.taxRate);
+  const stockLimitNum = Number(stockCfgRaw?.limit ?? defaultStockExemption.limit);
+  const stockIncNum = Number(stockCfgRaw?.yearlyIncrease ?? defaultStockExemption.yearlyIncrease);
+
+  const firstDeposit = phases.find((p: any) => String(p?.phaseType ?? p?.type ?? '').toUpperCase() === 'DEPOSIT') ?? null;
+  const depInitRaw = firstDeposit?.initialDeposit;
+  const depMonthlyRaw = firstDeposit?.monthlyDeposit;
+  const depIncRaw = firstDeposit?.yearlyIncreaseInPercentage;
+
+  const depInit = depInitRaw === null || depInitRaw === undefined ? null : Number(depInitRaw);
+  const depMonthly = depMonthlyRaw === null || depMonthlyRaw === undefined ? null : Number(depMonthlyRaw);
+  const depInc = depIncRaw === null || depIncRaw === undefined ? null : Number(depIncRaw);
+
+  const totalMonths = phases.length ? sumMonths(phases) : 0;
+  const totalYears = phases.length ? Math.floor(totalMonths / 12) : undefined;
+
+  return {
+    totalYears,
+    shape,
+    overallTaxRule: (input as any)?.overallTaxRule ? String((input as any).overallTaxRule) : undefined,
+    taxPercentage,
+    returnType,
+    yearlyFeePercentage,
+    inflationFactor,
+    usedTaxRules,
+    cardExemption: {
+      limit: Number.isFinite(cardLimitNum) ? cardLimitNum : null,
+      yearlyIncrease: Number.isFinite(cardIncNum) ? cardIncNum : null,
+    },
+    stockExemption: {
+      taxRate: Number.isFinite(stockTaxNum) ? stockTaxNum : null,
+      limit: Number.isFinite(stockLimitNum) ? stockLimitNum : null,
+      yearlyIncrease: Number.isFinite(stockIncNum) ? stockIncNum : null,
+    },
+    depositInitial: Number.isFinite(depInit as number) ? (depInit as number) : null,
+    depositMonthly: Number.isFinite(depMonthly as number) ? (depMonthly as number) : null,
+    depositYearlyIncreasePct: Number.isFinite(depInc as number) ? (depInc as number) : null,
+    lastYear,
+  };
 };
 
-const Em: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span style={{ display: 'inline-block', fontSize: 12, opacity: 0.75 }}>{children}</span>
-);
-
-const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span
+const PillButton: React.FC<{
+  children: React.ReactNode;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+}> = ({ children, onClick, active, disabled }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
     style={{
-      display: 'inline-block',
-      padding: '2px 8px',
+      padding: '7px 11px',
       borderRadius: 999,
       border: '1px solid #444',
-      fontSize: 12,
-      marginRight: 6,
-      marginBottom: 4,
+      background: active ? '#2e2e2e' : 'transparent',
+      color: '#ddd',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      fontSize: 13,
+      fontWeight: 650,
+      opacity: disabled ? 0.55 : 1,
     }}
+    aria-pressed={active}
   >
     {children}
-  </span>
+  </button>
 );
 
-const money = (v?: number) =>
-  typeof v === 'number'
-    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(v)
-    : '—';
-
-const pct = (v?: number) =>
-  typeof v === 'number'
-    ? `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-    : '—';
-
-const pctVal = (v?: number) =>
-  typeof v === 'number'
-    ? `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-    : '—';
-
-
-const fmtDate = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString();
-  } catch {
-    return iso;
-  }
+const compactId = (id: string) => {
+  if (!id) return '—';
+  if (id.length <= 12) return id;
+  return `${id.slice(0, 8)}…${id.slice(-4)}`;
 };
 
-const fmtDateTime = (iso?: string | null) => {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return String(iso);
-  }
-};
-
-const sumMonths = (phases: any[]) =>
-  phases.reduce((s, p) => s + (Number(p?.durationInMonths) || 0), 0);
-
-/** ---------- Inputs cell (from advanced request) ---------- */
-const PhaseBlock: React.FC<{ p: any }> = ({ p }) => {
-  const type = String(p?.phaseType ?? p?.type ?? '—');
-  const taxRules: any[] = Array.isArray(p?.taxRules) ? p.taxRules : [];
-  return (
-  <div
-    style={{
-      border: '1px solid #3a3a3a',
-      borderRadius: 10,
-      padding: '8px 10px',
-      marginBottom: 8,
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-      <strong style={{ fontSize: 14 }}>{type} - {Number(p?.durationInMonths) || 0} months</strong>
-    </div>
-
-    <div style={{ marginTop: 6 }}>
-      {type === 'DEPOSIT' && (
-        <>
-          <div style={{ marginTop: 6 }}>
-            <Em>Initial Deposit:</Em> {money(p?.initialDeposit)}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <Em>Monthly Deposit:</Em> {money(p?.monthlyDeposit)}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <Em>Yearly Increase %:</Em> {pct(p?.yearlyIncreaseInPercentage)}
-          </div>
-        </>
-      )}
-
-      {type === 'WITHDRAW' && (
-        <>
-          <div style={{ marginTop: 6 }}>
-            <Em>Withdraw Amount:</Em> {money(p?.withdrawAmount)}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <Em>Lower Variation %:</Em> {pct(p?.lowerVariationPercentage)}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <Em>Upper Variation %:</Em> {pct(p?.upperVariationPercentage)}
-          </div>
-        </>
-      )}
-
-      <div style={{ marginTop: 8 }}>
-        <Em>Tax Exemptions</Em>
-        <div style={{ marginTop: 4 }}>
-          {taxRules?.includes('EXEMPTIONCARD') && <Chip>Exemption Card</Chip>}
-          {taxRules?.includes('STOCKEXEMPTION') && <Chip>Stock Exemption</Chip>}
-          {!taxRules?.length && <span style={{ opacity: 0.7 }}>None</span>}
-        </div>
-      </div>
-    </div>
-  </div>
-  );
-};
-
-const InputsCell: React.FC<{ input: AdvancedSimulationRequest }> = ({ input }) => {
-  const start = toIsoDateString((input as any)?.startDate) ?? '—';
-  const phases = Array.isArray((input as any)?.phases) ? (input as any).phases : [];
-  const total = sumMonths(phases);
-
-  const overallTaxRule = String((input as any)?.overallTaxRule ?? '—');
-  const taxPercentage = Number((input as any)?.taxPercentage);
-  const inflationFactor = (input as any)?.inflationFactor;
-  const paths = (input as any)?.paths;
-  const batchSize = (input as any)?.batchSize;
+const PhaseShapeRow: React.FC<{ shape?: Array<{ phaseType: string; years: number }> }> = ({ shape }) => {
+  const parts = shape?.length
+    ? shape.map((s) => ({
+        ...s,
+        label: `${s.phaseType} ${s.years}y`,
+        title: `${s.phaseType} phase (${s.years} years)`,
+        tone:
+          s.phaseType === 'DEPOSIT'
+            ? ('deposit' as const)
+            : s.phaseType === 'WITHDRAW'
+              ? ('withdraw' as const)
+              : s.phaseType === 'PASSIVE'
+                ? ('neutral' as const)
+                : ('neutral' as const),
+      }))
+    : [];
 
   return (
-    <div>
-      <div style={{ marginBottom: 6 }}>
-        <Em>Start Date:</Em>
-        <div>{start ? fmtDate(start) : '—'}</div>
-      </div>
-      <div style={{ marginBottom: 6 }}>
-        <Em>Tax Rule:</Em>
-        <div>{overallTaxRule === 'CAPITAL' ? 'Capital Gains' : overallTaxRule === 'NOTIONAL' ? 'Notional Gains' : overallTaxRule}</div>
-      </div>
-      <div style={{ marginBottom: 6 }}>
-        <Em>Tax %:</Em>
-        <div>{Number.isFinite(taxPercentage) ? pct(taxPercentage) : '—'}</div>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 8px' }}>
-        {inflationFactor !== undefined ? <Chip>Inflation: {String(inflationFactor)}</Chip> : null}
-        {paths !== undefined ? <Chip>Paths: {String(paths)}</Chip> : null}
-        {batchSize !== undefined ? <Chip>Batch: {String(batchSize)}</Chip> : null}
-      </div>
-
-      <div style={{ margin: '10px 0 6px', fontWeight: 600 }}>Phases</div>
-      {phases.map((p: any, idx: number) => (
-        <PhaseBlock key={idx} p={p} />
-      ))}
-
-      <div style={{ marginTop: 6, fontWeight: 600 }}>
-        Total duration: {total}/1200 months
-      </div>
+    <div style={{ fontSize: 12, opacity: 0.92, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      {parts.length ? (
+        parts.map((p, idx) => (
+          <React.Fragment key={`${p.label}-${idx}`}>
+            <Tag tone={p.tone} title={p.title}>
+              {p.label}
+            </Tag>
+            {idx < parts.length - 1 ? <span style={{ opacity: 0.45 }}>→</span> : null}
+          </React.Fragment>
+        ))
+      ) : (
+        <span style={{ opacity: 0.7 }}>—</span>
+      )}
     </div>
   );
 };
 
-/** ---------- Outputs cell ---------- */
-const OutputsCell: React.FC<{ summaries: YearlySummary[] }> = ({ summaries }) => {
-  const byPhase = useMemo(() => {
-    const map: Record<string, YearlySummary[]> = {};
-    summaries.forEach((o) => {
-      const key = String(o.phaseName ?? 'UNKNOWN');
-      map[key] ??= [];
-      map[key].push(o);
+const RunChipsRow: React.FC<{ computed: RunComputed }> = ({ computed }) => {
+  const taxLabel = computed.overallTaxRule
+    ? computed.overallTaxRule === 'CAPITAL'
+      ? 'Capital'
+      : computed.overallTaxRule === 'NOTIONAL'
+        ? 'Notional'
+        : computed.overallTaxRule
+    : '—';
+
+  const returnModelLabel = (() => {
+    const t = String(computed.returnType ?? '').trim();
+    if (!t) return '—';
+    if (t === 'dataDrivenReturn') return 'Data-driven';
+    return t;
+  })();
+
+  const inflationLabel = (() => {
+    if (typeof computed.inflationFactor !== 'number') return null;
+    const pct = (computed.inflationFactor - 1) * 100;
+    if (!Number.isFinite(pct)) return null;
+    return `+${pct2(pct)}/y`;
+  })();
+
+  const cardExLabel = (() => {
+    if (!computed.usedTaxRules?.has('EXEMPTIONCARD')) return null;
+    const limit = computed.cardExemption?.limit ?? null;
+    const inc = computed.cardExemption?.yearlyIncrease ?? null;
+    return `${moneyCompact(limit)}${typeof inc === 'number' ? ` @ 0% +${moneyCompact(inc)}/y` : ''}`;
+  })();
+
+  const stockExLabel = (() => {
+    if (!computed.usedTaxRules?.has('STOCKEXEMPTION')) return null;
+    const tax = computed.stockExemption?.taxRate ?? null;
+    const limit = computed.stockExemption?.limit ?? null;
+    const inc = computed.stockExemption?.yearlyIncrease ?? null;
+    return `${moneyCompact(limit)}${typeof inc === 'number' ? `@ ${typeof tax === 'number' ? pct2(tax) : '—'} +${moneyCompact(inc)}/y` : ''}`;
+  })();
+
+  const depositParts = (() => {
+    const init = typeof computed.depositInitial === 'number' ? computed.depositInitial : null;
+    const monthly = typeof computed.depositMonthly === 'number' ? computed.depositMonthly : null;
+    const inc = typeof computed.depositYearlyIncreasePct === 'number' ? computed.depositYearlyIncreasePct : null;
+
+    const showInit = typeof init === 'number' && Number.isFinite(init) && init !== 0;
+    const showMonthly = typeof monthly === 'number' && Number.isFinite(monthly) && monthly !== 0;
+    const showInc = showMonthly && typeof inc === 'number' && Number.isFinite(inc) && inc !== 0;
+
+    if (!showInit && !showMonthly && !showInc) return null;
+
+    return {
+      init: showInit ? moneyCompact(init) : null,
+      monthly: showMonthly ? `+${moneyCompact(monthly)}/m` : null,
+      inc: showInc ? `+${pct2(inc)}/y` : null,
+    };
+  })();
+
+  const chips = (() => {
+    const out: Array<{ key: string; node: React.ReactNode }> = [];
+
+    if (computed.totalYears !== undefined) {
+      out.push({
+        key: 'duration',
+        node: (
+          <Tag tone="neutral" title="Total simulation duration">
+            {computed.totalYears} years
+          </Tag>
+        ),
+      });
+    }
+
+    if (depositParts?.init) {
+      out.push({
+        key: 'deposit-init',
+        node: (
+          <Tag tone="deposit" title="Initial deposit (one-time)">
+            {depositParts.init}
+          </Tag>
+        ),
+      });
+    }
+    if (depositParts?.monthly) {
+      out.push({
+        key: 'deposit-monthly',
+        node: (
+          <Tag tone="deposit" title="Monthly deposit amount">
+            {depositParts.monthly}
+          </Tag>
+        ),
+      });
+    }
+    if (depositParts?.inc) {
+      out.push({
+        key: 'deposit-inc',
+        node: (
+          <Tag tone="deposit" title="Yearly increase of monthly deposits">
+            {depositParts.inc}
+          </Tag>
+        ),
+      });
+    }
+
+    out.push({
+      key: 'return-model',
+      node: (
+        <Tag tone="return" title="Return model used in the simulation">
+          {returnModelLabel}
+        </Tag>
+      ),
     });
-    Object.values(map).forEach((arr) => arr.sort((a, b) => a.year - b.year));
-    return map;
-  }, [summaries]);
 
-  const snapshot = Object.entries(byPhase).map(([phase, arr]) => {
-    const last = arr[arr.length - 1];
-    return { phase, last };
-  });
+    if (inflationLabel) {
+      out.push({
+        key: 'inflation',
+        node: (
+          <Tag tone="inflation" title="Inflation adjustment per year">
+            {inflationLabel}
+          </Tag>
+        ),
+      });
+    }
+
+    if (computed.overallTaxRule) {
+      out.push({
+        key: 'tax',
+        node: (
+          <Tag tone="tax" title="Overall tax rule and rate">
+            {taxLabel}{typeof computed.taxPercentage === 'number' ? ` ${pct2(computed.taxPercentage)}` : ''}
+          </Tag>
+        ),
+      });
+    }
+    if (cardExLabel) out.push({ key: 'tax-card', node: <Tag tone="tax" title="Card exemption (limit and yearly increase)">{cardExLabel}</Tag> });
+    if (stockExLabel) out.push({ key: 'tax-stock', node: <Tag tone="tax" title="Stock exemption (limit, tax, and yearly increase)">{stockExLabel}</Tag> });
+
+    if (typeof computed.yearlyFeePercentage === 'number') {
+      out.push({
+        key: 'fee',
+        node: (
+          <Tag tone="fee" title="Yearly fee percentage">
+            {pct2(computed.yearlyFeePercentage)}/y
+          </Tag>
+        ),
+      });
+    }
+
+    return out;
+  })();
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-        {snapshot.map((s) => (
+    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {chips.map((c) => (
+        <React.Fragment key={c.key}>{c.node}</React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+const RunListRow: React.FC<{
+  run: RunListItem;
+  computed: RunComputed;
+  metricSummaries?: MetricSummary[] | null;
+  isSelected: boolean;
+  isLoadingDetails: boolean;
+  onSelect: () => void;
+}> = ({ run, computed, metricSummaries, isSelected, isLoadingDetails, onSelect }) => {
+  const last = computed.lastYear;
+  const title = run.createdAt ? fmtDate(run.createdAt) : compactId(run.id);
+
+  const withdrawMedian = (() => {
+    const ms = Array.isArray(metricSummaries) ? metricSummaries : [];
+    const overall = ms.find((m) => String(m.metric ?? '').toLowerCase() === 'withdraw' && m.scope === 'OVERALL_TOTAL');
+    if (overall && typeof overall.p50 === 'number') return overall.p50;
+    return null;
+  })();
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        textAlign: 'left',
+        border: `1px solid ${isSelected ? '#777' : '#2f2f2f'}`,
+        background: isSelected ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)',
+        borderRadius: 12,
+        padding: 10,
+        cursor: 'pointer',
+        color: '#ddd',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '140px 1fr 140px 120px',
+          gap: 10,
+          alignItems: 'start',
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 13 }}>{title}</div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>{compactId(run.id)}</div>
+          {isLoadingDetails ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>Loading…</div> : null}
+        </div>
+
+        <div>
+          <RunChipsRow computed={computed} />
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>End (median)</div>
+          <div style={{ fontSize: 14, fontWeight: 850, color: moneyStoryStepColor('capital' as any) }}>
+            {last ? money(last.medianCapital) : '—'}
+          </div>
+          {typeof withdrawMedian === 'number' ? (
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85, color: moneyStoryStepColor('withdraw' as any) }}>
+              {money(withdrawMedian)}
+            </div>
+          ) : null}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Fail</div>
           <div
-            key={s.phase}
             style={{
-              border: '1px solid #3a3a3a',
-              borderRadius: 10,
-              padding: '8px 10px',
-              minWidth: 220,
-              flex: '1 1 260px',
+              fontSize: 13,
+              fontWeight: 800,
+              color:
+                last && typeof last.negativeCapitalPercentage === 'number' && last.negativeCapitalPercentage > 0
+                  ? '#ff4d4f'
+                  : moneyStoryStepColor('return'),
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>
-              {s.phase} - {s.last.year}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 10, rowGap: 4 }}>
-              <Em>Median:</Em>
-              <div>{money(s.last.medianCapital)}</div>
-              <Em>Avg:</Em>
-              <div>{money(s.last.averageCapital)}</div>
-              <Em>Q25–Q75:</Em>
-              <div>
-                {money(s.last.quantile25)}–{money(s.last.quantile75)}
-              </div>
-              <Em>Q5–Q95:</Em>
-              <div>
-                {money(s.last.quantile5)}–{money(s.last.quantile95)}
-              </div>
-              <Em>Min/Max:</Em>
-              <div>
-                {money(s.last.minCapital)} / {money(s.last.maxCapital)}
-              </div>
-              <Em>Neg:</Em>
-              <div>{pctVal(s.last.negativeCapitalPercentage)}</div>
-              <Em>VaR(5%):</Em>
-              <div>{money(s.last.var)}</div>
-              <Em>CVaR:</Em>
-              <div>{money(s.last.cvar)}</div>
-            </div>
+            {last ? pctVal(last.negativeCapitalPercentage) : '—'}
           </div>
-        ))}
+        </div>
+      </div>
+    </button>
+  );
+};
+
+const RunCard: React.FC<{
+  run: RunListItem;
+  computed: RunComputed;
+  metricSummaries?: MetricSummary[] | null;
+  isSelected: boolean;
+  isLoadingDetails: boolean;
+  onSelect: () => void;
+}> = ({ run, computed, metricSummaries, isSelected, isLoadingDetails, onSelect }) => {
+  const last = computed.lastYear;
+  const title = run.createdAt ? fmtDate(run.createdAt) : compactId(run.id);
+
+  const withdrawMedian = (() => {
+    const ms = Array.isArray(metricSummaries) ? metricSummaries : [];
+    const overall = ms.find((m) => String(m.metric ?? '').toLowerCase() === 'withdraw' && m.scope === 'OVERALL_TOTAL');
+    if (overall && typeof overall.p50 === 'number') return overall.p50;
+
+    const yearly = ms.find(
+      (m) =>
+        String(m.metric ?? '').toLowerCase() === 'withdraw' &&
+        m.scope === 'YEARLY' &&
+        typeof m.year === 'number' &&
+        last &&
+        m.year === last.year
+    );
+    if (yearly && typeof yearly.p50 === 'number') return yearly.p50;
+    return null;
+  })();
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        textAlign: 'left',
+        border: `1px solid ${isSelected ? '#777' : '#3a3a3a'}`,
+        background: isSelected ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)',
+        borderRadius: 14,
+        padding: 12,
+        cursor: 'pointer',
+        color: '#ddd',
+        transition: 'border-color 120ms ease, background 120ms ease',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>{title}</div>
+        <div style={{ fontSize: 12, opacity: 0.75 }}>{compactId(run.id)}</div>
       </div>
 
-      <details>
-        <summary style={{ cursor: 'pointer' }}>Show raw yearly summaries (JSON)</summary>
-        <pre
+      <RunChipsRow computed={computed} />
+
+      <div
+        style={{
+          marginTop: 10,
+          borderTop: '1px solid #2d2d2d',
+          paddingTop: 10,
+        }}
+      >
+        <PhaseShapeRow shape={computed.shape} />
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          borderTop: '1px solid #2d2d2d',
+          paddingTop: 10,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 2,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>End (median)</div>
+          {typeof withdrawMedian === 'number' ? (
+            <span style={{ color: moneyStoryStepColor('withdraw' as any), fontWeight: 850 }}>{money(withdrawMedian)}</span>
+          ) : null}
+          <div style={{ fontSize: 16, fontWeight: 850, color: moneyStoryStepColor('capital' as any) }}>
+            {last ? money(last.medianCapital) : '—'}
+          </div>
+          
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            band:{' '}
+            {last ? (
+              <span style={{ color: moneyStoryStepColor('capital' as any) }}>
+                {money(last.quantile25)}–{money(last.quantile75)}
+              </span>
+            ) : (
+              '—'
+            )}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            tail:{' '}
+            {last ? (
+              <span style={{ color: moneyStoryStepColor('capital' as any) }}>
+                {money(last.quantile5)}–{money(last.quantile95)}
+              </span>
+            ) : (
+              '—'
+            )}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Risk</div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 750,
+              color:
+                last && typeof last.negativeCapitalPercentage === 'number' && last.negativeCapitalPercentage > 0
+                  ? '#ff4d4f'
+                  : moneyStoryStepColor('return'),
+            }}
+          >
+            fail: {last ? pctVal(last.negativeCapitalPercentage) : '—'}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            VaR: {last ? money(last.var) : '—'} · CVaR: {last ? money(last.cvar) : '—'}
+          </div>
+        </div>
+      </div>
+
+      {isLoadingDetails ? (
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>Loading details…</div>
+      ) : null}
+    </button>
+  );
+};
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ fontWeight: 850, margin: '14px 0 8px' }}>{children}</div>
+);
+
+const InputsSummary: React.FC<{ input: AdvancedSimulationRequest; showShape?: boolean }> = ({
+  input,
+  showShape = true,
+}) => {
+  const computed = useMemo(() => computeFromInputAndSummaries(input, null), [input]);
+
+  return (
+    <div>
+      <RunChipsRow computed={computed} />
+
+      {showShape ? (
+        <div
           style={{
-            marginTop: 8,
-            maxHeight: 260,
-            overflow: 'auto',
-            border: '1px solid #3a3a3a',
-            borderRadius: 10,
-            padding: 8,
+            marginTop: 10,
+            borderTop: '1px solid #2d2d2d',
+            paddingTop: 10,
           }}
         >
-{JSON.stringify(summaries, null, 2)}
-        </pre>
-      </details>
+          <PhaseShapeRow shape={computed.shape} />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const OutputsHero: React.FC<{ summaries: YearlySummary[]; metricSummaries?: MetricSummary[] | null }> = ({
+  summaries,
+  metricSummaries,
+}) => {
+  const last = summaries.length
+    ? summaries.reduce((best, s) => (s.year > best.year ? s : best), summaries[0])
+    : null;
+
+  if (!last) return <div style={{ opacity: 0.75 }}>No summaries.</div>;
+
+  const withdrawMedian = (() => {
+    const ms = Array.isArray(metricSummaries) ? metricSummaries : [];
+    const overall = ms.find((m) => String(m.metric ?? '').toLowerCase() === 'withdraw' && m.scope === 'OVERALL_TOTAL');
+    if (overall && typeof overall.p50 === 'number') return overall.p50;
+
+    const yearly = ms.find(
+      (m) =>
+        String(m.metric ?? '').toLowerCase() === 'withdraw' &&
+        m.scope === 'YEARLY' &&
+        typeof m.year === 'number' &&
+        m.year === last.year
+    );
+    if (yearly && typeof yearly.p50 === 'number') return yearly.p50;
+    return null;
+  })();
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ border: '1px solid #3a3a3a', borderRadius: 12, padding: '10px 12px' }}>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>End year</div>
+          {typeof withdrawMedian === 'number' ? (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+              withdraw (median):{' '}
+              <span style={{ color: moneyStoryStepColor('withdraw' as any), fontWeight: 850 }}>{money(withdrawMedian)}</span>
+            </div>
+          ) : null}
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              marginTop: withdrawMedian !== null ? 6 : 4,
+              color: moneyStoryStepColor('capital' as any),
+            }}
+          >
+            {money(last.medianCapital)}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+            band:{' '}
+            <span style={{ color: moneyStoryStepColor('capital' as any) }}>{money(last.quantile25)}–{money(last.quantile75)}</span>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+            tail:{' '}
+            <span style={{ color: moneyStoryStepColor('capital' as any) }}>{money(last.quantile5)}–{money(last.quantile95)}</span>
+          </div>
+        </div>
+        <div style={{ border: '1px solid #3a3a3a', borderRadius: 12, padding: '10px 12px' }}>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Risk</div>
+          <div style={{ marginTop: 4, fontSize: 14, fontWeight: 850 }}>
+            fail rate: {pctVal(last.negativeCapitalPercentage)}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>VaR(5%): {money(last.var)}</div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>CVaR: {money(last.cvar)}</div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -334,27 +867,37 @@ const OutputsCell: React.FC<{ summaries: YearlySummary[] }> = ({ summaries }) =>
 const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Under development banner
-  const [ack, setAck] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showLegend, setShowLegend] = useState(false);
 
-  const [query, setQuery] = useState('');
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [runsState, setRunsState] = useState<LoadState>('idle');
   const [runsError, setRunsError] = useState<string | null>(null);
 
-  const [expandedRunId, setExpandedRunId] = useState<string>('');
+  const [query, setQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [failedOnly, setFailedOnly] = useState(false);
+  const [taxRule, setTaxRule] = useState<'ANY' | 'CAPITAL' | 'NOTIONAL'>('ANY');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [minYears, setMinYears] = useState<number | ''>('');
+
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<'simple' | 'inDepth'>('simple');
 
   const [inputByRunId, setInputByRunId] = useState<Record<string, AdvancedSimulationRequest | null>>({});
   const [summariesByRunId, setSummariesByRunId] = useState<Record<string, YearlySummary[] | null>>({});
+  const [metricSummariesByRunId, setMetricSummariesByRunId] = useState<Record<string, MetricSummary[] | null>>({});
   const [rowStateByRunId, setRowStateByRunId] = useState<Record<string, LoadState>>({});
   const [rowErrorByRunId, setRowErrorByRunId] = useState<Record<string, string | null>>({});
+
+  const inflightRef = useRef<Record<string, Promise<void> | undefined>>({});
 
   const refreshRuns = useCallback(async () => {
     setRunsState('loading');
     setRunsError(null);
     try {
       const data = await listRuns();
-      // Most recent first when createdAt exists.
+      // Prefer most recent when createdAt exists.
       const sorted = [...data].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
       setRuns(sorted);
       setRunsState('ready');
@@ -368,88 +911,205 @@ const ExplorePage: React.FC = () => {
     refreshRuns();
   }, [refreshRuns]);
 
-  const filteredRuns = useMemo(() => {
+  const ensureRunLoaded = useCallback(
+    async (runId: string) => {
+      if (inputByRunId[runId] && summariesByRunId[runId] && metricSummariesByRunId[runId]) return;
+      const inflight = inflightRef.current[runId];
+      if (inflight) return inflight;
+
+      const p = (async () => {
+        setRowStateByRunId((prev) => ({ ...prev, [runId]: 'loading' }));
+        setRowErrorByRunId((prev) => ({ ...prev, [runId]: null }));
+        try {
+          const [inputRaw, resultsMaybe] = await Promise.all([
+            inputByRunId[runId] ? Promise.resolve(inputByRunId[runId]) : getRunInput(runId),
+            summariesByRunId[runId] && metricSummariesByRunId[runId]
+              ? Promise.resolve({ yearlySummaries: summariesByRunId[runId], metricSummaries: metricSummariesByRunId[runId] })
+              : getStandardResultsV3(runId),
+          ]);
+          const input = inputRaw as AdvancedSimulationRequest;
+
+          const yearlySummaries = Array.isArray((resultsMaybe as any)?.yearlySummaries)
+            ? (((resultsMaybe as any).yearlySummaries ?? []) as YearlySummary[])
+            : await getRunSummaries(runId);
+
+          const metricSummaries = Array.isArray((resultsMaybe as any)?.metricSummaries)
+            ? (((resultsMaybe as any).metricSummaries ?? []) as MetricSummary[])
+            : [];
+
+          setInputByRunId((prev) => ({ ...prev, [runId]: input }));
+          setSummariesByRunId((prev) => ({ ...prev, [runId]: yearlySummaries }));
+          setMetricSummariesByRunId((prev) => ({ ...prev, [runId]: metricSummaries }));
+          setRowStateByRunId((prev) => ({ ...prev, [runId]: 'ready' }));
+        } catch (e: any) {
+          setRowStateByRunId((prev) => ({ ...prev, [runId]: 'error' }));
+          setRowErrorByRunId((prev) => ({
+            ...prev,
+            [runId]: String(e?.message ?? e ?? 'Failed to load run details'),
+          }));
+        } finally {
+          delete inflightRef.current[runId];
+        }
+      })();
+
+      inflightRef.current[runId] = p;
+      return p;
+    },
+    [inputByRunId, metricSummariesByRunId, summariesByRunId]
+  );
+
+  // Prefetch a few cards so the gallery has immediate “hero outputs”.
+  useEffect(() => {
+    const first = runs.slice(0, 12).map((r) => r.id);
+    first.forEach((id) => {
+      void ensureRunLoaded(id);
+    });
+  }, [ensureRunLoaded, runs]);
+
+  // When filters require run details, load them in the background.
+  useEffect(() => {
+    const needsDetails = failedOnly || taxRule !== 'ANY' || minYears !== '' || sortMode === 'medianDesc' || sortMode === 'failureDesc';
+    if (!needsDetails) return;
+    runs.forEach((r) => {
+      void ensureRunLoaded(r.id);
+    });
+  }, [ensureRunLoaded, failedOnly, minYears, runs, sortMode, taxRule]);
+
+  const computedByRunId = useMemo(() => {
+    const out: Record<string, RunComputed> = {};
+    runs.forEach((r) => {
+      out[r.id] = computeFromInputAndSummaries(inputByRunId[r.id] ?? null, summariesByRunId[r.id] ?? null);
+    });
+    return out;
+  }, [inputByRunId, runs, summariesByRunId]);
+
+  const filteredAndSorted = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return runs;
-    return runs.filter((r) => {
+    const passesQuery = (r: RunListItem): boolean => {
+      if (!q) return true;
+      const c = computedByRunId[r.id];
       const blob = [
         r.id,
         r.createdAt ?? '',
-        r.rngSeedText ?? '',
-        r.rngSeed ?? '',
-        r.modelAppVersion ?? '',
-        r.modelJavaVersion ?? '',
-        r.modelSpringBootVersion ?? '',
         r.inputHash ?? '',
+        (c?.shape ?? []).map((s) => `${s.phaseType} ${s.years}y`).join(' '),
+        c?.overallTaxRule ?? '',
+        c?.returnType ?? '',
       ]
         .join(' ')
         .toLowerCase();
       return blob.includes(q);
+    };
+
+    const passesFailed = (r: RunListItem): boolean => {
+      if (!failedOnly) return true;
+      const last = computedByRunId[r.id]?.lastYear;
+      return typeof last?.negativeCapitalPercentage === 'number' ? last.negativeCapitalPercentage > 0 : false;
+    };
+
+    const passesTaxRule = (r: RunListItem): boolean => {
+      if (taxRule === 'ANY') return true;
+      const rule = computedByRunId[r.id]?.overallTaxRule;
+      return String(rule ?? '').toUpperCase() === taxRule;
+    };
+
+    const passesMinYears = (r: RunListItem): boolean => {
+      if (minYears === '') return true;
+      const v = computedByRunId[r.id]?.totalYears;
+      return typeof v === 'number' ? v >= minYears : false;
+    };
+
+    const filtered = runs.filter((r) => passesQuery(r) && passesFailed(r) && passesTaxRule(r) && passesMinYears(r));
+
+    const sortKey = (r: RunListItem): string => String(r.createdAt ?? '');
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortMode === 'newest') return sortKey(b).localeCompare(sortKey(a));
+      if (sortMode === 'oldest') return sortKey(a).localeCompare(sortKey(b));
+      if (sortMode === 'seed') return String(a.rngSeedText ?? a.rngSeed ?? '').localeCompare(String(b.rngSeedText ?? b.rngSeed ?? ''));
+      if (sortMode === 'medianDesc') {
+        const am = computedByRunId[a.id]?.lastYear?.medianCapital;
+        const bm = computedByRunId[b.id]?.lastYear?.medianCapital;
+        const an = typeof am === 'number' ? am : -Infinity;
+        const bn = typeof bm === 'number' ? bm : -Infinity;
+        return bn - an;
+      }
+      if (sortMode === 'failureDesc') {
+        const af = computedByRunId[a.id]?.lastYear?.negativeCapitalPercentage;
+        const bf = computedByRunId[b.id]?.lastYear?.negativeCapitalPercentage;
+        const an = typeof af === 'number' ? af : -Infinity;
+        const bn = typeof bf === 'number' ? bf : -Infinity;
+        return bn - an;
+      }
+      if (sortMode === 'depositDesc') {
+        const ad = computedByRunId[a.id];
+        const bd = computedByRunId[b.id];
+        const aMonthly = typeof ad?.depositMonthly === 'number' ? ad.depositMonthly : 0;
+        const bMonthly = typeof bd?.depositMonthly === 'number' ? bd.depositMonthly : 0;
+        const aInit = typeof ad?.depositInitial === 'number' ? ad.depositInitial : 0;
+        const bInit = typeof bd?.depositInitial === 'number' ? bd.depositInitial : 0;
+        const aScore = aMonthly * 12 + aInit;
+        const bScore = bMonthly * 12 + bInit;
+        return bScore - aScore;
+      }
+      return 0;
     });
-  }, [query, runs]);
 
-  const ensureRowLoaded = useCallback(
+    return sorted;
+  }, [computedByRunId, failedOnly, minYears, query, runs, sortMode, taxRule]);
+
+  const selectedRun = useMemo(() => {
+    if (!selectedRunId) return null;
+    return runs.find((r) => r.id === selectedRunId) ?? null;
+  }, [runs, selectedRunId]);
+
+  const selectedInput = selectedRunId ? (inputByRunId[selectedRunId] ?? null) : null;
+  const selectedSummaries = selectedRunId ? (summariesByRunId[selectedRunId] ?? null) : null;
+  const selectedMetricSummaries = selectedRunId ? (metricSummariesByRunId[selectedRunId] ?? null) : null;
+  const selectedState = selectedRunId ? (rowStateByRunId[selectedRunId] ?? 'idle') : 'idle';
+  const selectedErr = selectedRunId ? (rowErrorByRunId[selectedRunId] ?? null) : null;
+
+  const openInspector = useCallback(
     async (runId: string) => {
-      setRowStateByRunId((prev) => ({ ...prev, [runId]: 'loading' }));
-      setRowErrorByRunId((prev) => ({ ...prev, [runId]: null }));
-      try {
-        const [inputRaw, summaries] = await Promise.all([
-          inputByRunId[runId] ? Promise.resolve(inputByRunId[runId]) : getRunInput(runId),
-          summariesByRunId[runId] ? Promise.resolve(summariesByRunId[runId]) : getRunSummaries(runId),
-        ]);
-
-        const input = inputRaw as AdvancedSimulationRequest;
-        setInputByRunId((prev) => ({ ...prev, [runId]: input }));
-        setSummariesByRunId((prev) => ({ ...prev, [runId]: summaries as YearlySummary[] }));
-        setRowStateByRunId((prev) => ({ ...prev, [runId]: 'ready' }));
-      } catch (e: any) {
-        setRowStateByRunId((prev) => ({ ...prev, [runId]: 'error' }));
-        setRowErrorByRunId((prev) => ({ ...prev, [runId]: String(e?.message ?? e ?? 'Failed to load run') }));
-      }
+      setSelectedRunId(runId);
+      setInspectorTab('simple');
+      await ensureRunLoaded(runId);
     },
-    [inputByRunId, summariesByRunId]
+    [ensureRunLoaded]
   );
 
-  const handleView = useCallback(
-    async (runId: string) => {
-      setExpandedRunId((prev) => (prev === runId ? '' : runId));
-      // Load details when opening.
-      const nextOpen = expandedRunId !== runId;
-      if (nextOpen && (!inputByRunId[runId] || !summariesByRunId[runId])) {
-        await ensureRowLoaded(runId);
-      }
-    },
-    [ensureRowLoaded, expandedRunId, inputByRunId, summariesByRunId]
-  );
+  const closeInspector = useCallback(() => {
+    setSelectedRunId(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRunId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeInspector();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [closeInspector, selectedRunId]);
 
   const handleClone = useCallback(
     async (run: RunListItem) => {
-      const runId = run.id;
-      if (!inputByRunId[runId]) {
-        await ensureRowLoaded(runId);
-      }
-      const input = inputByRunId[runId];
+      await ensureRunLoaded(run.id);
+      const input = inputByRunId[run.id];
       if (!input) throw new Error('Missing run input');
-
-      // Clone into the Simulation form via the existing share-link mechanism.
       const normalReq = advancedToNormalRequest(input);
       const param = encodeScenarioToShareParam(normalReq);
-      const search = new URLSearchParams({ scenario: param }).toString();
+      const search = new URLSearchParams({ scenario: param, scenarioAuto: '1' }).toString();
       navigate(`/simulation?${search}`);
     },
-    [ensureRowLoaded, inputByRunId, navigate]
+    [ensureRunLoaded, inputByRunId, navigate]
   );
 
   const handleSaveScenario = useCallback(
     async (run: RunListItem) => {
-      const runId = run.id;
-      if (!inputByRunId[runId]) {
-        await ensureRowLoaded(runId);
-      }
-      const input = inputByRunId[runId];
+      await ensureRunLoaded(run.id);
+      const input = inputByRunId[run.id];
       if (!input) throw new Error('Missing run input');
 
-      const defaultName = `Run ${runId}${run.createdAt ? ` (${fmtDateTime(run.createdAt)})` : ''}`;
+      const defaultName = `Run ${run.id}${run.createdAt ? ` (${fmtDateTime(run.createdAt)})` : ''}`;
       const name = window.prompt('Save scenario as…', defaultName) ?? '';
       if (!name.trim()) return;
 
@@ -457,9 +1117,9 @@ const ExplorePage: React.FC = () => {
         name,
         input,
         undefined,
-        runId,
+        run.id,
         {
-          id: runId,
+          id: run.id,
           createdAt: run.createdAt,
           rngSeed: run.rngSeed ?? undefined,
           rngSeedText: run.rngSeedText ?? undefined,
@@ -471,385 +1131,512 @@ const ExplorePage: React.FC = () => {
       );
       window.alert('Saved to Scenarios.');
     },
-    [ensureRowLoaded, inputByRunId]
+    [ensureRunLoaded, inputByRunId]
   );
 
   const handleCsv = useCallback(async (runId: string) => {
     await exportSimulationCsv(runId);
   }, []);
 
+  const activeChips = useMemo(() => {
+    const chips: React.ReactNode[] = [];
+    if (query.trim()) chips.push(<FilterChip tone="neutral" key="q" onRemove={() => setQuery('')}>“{query.trim()}”</FilterChip>);
+    if (failedOnly) chips.push(<FilterChip tone="tax" key="f" onRemove={() => setFailedOnly(false)}>Failed</FilterChip>);
+    if (taxRule !== 'ANY') chips.push(<FilterChip tone="tax" key="t" onRemove={() => setTaxRule('ANY')}>{taxRule}</FilterChip>);
+    if (minYears !== '') chips.push(<FilterChip tone="neutral" key="m" onRemove={() => setMinYears('')}>≥ {minYears}y</FilterChip>);
+    return chips;
+  }, [failedOnly, minYears, query, taxRule]);
+
   return (
     <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
-      {/* Under development disclaimer */}
-      {!ack && (
-        <div
-          role="status"
-          style={{
-            marginBottom: 12,
-            padding: '10px 12px',
-            border: '1px solid #ffc10755',
-            background: 'linear-gradient(0deg, rgba(255,193,7,0.08), rgba(255,193,7,0.08))',
-            borderRadius: 10,
-          }}
-        >
-          <strong>Explore (beta):</strong> This page is under development. Data is sample-only;
-          filters, pagination, downloads, and “clone to form” are not final.
-          <div style={{ marginTop: 8 }}>
-            <button
-              onClick={() => setAck(true)}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ margin: '8px 0 6px' }}>Explore</h2>
+          <div style={{ fontSize: 13, opacity: 0.75 }}>
+            Scenario gallery + run inspector
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={refreshRuns}
+            style={{
+              padding: '8px 10px',
+              borderRadius: 10,
+              border: '1px solid #444',
+              background: '#2e2e2e',
+              color: '#ddd',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14, border: '1px solid #3a3a3a', borderRadius: 14, padding: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search runs (id, time, seed, version, hash, shape…)"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: '1px solid #444',
+              background: '#141414',
+              color: '#ddd',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <PillButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+              Grid
+            </PillButton>
+            <PillButton onClick={() => setViewMode('list')} active={viewMode === 'list'}>
+              List
+            </PillButton>
+
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              style={{
+                padding: '9px 10px',
+                borderRadius: 12,
+                border: '1px solid #444',
+                background: '#141414',
+                color: '#ddd',
+                fontWeight: 650,
+              }}
+              aria-label="Sort"
+            >
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="seed">Seed</option>
+              <option value="medianDesc">End median (desc)</option>
+              <option value="failureDesc">Failure rate (desc)</option>
+              <option value="depositDesc">Deposit (desc)</option>
+            </select>
+
+            <PillButton onClick={() => setFailedOnly((v) => !v)} active={failedOnly}>
+              Failed
+            </PillButton>
+
+            <PillButton onClick={() => setShowAdvanced(true)}>
+              Advanced
+            </PillButton>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, opacity: 0.75 }}>Tax rule</span>
+            <select
+              value={taxRule}
+              onChange={(e) => setTaxRule(e.target.value as any)}
               style={{
                 padding: '6px 10px',
-                borderRadius: 8,
+                borderRadius: 999,
                 border: '1px solid #444',
-                backgroundColor: '#2e2e2e',
+                background: '#141414',
+                color: '#ddd',
+                fontSize: 13,
+                fontWeight: 650,
               }}
+              aria-label="Tax rule filter"
             >
-              Got it
-            </button>
+              <option value="ANY">Any</option>
+              <option value="CAPITAL">Capital</option>
+              <option value="NOTIONAL">Notional</option>
+            </select>
           </div>
+
+          {activeChips.length ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>{activeChips}</div>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.6 }}>No active filters</div>
+          )}
+        </div>
+      </div>
+
+      {runsState === 'loading' && <div style={{ marginTop: 12, opacity: 0.8 }}>Loading runs…</div>}
+      {runsState === 'error' && (
+        <div style={{ marginTop: 12, color: '#ff6b6b' }}>Failed to load runs: {runsError}</div>
+      )}
+
+      <div style={{ marginTop: 12, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span>
+          Showing <strong>{filteredAndSorted.length}</strong> runs
+        </span>
+        <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setShowLegend((v) => !v)}
+            style={{
+              border: '1px solid #444',
+              background: 'transparent',
+              color: '#ddd',
+              borderRadius: 999,
+              padding: '2px 10px',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+            title="Show/hide legend"
+          >
+            Color coding
+          </button>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              flexWrap: 'nowrap',
+              gap: 8,
+              overflow: 'hidden',
+              maxWidth: showLegend ? 1000 : 0,
+              opacity: showLegend ? 1 : 0,
+              marginLeft: showLegend ? 10 : 0,
+              transition: 'max-width 180ms ease, opacity 140ms ease, margin-left 180ms ease',
+            }}
+            aria-hidden={!showLegend}
+          >
+            <Tag tone="neutral" title="Simulation duration / total years">Duration</Tag>
+            <Tag tone="deposit" title="Deposit chips">Deposit</Tag>
+            <Tag tone="return" title="Return model chip">Return model</Tag>
+            <Tag tone="inflation" title="Inflation chip">Inflation</Tag>
+            <Tag tone="tax" title="Tax inputs">Tax</Tag>
+            <Tag tone="fee" title="Fee chip">Fee</Tag>
+            <Tag tone="withdraw" title="Withdraw metric">Withdraw</Tag>
+            <Tag tone="capital" title="Capital metric">Capital</Tag>
+          </div>
+        </div>
+      </div>
+
+      {viewMode === 'grid' ? (
+        <div
+          style={{
+            marginTop: 12,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {filteredAndSorted.map((r) => {
+            const st = rowStateByRunId[r.id] ?? 'idle';
+            const computed = computedByRunId[r.id];
+            const metricSummaries = metricSummariesByRunId[r.id] ?? null;
+            return (
+              <RunCard
+                key={r.id}
+                run={r}
+                computed={computed}
+                metricSummaries={metricSummaries}
+                isSelected={selectedRunId === r.id}
+                isLoadingDetails={st === 'loading'}
+                onSelect={() => void openInspector(r.id)}
+              />
+            );
+          })}
+
+          {filteredAndSorted.length === 0 && runsState !== 'loading' ? (
+            <div style={{ opacity: 0.8 }}>No runs match your filters.</div>
+          ) : null}
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+          {filteredAndSorted.map((r) => {
+            const st = rowStateByRunId[r.id] ?? 'idle';
+            const computed = computedByRunId[r.id];
+            const metricSummaries = metricSummariesByRunId[r.id] ?? null;
+            return (
+              <RunListRow
+                key={r.id}
+                run={r}
+                computed={computed}
+                metricSummaries={metricSummaries}
+                isSelected={selectedRunId === r.id}
+                isLoadingDetails={st === 'loading'}
+                onSelect={() => void openInspector(r.id)}
+              />
+            );
+          })}
+
+          {filteredAndSorted.length === 0 && runsState !== 'loading' ? (
+            <div style={{ opacity: 0.8 }}>No runs match your filters.</div>
+          ) : null}
         </div>
       )}
 
-      <h2 style={{ margin: '8px 0 12px' }}>Explore Simulations</h2>
-
-      <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
-        <details open style={{ border: '1px solid #3a3a3a', borderRadius: 12, overflow: 'hidden' }}>
-          <summary
+      {/* Advanced filters drawer */}
+      {showAdvanced ? (
+        <div
+          onClick={() => setShowAdvanced(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 50,
+            display: 'flex',
+            justifyContent: 'flex-end',
+          }}
+          role="dialog"
+          aria-label="Advanced filters"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
             style={{
-              cursor: 'pointer',
-              padding: '10px 12px',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              background: 'linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              width: 'min(520px, 96vw)',
+              height: '100%',
+              overflow: 'auto',
+              background: '#111',
+              borderLeft: '1px solid #333',
+              padding: 16,
             }}
           >
-            <span>What is Explore?</span>
-            <span style={{ opacity: 0.7, fontWeight: 700, fontSize: 12 }}>Beta</span>
-          </summary>
-          <div style={{ padding: '10px 12px', lineHeight: 1.5, opacity: 0.92 }}>
-            <p style={{ margin: 0 }}>
-              <strong>Explore</strong> is a browsing page for inspecting example/curated simulation scenarios and their
-              outputs. It’s meant for <strong>learning</strong> and <strong>sanity-checking</strong> how inputs affect
-              outcomes — without having to start from a blank form every time.
-            </p>
-            <ul style={{ margin: '10px 0 0 18px' }}>
-              <li>
-                Use it to spot patterns: how deposits vs passive growth vs withdrawals change the distribution over time.
-              </li>
-              <li>
-                Use it as a starting point for new scenarios (Clone is coming soon).
-              </li>
-              <li>
-                Use it alongside <Link to="/simulation">Simulation</Link> and <Link to="/diff">Diff</Link> to iterate.
-              </li>
-            </ul>
-          </div>
-        </details>
-
-        <details style={{ border: '1px solid #3a3a3a', borderRadius: 12, overflow: 'hidden' }}>
-          <summary
-            style={{
-              cursor: 'pointer',
-              padding: '10px 12px',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              background: 'linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <span>How to read the table</span>
-            <span style={{ opacity: 0.7, fontWeight: 700, fontSize: 12 }}>Inputs → Outputs</span>
-          </summary>
-          <div style={{ padding: '10px 12px', lineHeight: 1.5, opacity: 0.92 }}>
-            <p style={{ margin: 0 }}>
-              Each row contains a full scenario definition (<strong>Inputs</strong>) and a compact summary of outcomes
-              (<strong>Outputs</strong>). The outputs shown are not “one prediction” — they’re statistical summaries
-              across many Monte Carlo paths.
-            </p>
-
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 750, marginBottom: 6 }}>Inputs</div>
-              <ul style={{ margin: '0 0 0 18px' }}>
-                <li>
-                  <strong>Start Date</strong> anchors the calendar. It matters for partial first years and phase boundaries.
-                </li>
-                <li>
-                  <strong>Tax Rule</strong> + <strong>Tax %</strong> describe how gains are taxed.
-                </li>
-                <li>
-                  <strong>Phases</strong> are the lifecycle: DEPOSIT → PASSIVE → WITHDRAW (but you can mix/extend them).
-                </li>
-              </ul>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>Advanced filters</div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(false)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  border: '1px solid #444',
+                  background: 'transparent',
+                  color: '#ddd',
+                  cursor: 'pointer',
+                  fontWeight: 750,
+                }}
+              >
+                Close
+              </button>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 750, marginBottom: 6 }}>Outputs (distribution snapshot)</div>
-              <ul style={{ margin: '0 0 0 18px' }}>
-                <li>
-                  <strong>Median</strong> is the 50th percentile outcome.
-                </li>
-                <li>
-                  <strong>Q25–Q75</strong> is the “middle half” (interquartile range).
-                </li>
-                <li>
-                  <strong>Q5–Q95</strong> shows tail spread (stress vs upside).
-                </li>
-                <li>
-                  <strong>Neg %</strong> is the estimated failure rate (ending below zero) for that year.
-                </li>
-                <li>
-                  <strong>VaR/CVaR</strong> describe loss-risk in the left tail (5% worst-case region).
-                </li>
-              </ul>
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.78 }}>
-                Tip: open “Show raw outputs (JSON)” to inspect the full per-year series.
+            <SectionTitle>Duration</SectionTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 12, opacity: 0.75 }}>Min years</span>
+                <input
+                  value={minYears}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.trim() === '') return setMinYears('');
+                    const n = Number(v);
+                    if (Number.isFinite(n) && n >= 0) setMinYears(Math.floor(n));
+                  }}
+                  inputMode="numeric"
+                  placeholder="e.g. 30"
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #444',
+                    background: '#141414',
+                    color: '#ddd',
+                  }}
+                />
+              </label>
+              <div style={{ display: 'grid', alignContent: 'end' }}>
+                <button
+                  type="button"
+                  onClick={() => setMinYears('')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #444',
+                    background: 'transparent',
+                    color: '#ddd',
+                    cursor: 'pointer',
+                    fontWeight: 750,
+                  }}
+                >
+                  Reset
+                </button>
               </div>
             </div>
-          </div>
-        </details>
 
-        <details style={{ border: '1px solid #3a3a3a', borderRadius: 12, overflow: 'hidden' }}>
-          <summary
-            style={{
-              cursor: 'pointer',
-              padding: '10px 12px',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              background: 'linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <span>How Explore fits into your workflow</span>
-            <span style={{ opacity: 0.7, fontWeight: 700, fontSize: 12 }}>Run → Save → Diff</span>
-          </summary>
-          <div style={{ padding: '10px 12px', lineHeight: 1.5, opacity: 0.92 }}>
-            <ol style={{ margin: 0, paddingLeft: 18 }}>
-              <li>
-                <Link to="/simulation">Run a simulation</Link> (Normal or Advanced mode) when you want full control and charts.
-              </li>
-              <li>
-                Save scenarios so you can rerun them later with identical inputs (important for reproducibility).
-              </li>
-              <li>
-                Use <Link to="/diff">Diff</Link> to compare two scenarios or two runs and see exactly what changed.
-              </li>
-            </ol>
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78 }}>
-              Explore will grow into a faster entry point for this loop (view/clone/export buttons are placeholders today).
+            <div style={{ marginTop: 16, fontSize: 12, opacity: 0.75 }}>
+              Some filters need run details (input + summaries). Those load in the background.
             </div>
           </div>
-        </details>
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-        <input
-          type="search"
-          placeholder="Search runs…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{
-            minWidth: 260,
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: '1px solid #444',
-            background: 'transparent',
-            color: 'inherit',
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => refreshRuns()}
-          disabled={runsState === 'loading'}
-          style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #444', background: 'transparent', color: 'inherit' }}
-        >
-          {runsState === 'loading' ? 'Refreshing…' : 'Refresh'}
-        </button>
-        <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8 }}>
-          {filteredRuns.length} run{filteredRuns.length === 1 ? '' : 's'}
         </div>
-      </div>
+      ) : null}
 
-      {runsState === 'error' && runsError && (
+      {/* Run inspector drawer */}
+      {selectedRunId ? (
         <div
-          role="alert"
+          onClick={closeInspector}
           style={{
-            marginBottom: 12,
-            padding: '10px 12px',
-            border: '1px solid rgba(255,0,0,0.35)',
-            background: 'linear-gradient(0deg, rgba(255,0,0,0.10), rgba(255,0,0,0.06))',
-            borderRadius: 10,
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 60,
+            display: 'flex',
+            justifyContent: 'flex-end',
           }}
+          role="dialog"
+          aria-label="Run inspector"
         >
-          <strong>Failed to load runs:</strong>
-          <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{runsError}</div>
-        </div>
-      )}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(820px, 96vw)',
+              height: '100%',
+              overflow: 'auto',
+              background: '#0f0f0f',
+              borderLeft: '1px solid #333',
+              padding: 16,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 16 }}>Run inspector</div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+                  {selectedRun ? `${compactId(selectedRun.id)} · ${fmtDateTime(selectedRun.createdAt)}` : compactId(selectedRunId)}
+                </div>
+              </div>
 
-      {/* Table: Inputs | Outputs | Actions */}
-      <div style={{ overflow: 'auto', border: '1px solid #3a3a3a', borderRadius: 10, maxHeight: '70vh' }}>
-        <table role="grid" style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', tableLayout: 'fixed' }}>
-          <colgroup>
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '36%' }} />
-            <col style={{ width: '34%' }} />
-            <col style={{ width: '8%' }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th style={thBase}>Run</th>
-              <th style={thBase}>Inputs</th>
-              <th style={thBase}>Outputs</th>
-              <th style={thBase}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRuns.map((run) => {
-              const runId = run.id;
-              const rowState = rowStateByRunId[runId] ?? 'idle';
-              const rowErr = rowErrorByRunId[runId] ?? null;
-              const input = inputByRunId[runId] ?? null;
-              const summaries = summariesByRunId[runId] ?? null;
-              const open = expandedRunId === runId;
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={closeInspector}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid #444',
+                    background: 'transparent',
+                    color: '#ddd',
+                    cursor: 'pointer',
+                    fontWeight: 750,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
 
-              const timeline = input ? buildTimelineFromAdvancedRequest(input) : null;
+            {selectedState === 'loading' || selectedState === 'idle' ? (
+              <div style={{ marginTop: 14, opacity: 0.8 }}>Loading…</div>
+            ) : null}
+            {selectedState === 'error' ? (
+              <div style={{ marginTop: 14, color: '#ff6b6b' }}>{selectedErr}</div>
+            ) : null}
 
-              return (
-                <React.Fragment key={runId}>
-                  <tr>
-                    <td style={tdBase}>
-                      <div style={{ fontWeight: 800, marginBottom: 6, wordBreak: 'break-word' }}>{runId}</div>
-                      <div style={{ fontSize: 12, opacity: 0.8, display: 'grid', rowGap: 4 }}>
-                        <div>
-                          <Em>Created:</Em> {fmtDateTime(run.createdAt)}
-                        </div>
-                        <div>
-                          <Em>Seed:</Em> {run.rngSeedText ?? (run.rngSeed ?? '—')}
-                        </div>
-                        <div>
-                          <Em>App:</Em> {run.modelAppVersion ?? '—'}
-                        </div>
+            {selectedRun && selectedInput && selectedSummaries && selectedState === 'ready' ? (
+              <>
+                <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <PillButton onClick={() => setInspectorTab('simple')} active={inspectorTab === 'simple'}>
+                    Simple
+                  </PillButton>
+                  <PillButton onClick={() => setInspectorTab('inDepth')} active={inspectorTab === 'inDepth'}>
+                    In-depth
+                  </PillButton>
+
+                  <div style={{ flex: 1 }} />
+
+                  <button
+                    type="button"
+                    onClick={() => void handleClone(selectedRun)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: '1px solid #444',
+                      background: '#2e2e2e',
+                      color: '#ddd',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                    }}
+                  >
+                    Clone to form
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveScenario(selectedRun)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: '1px solid #444',
+                      background: 'transparent',
+                      color: '#ddd',
+                      cursor: 'pointer',
+                      fontWeight: 750,
+                    }}
+                  >
+                    Save
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleCsv(selectedRun.id)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: '1px solid #444',
+                      background: 'transparent',
+                      color: '#ddd',
+                      cursor: 'pointer',
+                      fontWeight: 750,
+                    }}
+                  >
+                    CSV
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  {inspectorTab === 'simple' ? (
+                    <>
+                      <SectionTitle>Inputs</SectionTitle>
+                      <InputsSummary input={selectedInput} showShape={false} />
+
+                      <SectionTitle>Phase shape</SectionTitle>
+                      <div
+                        style={{
+                          border: '1px solid #2d2d2d',
+                          borderRadius: 12,
+                          padding: 10,
+                          background: 'rgba(255,255,255,0.02)',
+                        }}
+                      >
+                        <PhaseShapeRow shape={computeFromInputAndSummaries(selectedInput, null).shape} />
                       </div>
-                    </td>
 
-                    <td style={tdBase}>
-                      {input ? (
-                        <InputsCell input={input} />
-                      ) : (
-                        <div style={{ opacity: 0.75 }}>
-                          {rowState === 'loading' ? 'Loading…' : 'Not loaded yet.'}
-                        </div>
-                      )}
-                    </td>
+                      <SectionTitle>Outputs</SectionTitle>
+                      <OutputsHero summaries={selectedSummaries} metricSummaries={selectedMetricSummaries} />
+                    </>
+                  ) : (
+                    <>
+                      <SectionTitle>Timeline overview</SectionTitle>
+                      <MultiPhaseOverview
+                        data={selectedSummaries}
+                        timeline={buildTimelineFromAdvancedRequest(selectedInput)}
+                      />
 
-                    <td style={tdBase}>
-                      {summaries ? (
-                        <OutputsCell summaries={summaries} />
-                      ) : (
-                        <div style={{ opacity: 0.75 }}>
-                          {rowState === 'loading' ? 'Loading…' : 'Not loaded yet.'}
-                        </div>
-                      )}
-                    </td>
+                      <SectionTitle>Inputs</SectionTitle>
+                      <InputsSummary input={selectedInput} />
 
-                    <td style={{ ...tdBase, width: 0 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => handleView(runId)}
-                          style={{ padding: '6px 8px' }}
+                      <details style={{ marginTop: 12 }}>
+                        <summary style={{ cursor: 'pointer' }}>Raw yearly summaries (JSON)</summary>
+                        <pre
+                          style={{
+                            marginTop: 8,
+                            maxHeight: 260,
+                            overflow: 'auto',
+                            border: '1px solid #3a3a3a',
+                            borderRadius: 10,
+                            padding: 8,
+                          }}
                         >
-                          {open ? 'Hide' : 'View'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleClone(run).catch((e) => window.alert(String(e?.message ?? e)))}
-                          style={{ padding: '6px 8px' }}
-                        >
-                          Clone
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSaveScenario(run).catch((e) => window.alert(String(e?.message ?? e)))}
-                          style={{ padding: '6px 8px' }}
-                        >
-                          Save
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleCsv(runId).catch((e) => window.alert(String(e?.message ?? e)))}
-                          style={{ padding: '6px 8px' }}
-                        >
-                          CSV
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-
-                  {open && (
-                    <tr>
-                      <td style={{ ...tdBase, paddingTop: 0 }} colSpan={4}>
-                        <div style={{ borderTop: '1px solid #3a3a3a', paddingTop: 10 }}>
-                          {rowState === 'loading' ? (
-                            <div style={{ opacity: 0.85 }}>Loading run details…</div>
-                          ) : rowState === 'error' ? (
-                            <div style={{ color: '#ffb4b4', whiteSpace: 'pre-wrap' }}>{rowErr}</div>
-                          ) : input && summaries ? (
-                            <>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                                <div style={{ fontWeight: 800 }}>Charts</div>
-                                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                                  Tip: use <Link to="/diff">Diff</Link> to compare saved scenarios.
-                                </div>
-                              </div>
-                              <div style={{ marginTop: 10 }}>
-                                <MultiPhaseOverview data={summaries} timeline={timeline} />
-                              </div>
-                              <details style={{ marginTop: 10 }}>
-                                <summary style={{ cursor: 'pointer' }}>Show raw input (JSON)</summary>
-                                <pre style={{ marginTop: 8, maxHeight: 320, overflow: 'auto', border: '1px solid #3a3a3a', borderRadius: 10, padding: 8 }}>
-{JSON.stringify(input, null, 2)}
-                                </pre>
-                              </details>
-                            </>
-                          ) : (
-                            <div style={{ opacity: 0.85 }}>No details available.</div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+{JSON.stringify(selectedSummaries, null, 2)}
+                        </pre>
+                      </details>
+                    </>
                   )}
-                </React.Fragment>
-              );
-            })}
-
-            {filteredRuns.length === 0 && runsState !== 'loading' && (
-              <tr>
-                <td style={{ ...tdBase, textAlign: 'center' }} colSpan={4}>
-                  No persisted runs found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-        This list shows runs persisted by the backend (DB). Use Save to pin a run as a Scenario.
-      </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
