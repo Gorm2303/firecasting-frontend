@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import NormalInputForm, { type AdvancedFeatureFlags, type NormalInputFormHandle, type NormalInputFormMode } from '../components/normalMode/NormalInputForm';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationRequest, SimulationTimelineContext } from '../models/types';
+import { toIsoDateString } from '../utils/backendDate';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { Link } from 'react-router-dom';
 import ExportStatisticsButton from '../components/ExportStatisticsButton';
@@ -21,27 +22,8 @@ const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
   returnModel: true,
 };
 
-const toIsoDateString = (v: any): string | null => {
-  if (!v) return null;
-  if (typeof v === 'string') return v;
-  if (typeof v?.date === 'string') return v.date;
-  // Backend may persist/echo LocalDate-like objects.
-  const y = Number(v?.year);
-  const m = Number(v?.month);
-  const d = Number(v?.dayOfMonth);
-  if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d) && y > 0 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-    const mm = String(m).padStart(2, '0');
-    const dd = String(d).padStart(2, '0');
-    return `${y}-${mm}-${dd}`;
-  }
-  const epochDay = Number(v?.epochDay);
-  if (Number.isFinite(epochDay)) {
-    const base = Date.UTC(1970, 0, 1);
-    const dt = new Date(base + epochDay * 24 * 60 * 60 * 1000);
-    if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-  }
-  return null;
-};
+// NOTE: `toIsoDateString` is imported from ../utils/backendDate to ensure we
+// interpret backend epochDay correctly (days since 1900-01-01).
 
 type ExternalAdvancedLoad = {
   enabled?: boolean;

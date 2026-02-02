@@ -9,6 +9,7 @@ import { encodeScenarioToShareParam } from '../utils/shareScenarioLink';
 import { saveScenario } from '../config/savedScenarios';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { METRIC_COLORS, moneyStoryStepColor } from '../utils/metricColors';
+import { toIsoDateString } from '../utils/backendDate';
 import {
   exportSimulationCsv,
   getRunInput,
@@ -166,38 +167,8 @@ const fmtDateTime = (iso?: string | null) => {
   }
 };
 
-const toIsoDateString = (v: any): string | null => {
-  if (!v) return null;
-  if (typeof v === 'string') return v;
-  if (typeof v?.date === 'string') return v.date;
-
-  // Backend may persist/echo LocalDate-like objects.
-  const y = Number(v?.year);
-  const m = Number(v?.month);
-  const d = Number(v?.dayOfMonth);
-  if (
-    Number.isFinite(y) &&
-    Number.isFinite(m) &&
-    Number.isFinite(d) &&
-    y > 0 &&
-    m >= 1 &&
-    m <= 12 &&
-    d >= 1 &&
-    d <= 31
-  ) {
-    const mm = String(m).padStart(2, '0');
-    const dd = String(d).padStart(2, '0');
-    return `${y}-${mm}-${dd}`;
-  }
-
-  const epochDay = Number(v?.epochDay);
-  if (Number.isFinite(epochDay)) {
-    const base = Date.UTC(1970, 0, 1);
-    const dt = new Date(base + epochDay * 24 * 60 * 60 * 1000);
-    if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-  }
-  return null;
-};
+// NOTE: `toIsoDateString` is imported from ../utils/backendDate to ensure we
+// interpret backend epochDay correctly (days since 1900-01-01).
 
 const sumMonths = (phases: any[]) =>
   phases.reduce((s, p) => s + (Number(p?.durationInMonths) || 0), 0);
