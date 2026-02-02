@@ -41,8 +41,8 @@ interface YearlySummaryOverviewProps {
 /**
  * Transforms monthly data into a format that's
  * suitable for rendering the stacked areas:
- * - outer band: from 5th to 95th quantiles
- * - inner band: from 25th to 75th quantiles
+ * - outer band: from 5th to 95th percentiles
+ * - inner band: from 25th to 75th percentiles
  */
 const parseStartYearMonth = (iso?: string): { year: number; month: number } | null => {
   if (!iso) return null;
@@ -93,24 +93,24 @@ const transformDataForBands = (
     const median = Number(d.medianCapital);
 
     return {
-    yearMonth: d.yearMonth,
-    year: d.year,
-    month: d.month,
-    lower5: d.quantile5,
-    // Difference between 95th and 5th quantile
-    band5_95: d.quantile95 - d.quantile5,
-    lower25: d.quantile25,
-    // Difference between 75th and 25th quantile
-    band25_75: d.quantile75 - d.quantile25,
-    medianCapital: d.medianCapital,
-    inflationIdx,
-    // Real (start-date currency): divide by inflation index (inflation compounds at year-end).
-    realLower5: inflationIdx ? q5 / inflationIdx : q5,
-    realBand5_95: inflationIdx ? (q95 - q5) / inflationIdx : (q95 - q5),
-    realLower25: inflationIdx ? q25 / inflationIdx : q25,
-    realBand25_75: inflationIdx ? (q75 - q25) / inflationIdx : (q75 - q25),
-    realMedianCapital: inflationIdx ? median / inflationIdx : median,
-    negativeCapitalPercentage: d.negativeCapitalPercentage,
+      yearMonth: d.yearMonth,
+      year: d.year,
+      month: d.month,
+      lower5: d.quantile5,
+      // Difference between 95th and 5th percentile
+      band5_95: d.quantile95 - d.quantile5,
+      lower25: d.quantile25,
+      // Difference between 75th and 25th percentile
+      band25_75: d.quantile75 - d.quantile25,
+      medianCapital: d.medianCapital,
+      inflationIdx,
+      // Real (start-date currency): divide by inflation index (inflation compounds at year-end).
+      realLower5: inflationIdx ? q5 / inflationIdx : q5,
+      realBand5_95: inflationIdx ? (q95 - q5) / inflationIdx : q95 - q5,
+      realLower25: inflationIdx ? q25 / inflationIdx : q25,
+      realBand25_75: inflationIdx ? (q75 - q25) / inflationIdx : q75 - q25,
+      realMedianCapital: inflationIdx ? median / inflationIdx : median,
+      negativeCapitalPercentage: d.negativeCapitalPercentage,
     };
   });
 };
@@ -123,7 +123,7 @@ interface CustomTooltipProps {
 }
 
 /**
- * Custom tooltip that displays the Year-Month along with each quantile value.
+ * Custom tooltip that displays the Year-Month along with each percentile value.
  */
 const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
   if (active && payload && payload.length && payload[0].payload) {
@@ -154,12 +154,12 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
         }}
       >
         <p style={{ margin: '0 0 4px 0' }}>{`${yearMonth} — ${mode === 'real' ? 'Real' : 'Nominal'}`}</p>
-        <p style={{ margin: 0 }}>{`95th Quantile: ${formatNumber(quantile95)}`}</p>
-        <p style={{ margin: 0 }}>{`75th Quantile: ${formatNumber(quantile75)}`}</p>
+        <p style={{ margin: 0 }}>{`95th Percentile: ${formatNumber(quantile95)}`}</p>
+        <p style={{ margin: 0 }}>{`75th Percentile: ${formatNumber(quantile75)}`}</p>
         <p style={{ margin: 0 }}>{`Median: ${formatNumber(median)}`}</p>
-        <p style={{ margin: 0 }}>{`25th Quantile: ${formatNumber(quantile25)}`}</p>
-        <p style={{ margin: 0 }}>{`5th Quantile: ${formatNumber(quantile5)}`}</p>
-        <p style={{ margin: '4px 0 0 0' }}>{`Failure Rate: ${failPct.toFixed(2)}%`}</p>
+        <p style={{ margin: 0 }}>{`25th Percentile: ${formatNumber(quantile25)}`}</p>
+        <p style={{ margin: 0 }}>{`5th Percentile: ${formatNumber(quantile5)}`}</p>
+        <p style={{ margin: 0 }}>{`Failure Rate: ${failPct.toFixed(2)}%`}</p>
       </div>
     );
   }
@@ -287,7 +287,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
               stroke="none"
               fill="#00FFFF"
               fillOpacity={0.3}
-              name={`Quantiles (5th-95th, ${effectiveCapitalView})`}
+              name={`Percentiles (5th-95th, ${effectiveCapitalView})`}
             />
             <Area
               dataKey={chartKeys.band25_75}
@@ -295,7 +295,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
               stroke="none"
               fill="#0088FF"
               fillOpacity={0.7}
-              name={`Quantiles (25th-75th, ${effectiveCapitalView})`}
+              name={`Percentiles (25th-75th, ${effectiveCapitalView})`}
             />
             <Line
               type="monotone"
