@@ -1,17 +1,22 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useId } from 'react';
 import { YearlySummary } from './models/YearlySummary';
 import { SimulationTimelineContext } from './models/types';
 import YearlySummaryOverview from './YearlySummaryOverview';
 import { addMonthsClamped, parseIsoDateLocal, toIsoDateLocal } from './utils/phaseTimeline';
+import { transformYearlyToMonthly } from './utils/transformYearlyToMonthly';
 
 interface MultiPhaseOverviewProps {
   data: YearlySummary[];
   timeline?: SimulationTimelineContext | null;
+  /** If set, sync hover/tooltip across multiple MultiPhaseOverview instances (e.g., Run A + Run B). */
+  syncId?: string;
 }
 
 type CapitalView = 'nominal' | 'real';
 
-const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline }) => {
+const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline, syncId }) => {
+  const internalSyncId = useId();
+  const effectiveSyncId = syncId ?? internalSyncId;
   const normalized = data.map((s) => ({ ...s, phaseName: (s.phaseName ?? '').toUpperCase() }));
 
   const canShowReal = useMemo(() => {
@@ -146,6 +151,27 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
             if (!start) return null;
 
             let previousBlockLast: YearlySummary | undefined;
+            let previousBlockMonthlyYearMonthIndex: Map<string, YearlySummary> | undefined;
+
+            const toYearMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const toYearlyAnchorFromMonthly = (phaseName: string, year: number, from: YearlySummary): YearlySummary =>
+              ({
+                phaseName,
+                year,
+                averageCapital: from.averageCapital,
+                medianCapital: from.medianCapital,
+                minCapital: from.minCapital,
+                maxCapital: from.maxCapital,
+                stdDevCapital: from.stdDevCapital,
+                cumulativeGrowthRate: from.cumulativeGrowthRate,
+                quantile5: from.quantile5,
+                quantile25: from.quantile25,
+                quantile75: from.quantile75,
+                quantile95: from.quantile95,
+                var: from.var,
+                cvar: from.cvar,
+                negativeCapitalPercentage: from.negativeCapitalPercentage,
+              }) satisfies YearlySummary;
 
             return blocks.map((b, blockIndex) => {
               const startDate = addMonthsClamped(start, b.startOffsetMonths);
@@ -153,10 +179,17 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
               const startYear = startDate.getFullYear();
               const endYear = endDate.getFullYear();
               const startMonth = startDate.getMonth() + 1;
+              const startYearMonthKey = toYearMonthKey(startDate);
+              const phaseStartDateIso = toIsoDateLocal(startDate);
+              const phaseEndDateIso = toIsoDateLocal(endDate);
 
-              const groupData = normalized.filter(
-                (s) => s.phaseName === b.type && s.year >= startYear && s.year <= endYear
-              );
+              const groupData = normalized.filter((s) => {
+                if (s.phaseName !== b.type) return false;
+                const y = Number(s.year);
+                if (!Number.isFinite(y)) return false;
+                // Include next-year (Jan) point for interpolation within the final (possibly partial) year.
+                return y >= startYear && y <= endYear + 1;
+              });
 
               groupData.sort((a, b) => a.year - b.year);
 
@@ -185,7 +218,12 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                   } satisfies YearlySummary;
                 }
               } else {
-                startAnchor = previousBlockLast;
+                const prevMonthAnchor = previousBlockMonthlyYearMonthIndex?.get(startYearMonthKey);
+                if (prevMonthAnchor) {
+                  startAnchor = toYearlyAnchorFromMonthly(b.type, startYear, prevMonthAnchor);
+                } else {
+                  startAnchor = previousBlockLast;
+                }
               }
 
               // Update previousBlockLast for next block (use the last available year from this block's groupData).
@@ -196,6 +234,41 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                 );
               }
 
+              // Precompute a monthly-anchor lookup for the next phase boundary.
+              // This keeps continuity when phases start mid-year.
+              if (groupData.length) {
+                const monthly = transformYearlyToMonthly(groupData, {
+                  getFirstYearStartMonth: () => startMonth,
+                  phaseRange: { startDateIso: phaseStartDateIso, endDateIso: phaseEndDateIso },
+                  startAnchor,
+                });
+
+                const idx = new Map<string, YearlySummary>();
+                for (const m of monthly) {
+                  // Store as YearlySummary-shaped values so we can reuse the same anchor type.
+                  idx.set(m.yearMonth, {
+                    phaseName: b.type,
+                    year: m.year,
+                    averageCapital: m.averageCapital,
+                    medianCapital: m.medianCapital,
+                    minCapital: m.minCapital,
+                    maxCapital: m.maxCapital,
+                    stdDevCapital: m.stdDevCapital,
+                    cumulativeGrowthRate: m.cumulativeGrowthRate,
+                    quantile5: m.quantile5,
+                    quantile25: m.quantile25,
+                    quantile75: m.quantile75,
+                    quantile95: m.quantile95,
+                    var: m.var,
+                    cvar: m.cvar,
+                    negativeCapitalPercentage: m.negativeCapitalPercentage,
+                  } satisfies YearlySummary);
+                }
+                previousBlockMonthlyYearMonthIndex = idx;
+              } else {
+                previousBlockMonthlyYearMonthIndex = undefined;
+              }
+
               return (
                 <div key={`${b.type}-${b.startOffsetMonths}-${b.endOffsetMonths}`}>
                   <h2 style={{ textAlign: 'center' }}>
@@ -203,12 +276,13 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
                   </h2>
                   <YearlySummaryOverview
                     data={groupData}
+                    syncId={effectiveSyncId}
                     simulationStartDateIso={timeline!.startDate}
                     inflationFactorPerYear={timeline!.inflationFactorPerYear}
                     capitalView={capitalView}
                     firstYearStartMonth={startMonth}
-                    phaseStartDateIso={toIsoDateLocal(startDate)}
-                    phaseEndDateIso={toIsoDateLocal(endDate)}
+                    phaseStartDateIso={phaseStartDateIso}
+                    phaseEndDateIso={phaseEndDateIso}
                     startAnchor={startAnchor}
                   />
                 </div>
@@ -220,6 +294,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline 
               <h2 style={{ textAlign: 'center' }}>{g.title.charAt(0) + g.title.slice(1).toLowerCase()}</h2>
               <YearlySummaryOverview
                 data={g.data}
+                syncId={effectiveSyncId}
                 simulationStartDateIso={timeline?.startDate}
                 inflationFactorPerYear={timeline?.inflationFactorPerYear}
                 capitalView={capitalView}
