@@ -235,6 +235,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
 
   return (
     <div
+      data-tour="charts"
       style={{
         marginTop: '2rem',
         margin: '0 auto',
@@ -243,6 +244,7 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
       }}
     >
       <div
+        data-tour="capital-chart"
         style={{
           maxHeight: '80vh',
           aspectRatio: '1.6',
@@ -317,7 +319,9 @@ const YearlySummaryOverview: React.FC<YearlySummaryOverviewProps> = ({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <FailedCasesSummary yearlyData={yearlySorted} monthlyData={monthlyData} />
+      <div data-tour="failed-cases-summary">
+        <FailedCasesSummary yearlyData={yearlySorted} monthlyData={monthlyData} />
+      </div>
     </div>
   );
 };

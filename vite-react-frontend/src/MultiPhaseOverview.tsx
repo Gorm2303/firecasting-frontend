@@ -90,6 +90,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
   return (
     <div>
       <div
+        data-tour="capital-view"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -104,6 +105,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
         <button
           type="button"
           onClick={() => setCapitalView('nominal')}
+          data-tour="capital-view-nominal"
           style={{
             padding: '6px 10px',
             borderRadius: 999,
@@ -122,6 +124,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
         <button
           type="button"
           onClick={() => setCapitalView('real')}
+          data-tour="capital-view-real"
           disabled={!canShowReal}
           title={canShowReal ? 'Show inflation-adjusted (real) capital' : 'Real view requires inflation to be enabled'}
           style={{
@@ -154,6 +157,54 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
             let previousBlockMonthlyYearMonthIndex: Map<string, YearlySummary> | undefined;
 
             const toYearMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const addConstantToAnchor = (
+              phaseName: string,
+              year: number,
+              base: YearlySummary | undefined,
+              delta: number
+            ): YearlySummary => {
+              const d = Number(delta) || 0;
+              const b = base;
+              const add = (v: number) => (Number(v) || 0) + d;
+              if (!b) {
+                const v = d;
+                return {
+                  phaseName,
+                  year,
+                  averageCapital: v,
+                  medianCapital: v,
+                  minCapital: v,
+                  maxCapital: v,
+                  stdDevCapital: 0,
+                  cumulativeGrowthRate: 0,
+                  quantile5: v,
+                  quantile25: v,
+                  quantile75: v,
+                  quantile95: v,
+                  var: v,
+                  cvar: v,
+                  negativeCapitalPercentage: 0,
+                } satisfies YearlySummary;
+              }
+              return {
+                phaseName,
+                year,
+                averageCapital: add(b.averageCapital),
+                medianCapital: add(b.medianCapital),
+                minCapital: add(b.minCapital),
+                maxCapital: add(b.maxCapital),
+                stdDevCapital: b.stdDevCapital,
+                cumulativeGrowthRate: b.cumulativeGrowthRate,
+                quantile5: add(b.quantile5),
+                quantile25: add(b.quantile25),
+                quantile75: add(b.quantile75),
+                quantile95: add(b.quantile95),
+                var: add(b.var),
+                cvar: add(b.cvar),
+                // Deposit phases never count as failed; keep anchor fail-rate at 0.
+                negativeCapitalPercentage: 0,
+              } satisfies YearlySummary;
+            };
             const toYearlyAnchorFromMonthly = (phaseName: string, year: number, from: YearlySummary): YearlySummary =>
               ({
                 phaseName,
@@ -195,34 +246,28 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
 
               // Decide anchor for "year 0" interpolation.
               let startAnchor: YearlySummary | undefined;
-              if (blockIndex === 0 && b.type === 'DEPOSIT') {
-                const dep = Number(timeline!.firstPhaseInitialDeposit);
-                if (Number.isFinite(dep)) {
-                  const v = dep;
-                  startAnchor = {
-                    phaseName: b.type,
-                    year: startYear,
-                    averageCapital: v,
-                    medianCapital: v,
-                    minCapital: v,
-                    maxCapital: v,
-                    stdDevCapital: 0,
-                    cumulativeGrowthRate: 0,
-                    quantile5: v,
-                    quantile25: v,
-                    quantile75: v,
-                    quantile95: v,
-                    var: v,
-                    cvar: v,
-                    negativeCapitalPercentage: 0,
-                  } satisfies YearlySummary;
-                }
+              const prevMonthAnchor = previousBlockMonthlyYearMonthIndex?.get(startYearMonthKey);
+              if (prevMonthAnchor) {
+                startAnchor = toYearlyAnchorFromMonthly(b.type, startYear, prevMonthAnchor);
               } else {
-                const prevMonthAnchor = previousBlockMonthlyYearMonthIndex?.get(startYearMonthKey);
-                if (prevMonthAnchor) {
-                  startAnchor = toYearlyAnchorFromMonthly(b.type, startYear, prevMonthAnchor);
-                } else {
-                  startAnchor = previousBlockLast;
+                startAnchor = previousBlockLast;
+              }
+
+              // Apply initial deposit for *any* deposit phase so the curve jumps immediately at phase start.
+              if (b.type === 'DEPOSIT') {
+                const dep = (() => {
+                  const perPhase = timeline!.phaseInitialDeposits?.[blockIndex];
+                  if (perPhase !== undefined && Number.isFinite(Number(perPhase))) return Number(perPhase);
+                  // Back-compat for old bundles/timelines.
+                  if (blockIndex === 0 && timeline!.firstPhaseInitialDeposit !== undefined) return Number(timeline!.firstPhaseInitialDeposit);
+                  return undefined;
+                })();
+
+                if (dep !== undefined && Number.isFinite(dep) && dep !== 0) {
+                  startAnchor = addConstantToAnchor(b.type, startYear, startAnchor, dep);
+                } else if (blockIndex === 0 && dep !== undefined && Number.isFinite(dep)) {
+                  // Ensure we still create a start anchor for phase #1 even if previousBlockLast is missing.
+                  startAnchor = addConstantToAnchor(b.type, startYear, undefined, dep);
                 }
               }
 
@@ -270,7 +315,10 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
               }
 
               return (
-                <div key={`${b.type}-${b.startOffsetMonths}-${b.endOffsetMonths}`}>
+                <div
+                  key={`${b.type}-${b.startOffsetMonths}-${b.endOffsetMonths}`}
+                  data-tour={`results-phase-${String(b.type).toLowerCase()}`}
+                >
                   <h2 style={{ textAlign: 'center' }}>
                     {b.type.charAt(0) + b.type.slice(1).toLowerCase()} – {b.phaseNumbersLabel}
                   </h2>
@@ -290,7 +338,7 @@ const MultiPhaseOverview: React.FC<MultiPhaseOverviewProps> = ({ data, timeline,
             });
           })()
         : fallbackGrouped.map((g, idx) => (
-            <div key={idx}>
+            <div key={idx} data-tour={`results-phase-${String(g.title).toLowerCase()}`}>
               <h2 style={{ textAlign: 'center' }}>{g.title.charAt(0) + g.title.slice(1).toLowerCase()}</h2>
               <YearlySummaryOverview
                 data={g.data}

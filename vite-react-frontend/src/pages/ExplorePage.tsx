@@ -188,6 +188,7 @@ const buildTimelineFromAdvancedRequest = (req: any): SimulationTimelineContext |
       startDate: String(startDate),
       phaseTypes,
       phaseDurationsInMonths,
+      phaseInitialDeposits: phases.map((p) => (p?.initialDeposit !== undefined ? Number(p.initialDeposit) : undefined)),
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
       inflationFactorPerYear:
