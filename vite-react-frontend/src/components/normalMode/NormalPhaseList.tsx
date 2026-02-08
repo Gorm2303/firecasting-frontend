@@ -205,6 +205,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   <span style={{ fontSize: '0.95rem' }}>Type</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <select
+                      data-tour={`phase-${idx}-type`}
                       value={p.phaseType}
                       onChange={handlePhaseTypeChange(idx)}
                       style={{
@@ -257,6 +258,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           type="number"
                           min={0}
                           max={MAX_YEARS}
+                          data-tour={`phase-${idx}-duration-years`}
                           value={years}
                           onChange={handleDurationYearsChange(idx)}
                           style={{
@@ -279,7 +281,8 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         <input
                           type="number"
                           min={0}
-                          max={12}
+                          max={11}
+                          data-tour={`phase-${idx}-duration-months`}
                           value={months}
                           onChange={handleDurationMonthsChange(idx)}
                           style={{
@@ -311,6 +314,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
                           type="number"
+                          data-tour={`phase-${idx}-initial-deposit`}
                           value={p.initialDeposit ?? ''}
                           onChange={handleChange(idx, 'initialDeposit')}
                           style={{
@@ -330,6 +334,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
                           type="number"
+                          data-tour={`phase-${idx}-monthly-deposit`}
                           value={p.monthlyDeposit ?? ''}
                           onChange={handleChange(idx, 'monthlyDeposit')}
                           style={{
@@ -350,6 +355,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         <input
                           type="number"
                           step="0.01"
+                          data-tour={`phase-${idx}-yearly-increase`}
                           value={p.yearlyIncreaseInPercentage ?? ''}
                           onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
                           style={{
@@ -372,6 +378,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Withdraw Type</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <select
+                          data-tour={`phase-${idx}-withdraw-mode`}
                           value={withdrawMode}
                           onChange={handleWithdrawModeChange(idx)}
                           style={{
@@ -397,6 +404,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                             <input
                               type="number"
                               step="0.01"
+                              data-tour={`phase-${idx}-withdraw-rate`}
                               value={p.withdrawRate ?? ''}
                               onChange={handleChange(idx, 'withdrawRate')}
                               style={{
@@ -418,6 +426,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <input
                               type="number"
+                              data-tour={`phase-${idx}-withdraw-amount`}
                               value={p.withdrawAmount ?? ''}
                               onChange={handleChange(idx, 'withdrawAmount')}
                               style={{
@@ -440,6 +449,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         <input
                           type="number"
                           step="0.01"
+                          data-tour={`phase-${idx}-lower-variation`}
                           value={p.lowerVariationPercentage ?? ''}
                           onChange={handleChange(idx, 'lowerVariationPercentage')}
                           style={{
@@ -460,6 +470,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                         <input
                           type="number"
                           step="0.01"
+                          data-tour={`phase-${idx}-upper-variation`}
                           value={p.upperVariationPercentage ?? ''}
                           onChange={handleChange(idx, 'upperVariationPercentage')}
                           style={{
@@ -479,6 +490,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                 </div>
 
                 <fieldset
+                  data-tour={`phase-${idx}-tax-exemptions`}
                   style={{
                     border: '1px solid var(--fc-phase-border)',
                     padding: '0.2rem',
@@ -500,6 +512,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   >
                     <input
                       type="checkbox"
+                      data-tour={`phase-${idx}-tax-exemptioncard`}
                       checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
                       onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
                       style={{ marginRight: '0.3rem' }}
@@ -509,6 +522,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   <label style={{ display: 'block', fontSize: '0.95rem' }}>
                     <input
                       type="checkbox"
+                      data-tour={`phase-${idx}-tax-stockexemption`}
                       checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
                       onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
                       style={{ marginRight: '0.3rem' }}
