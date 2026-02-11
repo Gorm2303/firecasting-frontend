@@ -5,10 +5,10 @@ import { YearlySummary } from '../models/YearlySummary';
 import { SimulationRequest, SimulationTimelineContext } from '../models/types';
 import { toIsoDateString } from '../utils/backendDate';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import { Link } from 'react-router-dom';
 import ExportStatisticsButton from '../components/ExportStatisticsButton';
 import { exportRunBundle, exportSimulationCsv, getCompletedSummaries, getReplayStatus, importRunBundle, ReplayStatusResponse } from '../api/simulation';
 import SimulationProgress from '../components/SimulationProgress';
+import PageLayout from '../components/PageLayout';
 
 type BundleKind = 'normal' | 'advanced';
 const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
@@ -507,27 +507,16 @@ const SimulationPage: React.FC = () => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
-        <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
+    <PageLayout variant="wide">
+    <div style={{ maxWidth: 1500 }}>
+      <PageLayout variant="constrained" maxWidthPx={980} paddingPx={0}>
+        <h1 style={{ display: 'flex', justifyContent: 'center' }}>FIRE Simulator</h1>
 
         <div role="group" aria-label="Simulation tools" className="fc-sim-tools" style={{
           display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center',
           flexWrap: 'wrap',
           marginBottom: 12, border: '1px solid #444', borderRadius: 12, padding: 6,
         }}>
-          <Link to="/simulation/tutorial" style={{
-            padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
-            textDecoration:'none', color:'inherit',
-          }}>
-            Tutorial
-          </Link>
-          <Link to="/simulation/diff" style={{
-            padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
-            textDecoration:'none', color:'inherit',
-          }}>
-            Diff scenarios
-          </Link>
           <div role="group" aria-label="Mode" className="fc-sim-mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {modeButton('Normal', 'normal', () => {
               setMode('normal');
@@ -760,7 +749,7 @@ const SimulationPage: React.FC = () => {
             </>
           }
         />
-      </div>
+      </PageLayout>
 
       {isIoModalOpen && (
         <div
@@ -897,6 +886,7 @@ const SimulationPage: React.FC = () => {
         </div>
       )}
     </div>
+    </PageLayout>
   );
 };
 

@@ -5,6 +5,7 @@ import NormalInputForm, { TutorialStep } from '../components/normalMode/NormalIn
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationTimelineContext } from '../models/types';
+import PageLayout from '../components/PageLayout';
 
 type TutorialMode = 'normal' | 'advanced';
 
@@ -618,28 +619,30 @@ const TutorialPage: React.FC = () => {
   if (!tutorialMode) return <Navigate to="/simulation/tutorial" replace />;
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center' }}>Firecasting — Tutorial</h1>
-      <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
-        Learn by doing. Same components, guided steps.
-      </p>
+    <PageLayout variant="wide">
+      <div style={{ maxWidth: 1500 }}>
+        <h1 style={{ textAlign: 'center' }}>Tutor</h1>
+        <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
+          Learn by doing. Same components, guided steps.
+        </p>
 
-      <NormalInputForm
-        tutorialSteps={steps}
-        onExitTutorial={() => navigate('/simulation')}
-        onSimulationComplete={(results, ctx) => {
-          setStats(results);
-          setTimeline(ctx ?? null);
-        }}
-        mode={tutorialMode}
-      />
+        <NormalInputForm
+          tutorialSteps={steps}
+          onExitTutorial={() => navigate('/simulation')}
+          onSimulationComplete={(results, ctx) => {
+            setStats(results);
+            setTimeline(ctx ?? null);
+          }}
+          mode={tutorialMode}
+        />
 
-      {stats && stats.length > 0 && (
-        <div style={{ marginTop: 18 }}>
-          <MultiPhaseOverview data={stats} timeline={timeline} />
-        </div>
-      )}
-    </div>
+        {stats && stats.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <MultiPhaseOverview data={stats} timeline={timeline} />
+          </div>
+        )}
+      </div>
+    </PageLayout>
   );
 };
 

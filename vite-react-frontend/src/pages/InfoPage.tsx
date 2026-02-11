@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DisclaimerSection from '../pages/DisclaimerSection';
+import PageLayout from '../components/PageLayout';
 
 type HeadingItem = { id: string; text: string };
 
@@ -204,7 +205,9 @@ const InfoPage: React.FC = () => {
         .info-section-body details { marginTop: 10px; }
       `}</style>
 
-      <div id="info-root" style={{ minHeight: '100vh', padding: 16, maxWidth: 980, margin: '0 auto' }}>
+      <PageLayout variant="constrained">
+      <div id="info-root">
+        <h1 style={{ margin: '0 0 12px 0' }}>Explainer</h1>
       {/* Burger button */}
       {hasMenu && (
         <button
@@ -326,17 +329,17 @@ const InfoPage: React.FC = () => {
             <strong>Simulation</strong>
           </summary>
           <p>
-            The <Link to="/simulation">Simulation</Link> page is where you build a scenario and run it. It’s the main
+            The <Link to="/simulation">FIRE Simulator</Link> page is where you build a scenario and run it. It’s the main
             workflow for exploring outcomes and viewing charts.
           </p>
         </details>
 
         <details>
           <summary>
-            <strong>Tutorial</strong>
+            <strong>Tutor</strong>
           </summary>
           <p>
-            The <Link to="/simulation/tutorial">Tutorial</Link> is a guided, step-by-step walkthrough that uses the same
+            The <Link to="/tutorial">Tutor</Link> is a guided, step-by-step walkthrough that uses the same
             input form as the main simulation page. It’s the fastest way to learn what each input does.
           </p>
         </details>
@@ -368,10 +371,10 @@ const InfoPage: React.FC = () => {
 
         <details>
           <summary>
-            <strong>Diff</strong>
+            <strong>Comparator</strong>
           </summary>
           <p>
-            The <Link to="/simulation/diff">Diff</Link> page compares two runs side-by-side and explains what changed:
+            The <Link to="/diff-scenarios">Comparator</Link> page compares two runs side-by-side and explains what changed:
             inputs, model version, and/or randomness. It can rerun scenarios (optionally pinning seeds) to make comparisons
             reproducible.
           </p>
@@ -379,10 +382,10 @@ const InfoPage: React.FC = () => {
 
         <details>
           <summary>
-            <strong>Explore (beta)</strong>
+            <strong>Explorer (beta)</strong>
           </summary>
           <p>
-            The <Link to="/explore">Explore</Link> page is a work-in-progress area for browsing and inspecting example or
+            The <Link to="/explore">Explorer</Link> page is a work-in-progress area for browsing and inspecting example or
             sampled runs. Expect unfinished features and placeholders as it evolves.
           </p>
         </details>
@@ -781,6 +784,7 @@ const InfoPage: React.FC = () => {
 
         <DisclaimerSection />
       </div>
+      </PageLayout>
     </>
   );
 };

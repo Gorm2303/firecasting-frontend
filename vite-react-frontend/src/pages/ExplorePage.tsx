@@ -1,6 +1,7 @@
 // src/pages/ExplorePage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageLayout from '../components/PageLayout';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
@@ -27,7 +28,6 @@ type TagTone = 'capital' | 'deposit' | 'return' | 'withdraw' | 'tax' | 'fee' | '
 
 const hexToRgba = (hex: string, alpha: number): string => {
   const h = String(hex || '').replace('#', '').trim();
-  if (h.length !== 6) return `rgba(255,255,255,${alpha})`;
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
@@ -1120,10 +1120,11 @@ const ExplorePage: React.FC = () => {
   }, [failedOnly, minYears, query, taxRule]);
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
+    <PageLayout variant="wide">
+    <div style={{ maxWidth: 1500 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: '8px 0 6px' }}>Explore</h2>
+          <h2 style={{ margin: '8px 0 6px' }}>Explorer</h2>
           <div style={{ fontSize: 13, opacity: 0.75 }}>
             Scenario gallery + run inspector
           </div>
@@ -1610,6 +1611,7 @@ const ExplorePage: React.FC = () => {
         </div>
       ) : null}
     </div>
+    </PageLayout>
   );
 };
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageLayout from '../components/PageLayout';
 
 const card: React.CSSProperties = {
   border: '1px solid var(--fc-card-border)',
@@ -26,8 +27,8 @@ const TutorialLandingPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 900, margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: 6 }}>Firecasting — Tutorial</h1>
+    <PageLayout variant="constrained" maxWidthPx={900}>
+      <h1 style={{ textAlign: 'center', marginBottom: 6 }}>Tutor</h1>
       <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
         Choose a track. Both are interactive and use the real form.
       </p>
@@ -59,7 +60,7 @@ const TutorialLandingPage: React.FC = () => {
           </button>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 
