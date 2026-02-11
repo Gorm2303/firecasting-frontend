@@ -15,12 +15,11 @@ import {
   breakEvenMonths,
   coreExpenseDays,
   equivalentCoreExpenseDaysInYearN,
-  futureValueNominal,
-  futureValueNominalRecurringMonthly,
   futureValueReal,
   monthlyBenefitMoneyFromHours,
   workHours,
 } from "../lib/moneyPerspective/calculations";
+import { futureValueNominalTotalForItems } from "../lib/moneyPerspective/purchases";
 
 const controlStyle: React.CSSProperties = {
   height: 44,
@@ -30,6 +29,7 @@ const controlStyle: React.CSSProperties = {
   background: "var(--fc-card-bg)",
   color: "var(--fc-card-text)",
   fontSize: 18,
+  boxSizing: "border-box",
 };
 
 const labelStyle: React.CSSProperties = {
@@ -60,22 +60,94 @@ const btn = (): React.CSSProperties => ({
   fontWeight: 800,
 });
 
-const formatCurrency = (value: number, currency: string): string => {
+const inputGroupStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "stretch",
+  height: 44,
+  border: "1px solid var(--fc-card-border)",
+  borderRadius: 4,
+  overflow: "hidden",
+  background: "var(--fc-card-bg)",
+  color: "var(--fc-card-text)",
+  fontSize: 18,
+  minWidth: 0,
+  boxSizing: "border-box",
+};
+
+const inputGroupInputStyle: React.CSSProperties = {
+  flex: "1 1 auto",
+  width: "100%",
+  padding: "0 10px",
+  border: "none",
+  outline: "none",
+  background: "transparent",
+  color: "inherit",
+  font: "inherit",
+  minWidth: 0,
+  boxSizing: "border-box",
+};
+
+const inputGroupUnitStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  padding: "0 10px",
+  borderLeft: "1px solid var(--fc-subtle-border)",
+  background: "var(--fc-subtle-bg)",
+  color: "var(--fc-card-muted)",
+  fontSize: 18,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+};
+
+const formatCurrencyNoDecimals = (value: number, currency: string): string => {
   const safe = Number.isFinite(value) ? value : 0;
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 0,
     }).format(safe);
   } catch {
-    return `${safe.toFixed(2)} ${currency}`;
+    return `${Math.round(safe)} ${currency}`;
   }
 };
 
 const formatNumber = (value: number, digits = 2): string => {
   if (!Number.isFinite(value)) return "—";
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+};
+
+const formatRunwayDmy = (runwayDays: number): string => {
+  if (!Number.isFinite(runwayDays)) return "—";
+
+  const totalDays = Math.max(0, Math.round(runwayDays));
+  const daysPerYear = 365;
+
+  let remaining = totalDays;
+  let years = Math.floor(remaining / daysPerYear);
+  remaining -= years * daysPerYear;
+
+  let months = Math.floor(remaining / DAYS_PER_MONTH);
+  remaining -= months * DAYS_PER_MONTH;
+
+  let days = Math.round(remaining);
+
+  // Guard against floating rounding nudging us over the boundary.
+  const maxDaysInMonth = Math.ceil(DAYS_PER_MONTH);
+  if (days >= maxDaysInMonth) {
+    months += 1;
+    days = 0;
+  }
+  if (months >= 12) {
+    years += Math.floor(months / 12);
+    months = months % 12;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years}y`);
+  if (months > 0 || years > 0) parts.push(`${months}m`);
+  parts.push(`${days}d`);
+  return parts.join(" ");
 };
 
 const toDraft = (value: number): string => {
@@ -191,6 +263,22 @@ function purchaseMonthlyEquivalent(
       return amount;
     case "yearly":
       return amount / 12;
+  }
+}
+
+function purchaseYearlyEquivalent(
+  amount: number,
+  purchaseType: PurchaseAmountType,
+): number {
+  switch (purchaseType) {
+    case "oneTime":
+      return amount;
+    case "weekly":
+      return amount * 52;
+    case "monthly":
+      return amount * 12;
+    case "yearly":
+      return amount;
   }
 }
 
@@ -313,274 +401,6 @@ function setCoreExpenseForSource(
   return setCoreExpenseFromDaily(core, source, daily);
 }
 
-type EditAssumptionsProps = {
-  settings: MoneyPerspectiveSettingsV3;
-  setSettings: React.Dispatch<React.SetStateAction<MoneyPerspectiveSettingsV3>>;
-  controlStyle: React.CSSProperties;
-  labelStyle: React.CSSProperties;
-};
-
-const EditAssumptions: React.FC<EditAssumptionsProps> = ({
-  settings,
-  setSettings,
-  controlStyle,
-  labelStyle,
-}) => {
-  const [open, setOpen] = useState(false);
-  const compensationValue = settings.compensation.amount;
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <button
-        type="button"
-        style={{ ...btn(), justifySelf: "start" }}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        {open ? "Hide assumptions" : "Edit assumptions"}
-      </button>
-
-      {open ? (
-        <div style={{ display: "grid", gap: 18 }}>
-          <div style={{ display: "grid", gap: 10 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px minmax(0, 120px) minmax(0, 1fr)",
-                gap: 10,
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <div style={labelStyle}>Net salary</div>
-              <select
-                value={settings.compensation.period}
-                onChange={(e) => {
-                  const next = e.target.value as MoneyPerspectiveSalaryPeriod;
-                  setSettings((s) => {
-                    const current = s.compensation;
-                    if (next === current.period) return s;
-
-                    const effectiveHourly =
-                      effectiveHourlyFromSalarySettings(current);
-                    if (effectiveHourly == null)
-                      return {
-                        ...s,
-                        compensation: { ...current, period: next },
-                      };
-
-                    const hours =
-                      current.workingHoursPerMonth > 0
-                        ? current.workingHoursPerMonth
-                        : 160;
-                    const amount = salaryAmountFromEffectiveHourly(
-                      effectiveHourly,
-                      hours,
-                      next,
-                    );
-                    return {
-                      ...s,
-                      compensation: {
-                        ...current,
-                        workingHoursPerMonth: hours,
-                        period: next,
-                        amount,
-                      },
-                    };
-                  });
-                }}
-                style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-              >
-                <option value="hourly">Hourly</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-              <input
-                value={toDraftFixed1(compensationValue)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!isValidDecimalDraft(v)) return;
-                  const n = roundTo1Decimal(draftToNumberOrZero(v));
-                  setSettings((s) => ({
-                    ...s,
-                    compensation: { ...s.compensation, amount: n },
-                  }));
-                }}
-                inputMode="decimal"
-                style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 1fr",
-                gap: 10,
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <div style={labelStyle}>Core expenses</div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 180px)",
-                  gap: 10,
-                  minWidth: 0,
-                }}
-              >
-                <input
-                  value={toDraftFixed1(
-                    coreExpenseValueForSource(settings.coreExpenses),
-                  )}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (!isValidDecimalDraft(v)) return;
-                    const n = roundTo1Decimal(draftToNumberOrZero(v));
-                    setSettings((s) => ({
-                      ...s,
-                      coreExpenses: setCoreExpenseForSource(
-                        s.coreExpenses,
-                        s.coreExpenses.source,
-                        n,
-                      ),
-                    }));
-                  }}
-                  inputMode="decimal"
-                  style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                />
-                <select
-                  value={settings.coreExpenses.source}
-                  onChange={(e) => {
-                    const next = e.target
-                      .value as MoneyPerspectiveSettingsV3["coreExpenses"]["source"];
-                    setSettings((s) => {
-                      const daily = dailyCoreExpenseFromSettings(
-                        s.coreExpenses,
-                      );
-                      if (daily == null)
-                        return {
-                          ...s,
-                          coreExpenses: { ...s.coreExpenses, source: next },
-                        };
-                      return {
-                        ...s,
-                        coreExpenses: setCoreExpenseFromDaily(
-                          s.coreExpenses,
-                          next,
-                          daily,
-                        ),
-                      };
-                    });
-                  }}
-                  style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 1fr",
-                gap: 10,
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <div style={labelStyle}>Expected annual return (%)</div>
-              <input
-                value={toDraft(settings.investing.annualReturnPct)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!isValidDecimalDraft(v)) return;
-                  setSettings((s) => ({
-                    ...s,
-                    investing: {
-                      ...s.investing,
-                      annualReturnPct: draftToNumberOrZero(v),
-                    },
-                  }));
-                }}
-                inputMode="decimal"
-                style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 1fr",
-                gap: 10,
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <div style={labelStyle}>Inflation (%)</div>
-              <input
-                value={toDraft(settings.investing.inflationPct)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!isValidDecimalDraft(v)) return;
-                  setSettings((s) => ({
-                    ...s,
-                    investing: {
-                      ...s.investing,
-                      inflationPct: draftToNumberOrZero(v),
-                    },
-                  }));
-                }}
-                inputMode="decimal"
-                style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                placeholder="e.g. 2"
-              />
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 1fr",
-                gap: 10,
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <div style={labelStyle}>Fee drag (%)</div>
-              <input
-                value={toDraft(settings.investing.feeDragPct)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!isValidDecimalDraft(v)) return;
-                  setSettings((s) => ({
-                    ...s,
-                    investing: {
-                      ...s.investing,
-                      feeDragPct: draftToNumberOrZero(v),
-                    },
-                  }));
-                }}
-                inputMode="decimal"
-                style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                placeholder="e.g. 0.5"
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 const MoneyPerspectivePage: React.FC = () => {
   const [searchParams] = useSearchParams();
 
@@ -694,6 +514,13 @@ const MoneyPerspectivePage: React.FC = () => {
 
   const year0Cost = useMemo(() => {
     return itemsWithAmount.reduce((sum, it) => sum + it.amount, 0);
+  }, [itemsWithAmount]);
+
+  const yearlyExpenseTotal = useMemo(() => {
+    return itemsWithAmount.reduce(
+      (sum, it) => sum + purchaseYearlyEquivalent(it.amount, it.type),
+      0,
+    );
   }, [itemsWithAmount]);
 
   const displayCurrency = useMemo(() => {
@@ -821,65 +648,34 @@ const MoneyPerspectivePage: React.FC = () => {
   }, [settings.investing.annualReturnPct, settings.investing.feeDragPct]);
 
   const results = useMemo(() => {
-    const amount = year0Cost;
+    const amount = yearlyExpenseTotal;
     const hourly = effectiveHourlyRate;
     const workHrs = hourly ? workHours(amount, hourly) : null;
     return { workHrs };
-  }, [effectiveHourlyRate, year0Cost]);
+  }, [effectiveHourlyRate, yearlyExpenseTotal]);
 
   const horizonTable = useMemo(() => {
     const daily = dailyCoreExpense;
-    if (year0Cost <= 0)
-      return [] as Array<{
-        years: number;
-        fvNominal: number | null;
-        fvReal: number | null;
-        runwayDays: number | null;
-      }>;
 
+    const row0FvNominal = year0Cost;
+    const row0FvReal = row0FvNominal;
+    const row0RunwayDays =
+      daily && row0FvReal != null ? coreExpenseDays(row0FvReal, daily) : null;
     const row0 = {
       years: 0,
-      fvNominal: year0Cost,
-      fvReal: year0Cost,
-      runwayDays: daily ? coreExpenseDays(year0Cost, daily) : null,
+      fvNominal: row0FvNominal,
+      fvReal: row0FvReal,
+      runwayDays: row0RunwayDays,
     };
 
     const futureRows = HORIZON_TABLE_YEARS.map((years) => {
-      let fvNominalTotal = 0;
-      for (const it of itemsWithAmount) {
-        if (it.type === "oneTime") {
-          const fv = futureValueNominal(
-            it.amount,
-            settings.investing.annualReturnPct,
-            12,
-            years,
-            settings.investing.feeDragPct,
-          );
-          if (fv == null) return { years, fvNominal: null, fvReal: null, runwayDays: null };
-          fvNominalTotal += fv;
-          continue;
-        }
-
-        const initial = futureValueNominal(
-          it.amount,
-          settings.investing.annualReturnPct,
-          12,
-          years,
-          settings.investing.feeDragPct,
-        );
-        const monthlyEq = purchaseMonthlyEquivalent(it.amount, it.type);
-        const recurring = futureValueNominalRecurringMonthly(
-          monthlyEq,
-          settings.investing.annualReturnPct,
-          years,
-          settings.investing.feeDragPct,
-        );
-        if (initial == null || recurring == null) return { years, fvNominal: null, fvReal: null, runwayDays: null };
-        fvNominalTotal += initial + recurring;
-      }
-
-      const fvNominal = fvNominalTotal;
-
+      const fvNominal = futureValueNominalTotalForItems(
+        itemsWithAmount,
+        settings.investing.annualReturnPct,
+        years,
+        settings.investing.feeDragPct,
+      );
+      if (fvNominal == null) return { years, fvNominal: null, fvReal: null, runwayDays: null };
       const fvReal =
         fvNominal != null &&
         Number.isFinite(settings.investing.inflationPct) &&
@@ -924,106 +720,47 @@ const MoneyPerspectivePage: React.FC = () => {
     return breakEvenMonths(costForBreakEven, monthlyBenefitMoney);
   }, [itemsWithAmount, monthlyBenefitMoney, year0Cost]);
 
-  const showMissingPurchase = year0Cost <= 0;
+  const showMissingPurchase = itemsWithAmount.length === 0;
 
-  const assumptionsSummaryRows = useMemo(() => {
-    const rows: Array<{ label: string; value: string }> = [];
-
-    rows.push({
-      label: "Expense list (year 0)",
-      value:
-        year0Cost > 0
-          ? `${formatCurrency(year0Cost, displayCurrency)} (${itemsWithAmount.length} item${itemsWithAmount.length === 1 ? "" : "s"})`
-          : "Missing",
-    });
-
-    if (effectiveHourlyRate != null) {
-      const salaryLabel =
-        settings.compensation.period === "hourly"
-          ? `${formatCurrency(settings.compensation.amount, displayCurrency)} / hour`
-          : `${formatCurrency(settings.compensation.amount, displayCurrency)} / ${settings.compensation.period}`;
-      rows.push({ label: "Net salary", value: salaryLabel });
-    } else {
-      rows.push({ label: "Net salary", value: "Missing" });
-    }
-
-    if (dailyCoreExpense != null) {
-      rows.push({
-        label: "Core expenses (daily)",
-        value: formatCurrency(dailyCoreExpense, displayCurrency),
-      });
-    } else {
-      rows.push({ label: "Core expenses (daily)", value: "Missing" });
-    }
-
-    rows.push({
-      label: "Expected annual return",
-      value: `${formatNumber(settings.investing.annualReturnPct, 2)}%`,
-    });
-    rows.push({
-      label: "Fee drag",
-      value: `${formatNumber(settings.investing.feeDragPct, 2)}%`,
-    });
-    rows.push({
-      label: "Net annual return",
-      value: `${formatNumber(netAnnualReturnPct, 2)}%`,
-    });
-    rows.push({
-      label: "Inflation",
-      value: `${formatNumber(settings.investing.inflationPct, 2)}%`,
-    });
-    rows.push({ label: "Compounding", value: "12 times a year (monthly)" });
-
-    return rows;
-  }, [
-    dailyCoreExpense,
-    displayCurrency,
-    effectiveHourlyRate,
-    itemsWithAmount.length,
-    netAnnualReturnPct,
-    settings.investing.annualReturnPct,
-    settings.investing.feeDragPct,
-    settings.investing.inflationPct,
-    settings.compensation.amount,
-    settings.compensation.period,
-    year0Cost,
-  ]);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
   return (
-    <PageLayout variant="constrained" maxWidthPx={500}>
+    <PageLayout variant="constrained" maxWidthPx={600}>
       <h1 style={{ textAlign: "center", fontSize: 34 }}>
         Money Perspectivator
       </h1>
 
       <div style={{ display: "grid", gap: 14 }}>
         <div style={cardStyle}>
-          <div style={{ fontWeight: 900, fontSize: 22 }}>Expense list</div>
+          <div style={{ fontWeight: 900, fontSize: 22 }}>Purchase</div>
 
           <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
             <div style={{ display: "grid", gap: 10 }}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "120px 1fr",
+                  gridTemplateColumns: "120px minmax(0, 1fr)",
                   gap: 10,
                   alignItems: "center",
                   minWidth: 0,
                 }}
               >
                 <div style={labelStyle}>Name</div>
-                <input
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  placeholder="Optional"
-                  style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                  aria-label="Expense name"
-                />
+                <div style={{ ...inputGroupStyle }}>
+                  <input
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Optional"
+                    style={inputGroupInputStyle}
+                    aria-label="Expense name"
+                  />
+                </div>
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "120px 1fr",
+                  gridTemplateColumns: "120px minmax(0, 1fr) auto minmax(0, 1fr)",
                   gap: 10,
                   alignItems: "center",
                   minWidth: 0,
@@ -1043,26 +780,32 @@ const MoneyPerspectivePage: React.FC = () => {
                   <option value="monthly">Monthly</option>
                   <option value="yearly">Yearly</option>
                 </select>
+
+                <div style={labelStyle}>Currency</div>
+                <div style={{ ...inputGroupStyle }}>
+                  <input
+                    value={normalizeCurrencyDraft(
+                      items.length > 0 ? items[0].currency : newItemCurrency,
+                    )}
+                    onChange={(e) => setCurrencyForAllItems(e.target.value)}
+                    placeholder="DKK"
+                    style={inputGroupInputStyle}
+                    aria-label="Currency (ISO 4217)"
+                  />
+                </div>
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "120px 1fr",
+                  gridTemplateColumns: "120px minmax(0, 1fr)",
                   gap: 10,
                   alignItems: "center",
                   minWidth: 0,
                 }}
               >
                 <div style={labelStyle}>Amount</div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) 110px",
-                    gap: 10,
-                    minWidth: 0,
-                  }}
-                >
+                <div style={{ ...inputGroupStyle, height: 44 }}>
                   <input
                     value={newItemAmountDraft}
                     onChange={(e) => {
@@ -1072,18 +815,12 @@ const MoneyPerspectivePage: React.FC = () => {
                     }}
                     placeholder="e.g. 1999.9"
                     inputMode="decimal"
-                    style={{ ...controlStyle, width: "100%", minWidth: 0 }}
+                    style={inputGroupInputStyle}
                     aria-label="Expense amount"
                   />
-                  <input
-                    value={normalizeCurrencyDraft(
-                      items.length > 0 ? items[0].currency : newItemCurrency,
-                    )}
-                    onChange={(e) => setCurrencyForAllItems(e.target.value)}
-                    placeholder="DKK"
-                    style={{ ...controlStyle, width: "100%", minWidth: 0 }}
-                    aria-label="Currency (ISO 4217)"
-                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    {displayCurrency}
+                  </span>
                 </div>
               </div>
 
@@ -1113,13 +850,23 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                  Expense list
+                </div>
                 <table
                   style={{
                     width: "100%",
                     borderCollapse: "collapse",
+                    tableLayout: "fixed",
                     fontSize: 14,
                   }}
                 >
+                  <colgroup>
+                    <col style={{ width: "auto" }} />
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "30%" }} />
+                    <col style={{ width: "44px" }} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th
@@ -1127,6 +874,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           textAlign: "left",
                           padding: "6px 8px",
                           borderBottom: "1px solid var(--fc-subtle-border)",
+                          background: "var(--fc-subtle-bg)",
                         }}
                       >
                         Name
@@ -1136,6 +884,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           textAlign: "left",
                           padding: "6px 8px",
                           borderBottom: "1px solid var(--fc-subtle-border)",
+                          background: "var(--fc-subtle-bg)",
                         }}
                       >
                         Type
@@ -1145,24 +894,17 @@ const MoneyPerspectivePage: React.FC = () => {
                           textAlign: "right",
                           padding: "6px 8px",
                           borderBottom: "1px solid var(--fc-subtle-border)",
+                          background: "var(--fc-subtle-bg)",
                         }}
                       >
                         Amount
                       </th>
                       <th
                         style={{
-                          textAlign: "left",
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--fc-subtle-border)",
-                        }}
-                      >
-                        Currency
-                      </th>
-                      <th
-                        style={{
                           width: 44,
                           padding: "6px 8px",
                           borderBottom: "1px solid var(--fc-subtle-border)",
+                          background: "var(--fc-subtle-bg)",
                         }}
                       />
                     </tr>
@@ -1199,6 +941,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               fontSize: 14,
                               width: "100%",
                               minWidth: 0,
+                              maxWidth: "100%",
                             }}
                             aria-label={`Name for item ${it.id}`}
                           />
@@ -1226,6 +969,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               fontSize: 14,
                               width: "100%",
                               minWidth: 0,
+                              maxWidth: "100%",
                             }}
                             aria-label={`Type for item ${it.id}`}
                           >
@@ -1243,56 +987,47 @@ const MoneyPerspectivePage: React.FC = () => {
                             textAlign: "right",
                           }}
                         >
-                          <input
-                            value={itemAmountDrafts[it.id] ?? toDraft(it.amount)}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (!isValidDecimalDraft(v)) return;
-                              setItemAmountDrafts((prev) => ({
-                                ...prev,
-                                [it.id]: v,
-                              }));
-                              const n = draftToNumberOrZero(v);
-                              setItems((current) =>
-                                current.map((x) =>
-                                  x.id !== it.id ? x : { ...x, amount: n },
-                                ),
-                              );
-                            }}
-                            inputMode="decimal"
+                          <div
                             style={{
-                              ...controlStyle,
+                              ...inputGroupStyle,
                               height: 34,
                               fontSize: 14,
-                              width: "100%",
-                              minWidth: 0,
-                              textAlign: "right",
                             }}
-                            aria-label={`Amount for item ${it.id}`}
-                          />
-                        </td>
-                        <td
-                          style={{
-                            padding: "6px 8px",
-                            borderBottom:
-                              "1px solid var(--fc-subtle-border)",
-                          }}
-                        >
-                          <input
-                            value={displayCurrency}
-                            onChange={(e) =>
-                              setCurrencyForAllItems(e.target.value)
-                            }
-                            placeholder="DKK"
-                            style={{
-                              ...controlStyle,
-                              height: 34,
-                              fontSize: 14,
-                              width: "100%",
-                              minWidth: 0,
-                            }}
-                            aria-label={`Currency for item ${it.id}`}
-                          />
+                          >
+                            <input
+                              value={itemAmountDrafts[it.id] ?? toDraft(it.amount)}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (!isValidDecimalDraft(v)) return;
+                                setItemAmountDrafts((prev) => ({
+                                  ...prev,
+                                  [it.id]: v,
+                                }));
+                                const n = draftToNumberOrZero(v);
+                                setItems((current) =>
+                                  current.map((x) =>
+                                    x.id !== it.id ? x : { ...x, amount: n },
+                                  ),
+                                );
+                              }}
+                              inputMode="decimal"
+                              style={{
+                                ...inputGroupInputStyle,
+                                fontSize: 14,
+                                textAlign: "right",
+                              }}
+                              aria-label={`Amount for item ${it.id}`}
+                            />
+                            <span
+                              aria-hidden
+                              style={{
+                                ...inputGroupUnitStyle,
+                                fontSize: 14,
+                              }}
+                            >
+                              {displayCurrency}
+                            </span>
+                          </div>
                         </td>
                         <td
                           style={{
@@ -1347,50 +1082,272 @@ const MoneyPerspectivePage: React.FC = () => {
               gap: 10,
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 22 }}>Assumptions</div>
             <button
               type="button"
-              style={btn()}
-              onClick={() => setSettings(defaultMoneyPerspectiveSettings())}
-              aria-label="Reset assumptions to defaults"
+              onClick={() => setAssumptionsOpen((v) => !v)}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "inherit",
+                fontWeight: 900,
+                fontSize: 22,
+                textAlign: "left",
+              }}
+              aria-expanded={assumptionsOpen}
+              aria-label={assumptionsOpen ? "Collapse assumptions" : "Expand assumptions"}
             >
-              Reset defaults
+              {assumptionsOpen ? "Assumptions ▾" : "Assumptions ▸"}
             </button>
+
+            {assumptionsOpen ? (
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button
+                  type="button"
+                  style={btn()}
+                  onClick={() => setSettings(defaultMoneyPerspectiveSettings())}
+                  aria-label="Reset assumptions to defaults"
+                >
+                  Reset defaults
+                </button>
+              </div>
+            ) : null}
           </div>
 
-          <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              {assumptionsSummaryRows.map((r) => (
+          {assumptionsOpen ? (
+            <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "190px minmax(0, 1fr) 120px",
+                  gap: 10,
+                  alignItems: "center",
+                  minWidth: 0,
+                }}
+              >
+                <div style={labelStyle}>Expense list (yearly)</div>
                 <div
-                  key={r.label}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "230px auto",
-                    gap: 10,
+                    gridColumn: "2 / span 2",
+                    fontWeight: 800,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
-                  <div style={{ fontWeight: 600 }}>{r.label}</div>
-                  <div style={{ fontWeight: 600 }}>{r.value}</div>
+                  {yearlyExpenseTotal > 0
+                    ? `${formatCurrencyNoDecimals(yearlyExpenseTotal, displayCurrency)} (${itemsWithAmount.length} item${itemsWithAmount.length === 1 ? "" : "s"})`
+                    : "Missing"}
                 </div>
-              ))}
-            </div>
 
-            <div
-              style={{
-                borderTop: "1px solid var(--fc-subtle-border)",
-                paddingTop: 12,
-                display: "grid",
-                gap: 12,
-              }}
-            >
-              <EditAssumptions
-                settings={settings}
-                setSettings={setSettings}
-                controlStyle={controlStyle}
-                labelStyle={labelStyle}
-              />
+                <div style={labelStyle}>Net salary</div>
+                <div style={{ ...inputGroupStyle, width: "100%" }}>
+                  <input
+                    value={toDraftFixed1(settings.compensation.amount)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isValidDecimalDraft(v)) return;
+                      const n = roundTo1Decimal(draftToNumberOrZero(v));
+                      setSettings((s) => ({
+                        ...s,
+                        compensation: { ...s.compensation, amount: n },
+                      }));
+                    }}
+                    inputMode="decimal"
+                    style={inputGroupInputStyle}
+                    aria-label="Net salary amount"
+                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    {displayCurrency}
+                  </span>
+                </div>
+
+                <select
+                  value={settings.compensation.period}
+                  onChange={(e) => {
+                    const next = e.target.value as MoneyPerspectiveSalaryPeriod;
+                    setSettings((s) => {
+                      const current = s.compensation;
+                      if (next === current.period) return s;
+                      const effectiveHourly =
+                        effectiveHourlyFromSalarySettings(current);
+                      if (effectiveHourly == null)
+                        return {
+                          ...s,
+                          compensation: { ...current, period: next },
+                        };
+
+                      const hours =
+                        current.workingHoursPerMonth > 0
+                          ? current.workingHoursPerMonth
+                          : 160;
+                      const amount = roundTo1Decimal(
+                        salaryAmountFromEffectiveHourly(
+                          effectiveHourly,
+                          hours,
+                          next,
+                        ),
+                      );
+                      return {
+                        ...s,
+                        compensation: {
+                          ...current,
+                          workingHoursPerMonth: hours,
+                          period: next,
+                          amount,
+                        },
+                      };
+                    });
+                  }}
+                  style={{ ...controlStyle, width: "100%", minWidth: 0 }}
+                  aria-label="Net salary period"
+                >
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+
+                <div style={labelStyle}>Core expenses</div>
+                <div style={{ ...inputGroupStyle, width: "100%" }}>
+                  <input
+                    value={toDraftFixed1(coreExpenseValueForSource(settings.coreExpenses))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isValidDecimalDraft(v)) return;
+                      const n = roundTo1Decimal(draftToNumberOrZero(v));
+                      setSettings((s) => ({
+                        ...s,
+                        coreExpenses: setCoreExpenseForSource(
+                          s.coreExpenses,
+                          s.coreExpenses.source,
+                          n,
+                        ),
+                      }));
+                    }}
+                    inputMode="decimal"
+                    style={inputGroupInputStyle}
+                    aria-label="Core expenses amount"
+                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    {displayCurrency}
+                  </span>
+                </div>
+
+                <select
+                  value={settings.coreExpenses.source}
+                  onChange={(e) => {
+                    const next =
+                      e.target.value as MoneyPerspectiveSettingsV3["coreExpenses"]["source"];
+                    setSettings((s) => {
+                      const daily = dailyCoreExpenseFromSettings(s.coreExpenses);
+                      if (daily == null)
+                        return {
+                          ...s,
+                          coreExpenses: { ...s.coreExpenses, source: next },
+                        };
+                      return {
+                        ...s,
+                        coreExpenses: setCoreExpenseFromDaily(
+                          s.coreExpenses,
+                          next,
+                          daily,
+                        ),
+                      };
+                    });
+                  }}
+                  style={{ ...controlStyle, width: "100%", minWidth: 0 }}
+                  aria-label="Core expenses period"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+
+                <div style={labelStyle}>Expected annual return</div>
+                <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
+                  <input
+                    value={toDraft(settings.investing.annualReturnPct)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isValidDecimalDraft(v)) return;
+                      setSettings((s) => ({
+                        ...s,
+                        investing: {
+                          ...s.investing,
+                          annualReturnPct: draftToNumberOrZero(v),
+                        },
+                      }));
+                    }}
+                    inputMode="decimal"
+                    style={inputGroupInputStyle}
+                    aria-label="Expected annual return percent"
+                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    %
+                  </span>
+                </div>
+
+                <div style={labelStyle}>Inflation</div>
+                <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
+                  <input
+                    value={toDraft(settings.investing.inflationPct)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isValidDecimalDraft(v)) return;
+                      setSettings((s) => ({
+                        ...s,
+                        investing: {
+                          ...s.investing,
+                          inflationPct: draftToNumberOrZero(v),
+                        },
+                      }));
+                    }}
+                    inputMode="decimal"
+                    style={inputGroupInputStyle}
+                    aria-label="Inflation percent"
+                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    %
+                  </span>
+                </div>
+
+                <div style={labelStyle}>Fee drag</div>
+                <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
+                  <input
+                    value={toDraft(settings.investing.feeDragPct)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isValidDecimalDraft(v)) return;
+                      setSettings((s) => ({
+                        ...s,
+                        investing: {
+                          ...s.investing,
+                          feeDragPct: draftToNumberOrZero(v),
+                        },
+                      }));
+                    }}
+                    inputMode="decimal"
+                    style={inputGroupInputStyle}
+                    aria-label="Fee drag percent"
+                  />
+                  <span aria-hidden style={inputGroupUnitStyle}>
+                    %
+                  </span>
+                </div>
+
+                <div style={{ ...subtleTextStyle, fontSize: 13, gridColumn: "1 / span 3" }}>
+                  Net annual return: {formatNumber(netAnnualReturnPct, 2)}%
+                </div>
+                <div style={{ ...subtleTextStyle, fontSize: 13, gridColumn: "1 / span 3" }}>
+                  Compounding: 12 times a year (monthly)
+                </div>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div style={{ ...subtleTextStyle, fontSize: 13, marginTop: 12 }}>
             Notes: Core expenses are meant to cover necessities (rent, food,
@@ -1424,7 +1381,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 )}
               </div>
               {showMissingPurchase ? (
-                <div style={subtleTextStyle}>Missing purchase amount.</div>
+                <div style={subtleTextStyle}>Missing expense list.</div>
               ) : effectiveHourlyRate == null ? (
                 <div style={subtleTextStyle}>
                   Set net salary to compute work time equivalent.
@@ -1442,7 +1399,7 @@ const MoneyPerspectivePage: React.FC = () => {
 
               {showMissingPurchase ? (
                 <div style={{ ...subtleTextStyle, marginTop: 6 }}>
-                  Enter a purchase amount to show the horizon table.
+                  Add an item to show the horizon table.
                 </div>
               ) : (
                 <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -1489,7 +1446,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             borderBottom: "1px solid var(--fc-subtle-border)",
                           }}
                         >
-                          Runway (days)
+                          Runway (D/M/Y)
                         </th>
                       </tr>
                     </thead>
@@ -1512,7 +1469,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             }}
                           >
                             {r.fvNominal != null
-                              ? formatCurrency(r.fvNominal, displayCurrency)
+                              ? formatCurrencyNoDecimals(r.fvNominal, displayCurrency)
                               : "—"}
                           </td>
                           <td
@@ -1523,7 +1480,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             }}
                           >
                             {r.fvReal != null
-                              ? formatCurrency(r.fvReal, displayCurrency)
+                              ? formatCurrencyNoDecimals(r.fvReal, displayCurrency)
                               : "—"}
                           </td>
                           <td
@@ -1536,7 +1493,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             {dailyCoreExpense == null
                               ? "—"
                               : r.runwayDays != null
-                                ? formatNumber(r.runwayDays, 2)
+                                ? formatRunwayDmy(r.runwayDays)
                                 : "—"}
                           </td>
                         </tr>
