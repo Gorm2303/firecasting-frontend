@@ -34,7 +34,7 @@ describe('NormalInputForm advanced options persistence', () => {
     fireEvent.change(screen.getByLabelText(/Return type/i), { target: { value: 'distributionReturn' } });
     fireEvent.change(screen.getByLabelText(/Master seed/i), { target: { value: 'custom' } });
     const seedLabel = screen.getByText(/Master seed/i).closest('label');
-    const seedInput = seedLabel?.querySelector('input[type="number"]') as HTMLInputElement | null;
+    const seedInput = seedLabel?.querySelector('input') as HTMLInputElement | null;
     expect(seedInput).toBeTruthy();
     fireEvent.change(seedInput as HTMLInputElement, { target: { value: '123' } });
 

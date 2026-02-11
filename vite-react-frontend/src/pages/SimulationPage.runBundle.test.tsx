@@ -180,7 +180,7 @@ describe('SimulationPage run bundle import', () => {
     expect((screen.getByLabelText(/Return type/i) as HTMLSelectElement).value).toBe('distributionReturn');
     expect((screen.getByLabelText(/Master seed/i) as HTMLSelectElement).value).toBe('custom');
     const seedLabel = screen.getByText(/Master seed/i).closest('label');
-    const seedInput = seedLabel?.querySelector('input[type="number"]') as HTMLInputElement | null;
+    const seedInput = seedLabel?.querySelector('input') as HTMLInputElement | null;
     expect(seedInput).toBeTruthy();
     expect((seedInput as HTMLInputElement).value).toBe('123');
     expect((screen.getByLabelText(/^Distribution$/i) as HTMLSelectElement).value).toBe('studentT');
