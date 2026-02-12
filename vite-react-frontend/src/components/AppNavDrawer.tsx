@@ -64,8 +64,8 @@ const AppNavDrawer: React.FC = () => {
         title: 'Tools',
         items: [
           { label: 'Salary Taxator', to: '/salary-after-tax', isActive: (p) => p === '/salary-after-tax' },
-          { label: 'Progress Tracker', to: '/progress-tracker', isActive: (p) => p === '/progress-tracker' },
           { label: 'Money Perspectivator', to: '/money-perspective', isActive: (p) => p === '/money-perspective' },
+          { label: 'Progress Tracker', to: '/progress-tracker', isActive: (p) => p === '/progress-tracker' },
         ],
       },
     ],
