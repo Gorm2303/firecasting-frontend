@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 
 export type PageLayoutVariant = 'constrained' | 'wide';
 
@@ -12,6 +12,8 @@ type Props = {
 };
 
 const PINNED_NAV_WIDTH_PX = 240;
+
+const PinnedNavGutterContext = React.createContext<boolean>(false);
 
 const usePinnedNav = (): boolean => {
   const [isPinned, setIsPinned] = useState(() => {
@@ -46,31 +48,43 @@ const PageLayout: React.FC<Props> = ({
 }) => {
   const isPinnedNav = usePinnedNav();
 
-  // In pinned layout, constrained pages are centered relative to the full viewport
+  // PageLayout is sometimes nested (e.g. a wide outer layout + constrained inner
+  // card layout). In pinned layout we must only compensate once, otherwise the
+  // inner content shifts left.
+  const parentAlreadyHasPinnedGutter = useContext(PinnedNavGutterContext);
+
+  // In pinned layout, pages should be centered relative to the full viewport
   // by adding a right gutter equal to the pinned nav width.
-  const pinnedRightGutterPx = isPinnedNav && variant === 'constrained' ? PINNED_NAV_WIDTH_PX : 0;
+  const pinnedRightGutterPx = !parentAlreadyHasPinnedGutter && isPinnedNav ? PINNED_NAV_WIDTH_PX : 0;
+
+  const providePinnedGutter = useMemo(
+    () => parentAlreadyHasPinnedGutter || pinnedRightGutterPx > 0,
+    [parentAlreadyHasPinnedGutter, pinnedRightGutterPx]
+  );
 
   return (
-    <div
-      style={{
-        width: '100%',
-        boxSizing: 'border-box',
-        paddingLeft: paddingPx,
-        paddingRight: paddingPx + pinnedRightGutterPx,
-        paddingTop: paddingPx,
-        paddingBottom: paddingPx,
-      }}
-    >
+    <PinnedNavGutterContext.Provider value={providePinnedGutter}>
       <div
-        style={
-          variant === 'constrained'
-            ? { maxWidth: maxWidthPx, margin: '0 auto' }
-            : { width: '100%' }
-        }
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          paddingLeft: paddingPx,
+          paddingRight: paddingPx + pinnedRightGutterPx,
+          paddingTop: paddingPx,
+          paddingBottom: paddingPx,
+        }}
       >
-        {children}
+        <div
+          style={
+            variant === 'constrained'
+              ? { maxWidth: maxWidthPx, margin: '0 auto' }
+              : { width: '100%' }
+          }
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </PinnedNavGutterContext.Provider>
   );
 };
 

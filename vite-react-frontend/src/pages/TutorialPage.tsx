@@ -620,7 +620,7 @@ const TutorialPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ maxWidth: 1500 }}>
+      <div style={{ maxWidth: 1500, margin: '0 auto' }}>
         <h1 style={{ textAlign: 'center' }}>Tutor</h1>
         <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
           Learn by doing. Same components, guided steps.

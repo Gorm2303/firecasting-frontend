@@ -802,7 +802,7 @@ const RunDiffPage: React.FC = () => {
     <PageLayout variant="wide">
     <div
       className={singleModeSide === 'A' ? 'single-mode-a' : singleModeSide === 'B' ? 'single-mode-b' : ''}
-      style={{ maxWidth: 1500 }}
+      style={{ maxWidth: 1500, margin: '0 auto' }}
     >
       <style>{`
         /* Match the /info collapsible-card look */

@@ -508,7 +508,7 @@ const SimulationPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-    <div style={{ maxWidth: 1500 }}>
+    <div style={{ maxWidth: 1500, margin: '0 auto' }}>
       <PageLayout variant="constrained" maxWidthPx={980} paddingPx={0}>
         <h1 style={{ display: 'flex', justifyContent: 'center' }}>FIRE Simulator</h1>
 
