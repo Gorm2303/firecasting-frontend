@@ -7,6 +7,9 @@ export type MoneyPerspectiveCompensationSettings = {
 
   /** Used to derive hourly from non-hourly periods. */
   workingHoursPerMonth: number;
+
+  /** Expected yearly pay raise (pct). Used in projections. */
+  payRaisePct: number;
 };
 
 export type MoneyPerspectiveCoreExpenseSettings = {
@@ -90,6 +93,7 @@ export function defaultMoneyPerspectiveSettings(): MoneyPerspectiveSettingsV3 {
       period: 'hourly',
       amount: 200,
       workingHoursPerMonth: 160,
+      payRaisePct: 2,
     },
     coreExpenses: {
       source: 'monthly',
@@ -120,6 +124,7 @@ function normalizeV3(raw: Record<string, unknown>, defaults: MoneyPerspectiveSet
       period: normalizeSalaryPeriod(comp.period, defaults.compensation.period),
       amount: asNumber(comp.amount, defaults.compensation.amount),
       workingHoursPerMonth: asNumber(comp.workingHoursPerMonth, defaults.compensation.workingHoursPerMonth),
+      payRaisePct: asNumber(comp.payRaisePct, defaults.compensation.payRaisePct),
     },
     coreExpenses: {
       source: normalizeCoreSource(core.source, defaults.coreExpenses.source),
@@ -173,6 +178,7 @@ function migrateFromV2ToV3(rawV2: Record<string, unknown>): MoneyPerspectiveSett
       period,
       amount,
       workingHoursPerMonth,
+      payRaisePct: 0,
     },
     coreExpenses: {
       source: normalizeCoreSource(v2Core.source, defaults.coreExpenses.source),
@@ -234,6 +240,7 @@ function migrateFromV1ToV3(rawV1: Record<string, unknown>): MoneyPerspectiveSett
       period,
       amount,
       workingHoursPerMonth: v1Hours,
+      payRaisePct: 0,
     },
     coreExpenses: {
       source: normalizeCoreSource(v1Core.source, defaults.coreExpenses.source),
