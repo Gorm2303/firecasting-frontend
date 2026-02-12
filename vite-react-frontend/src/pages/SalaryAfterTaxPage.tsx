@@ -21,6 +21,7 @@ const formatPct = (value: number, digits = 1): string => {
 };
 
 const ATP_MONTHLY_DKK = 99;
+const ATP_MONTHLY_GROSS_THRESHOLD_DKK = 2_340;
 
 const ANNUAL_BREAKDOWN_MILESTONE_LABELS = new Set<string>([
   'Gross salary (year)',
@@ -127,7 +128,16 @@ const SalaryAfterTaxPage: React.FC = () => {
       : DK_TAX_YEAR_2026.defaultMunicipalTaxRate;
   const churchTaxRate = selectedMunicipality != null ? selectedMunicipality.churchTaxPct / 100 : 0;
 
-  const atpAnnualDkk = ATP_MONTHLY_DKK * 12;
+  const grossMonthlyEquivalent = useMemo(() => {
+    const safeGross = Number.isFinite(grossAmount) ? grossAmount : 0;
+    return grossPeriod === 'monthly' ? safeGross : safeGross / 12;
+  }, [grossAmount, grossPeriod]);
+
+  // Assumption: ATP (employee share) is only deducted when working > 39 hours/month.
+  // We don't model hours directly, so we approximate eligibility using gross monthly salary.
+  const atpAnnualDkk = useMemo(() => {
+    return grossMonthlyEquivalent < ATP_MONTHLY_GROSS_THRESHOLD_DKK ? 0 : ATP_MONTHLY_DKK * 12;
+  }, [grossMonthlyEquivalent]);
 
   const usingDefaultMunicipal = selectedMunicipality == null;
 
@@ -168,7 +178,14 @@ const SalaryAfterTaxPage: React.FC = () => {
   const annualBreakdownRows = [
     { label: 'Gross salary (year)', value: breakdown.grossAnnualDkk, note: 'annualized from input' },
     { label: 'Employee pension', value: -breakdown.employeePensionAnnualDkk, note: 'deducted before AM-bidrag' },
-    { label: 'ATP', value: -atpAnnualDkk, note: `${ATP_MONTHLY_DKK} DKK/month (fixed)` },
+    {
+      label: 'ATP',
+      value: -breakdown.atpAnnualDkk,
+      note:
+        breakdown.atpAnnualDkk === 0
+          ? `0 DKK (gross/mo < ${ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')})`
+          : `${ATP_MONTHLY_DKK} DKK/mo (fixed; gross/mo ≥ ${ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')})`,
+    },
     { label: 'AM base', value: breakdown.amBaseAnnualDkk, note: 'gross - pension - ATP' },
     { label: 'AM-bidrag (8%)', value: -breakdown.amBidragAnnualDkk, note: '8% of AM base' },
     { label: 'Personal income after AM', value: breakdown.personalIncomeAfterAmAnnualDkk, note: 'AM base - AM-bidrag' },
@@ -471,6 +488,43 @@ const SalaryAfterTaxPage: React.FC = () => {
               })}
             </tbody>
           </table>
+
+          <div style={{ marginTop: 14, opacity: 0.75, fontSize: 13, lineHeight: 1.35 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>ATP assumption</div>
+            <div>
+              ATP is only deducted when an employee works more than <strong>39 hours/month</strong>. Since this tool does not ask for
+              hours, it uses a simple proxy: <strong>no ATP deduction</strong> when gross monthly salary is under{' '}
+              <strong>{ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')} DKK</strong>.
+            </div>
+
+            <div style={{ marginTop: 10, fontWeight: 650 }}>ATP contribution rates (employee share)</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Hours/month</th>
+                  <th style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Employee share</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Min. 117</td>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>94.65 DKK</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>78 – 116</td>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>63.10 DKK</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>39 – 77</td>
+                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>31.55 DKK</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '6px 0' }}>Under 39</td>
+                  <td style={{ padding: '6px 0', textAlign: 'right' }}>0.00 DKK</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </details>
       </div>
     </PageLayout>
