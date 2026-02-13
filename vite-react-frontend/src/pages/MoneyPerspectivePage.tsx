@@ -1102,6 +1102,15 @@ const MoneyPerspectivePage: React.FC = () => {
     return workTimeProjectionTable?.find((r) => r.years === 1) ?? null;
   }, [workTimeProjectionTable]);
 
+  const workThisYear1PctOfWorkYear = useMemo(() => {
+    const hoursThisYear = workTimeProjectionYear1?.workThisYearHours;
+    if (hoursThisYear == null) return null;
+
+    const workYearHours = useWorkDaysInYmd ? 1920 : 2920;
+    if (!(workYearHours > 0)) return null;
+    return (100 * hoursThisYear) / workYearHours;
+  }, [useWorkDaysInYmd, workTimeProjectionYear1]);
+
   const workTimeProjectionYear2 = useMemo(() => {
     return workTimeProjectionTable?.find((r) => r.years === 2) ?? null;
   }, [workTimeProjectionTable]);
@@ -1495,7 +1504,7 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>Repetitive Expenses to Work</div>
+                <div style={{ fontWeight: 800 }}>Recurring Expenses to Work</div>
                 {effectiveHourlyRate == null ? (
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
@@ -1508,7 +1517,41 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={subtleTextStyle}>
                   Set net salary to compute work.
                 </div>
-              ) : null}
+              ) : (
+                <div
+                  style={{
+                    ...subtleTextStyle,
+                    fontSize: 12,
+                    display: "grid",
+                    gap: 2,
+                    justifyItems: "end",
+                    textAlign: "right",
+                  }}
+                >
+                  <div>
+                    = {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, true)} working days
+                  </div>
+                  <div>
+                    = {workThisYear1PctOfWorkYear == null ? "—" : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontWeight: 800 }}>Value of All Expenses</div>
+                <div style={{ fontWeight: 900, fontSize: 22 }}>
+                  {formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)}
+                </div>
+              </div>
             </div>
 
             <div
