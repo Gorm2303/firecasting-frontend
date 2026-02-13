@@ -829,6 +829,8 @@ const MoneyPerspectivePage: React.FC = () => {
     const gMonthly = stepG - 1;
 
     const baseMonthly = recurringYearlyExpenseTotal / 12;
+    const baseYearly = recurringYearlyExpenseTotal;
+    const stepInflationYearly = 1 + inflationRate;
 
     const fvGrowingMonthly = (months: number): number => {
       const n = Math.max(0, Math.round(months));
@@ -845,12 +847,14 @@ const MoneyPerspectivePage: React.FC = () => {
     };
 
     const expenseMoneyInYearN = (yearN: number): number => {
-      if (!(baseMonthly > 0)) return 0;
+      if (!(baseYearly > 0)) return 0;
       if (!(yearN > 0)) return 0;
-      const startMonth = 12 * (yearN - 1);
-      if (stepG === 1) return baseMonthly * 12;
-      const sum12 = (Math.pow(stepG, 12) - 1) / (stepG - 1);
-      return baseMonthly * Math.pow(stepG, startMonth) * sum12;
+
+      // Define "Year N spending" as the 12 monthly amounts in that year.
+      // To match expectations like (32,000 × 12) for Year 1, apply inflation yearly (start-of-year),
+      // rather than increasing each month.
+      if (stepInflationYearly === 1) return baseYearly;
+      return baseYearly * Math.pow(stepInflationYearly, Math.max(0, yearN - 1));
     };
 
     const projectionYears = [...HORIZON_TABLE_YEARS, ...EXTRA_DETAIL_YEARS]
@@ -1750,11 +1754,12 @@ const MoneyPerspectivePage: React.FC = () => {
                             if (!(baseMonthlySpend > 0)) return 0;
                             if (!(yearN > 0)) return 0;
 
-                            // Sum of 12 months, starting at month 12*(yearN-1), growing with inflation each month.
-                            const startMonth = 12 * (yearN - 1);
-                            if (stepG === 1) return baseMonthlySpend * 12;
-                            const sum12 = (Math.pow(stepG, 12) - 1) / (stepG - 1);
-                            return baseMonthlySpend * Math.pow(stepG, startMonth) * sum12;
+                            // Keep the breakdown consistent with the table above:
+                            // spending is defined as 12 monthly amounts in that year, with inflation applied yearly.
+                            const baseYearlySpend = baseMonthlySpend * 12;
+                            const stepInflationYearly = 1 + i;
+                            if (stepInflationYearly === 1) return baseYearlySpend;
+                            return baseYearlySpend * Math.pow(stepInflationYearly, Math.max(0, yearN - 1));
                           };
 
                           const wage1 = effectiveHourlyRate;
