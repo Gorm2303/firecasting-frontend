@@ -455,7 +455,7 @@ const SalaryAfterTaxPage: React.FC = () => {
                         padding: `${paddingTop}px 0 7px 0`,
                         borderTop: showTopSeparator ? '2px solid var(--fc-card-border)' : undefined,
                         borderBottom: '1px solid var(--fc-subtle-border)',
-                        fontWeight: isMilestone ? 600 : 400,
+                        fontWeight: isMilestone ? 700 : 400,
                       }}
                     >
                       {label}
@@ -467,7 +467,7 @@ const SalaryAfterTaxPage: React.FC = () => {
                         borderBottom: '1px solid var(--fc-subtle-border)',
                         textAlign: 'right',
                         fontVariantNumeric: 'tabular-nums',
-                        fontWeight: isNet ? 700 : isMilestone ? 600 : 400,
+                        fontWeight: isNet ? 900 : isMilestone ? 700 : 400,
                       }}
                     >
                       {value < 0 ? '-' : ''}
@@ -489,42 +489,122 @@ const SalaryAfterTaxPage: React.FC = () => {
             </tbody>
           </table>
 
-          <div style={{ marginTop: 14, opacity: 0.75, fontSize: 13, lineHeight: 1.35 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>ATP assumption</div>
-            <div>
-              ATP is only deducted when an employee works more than <strong>39 hours/month</strong>. Since this tool does not ask for
-              hours, it uses a simple proxy: <strong>no ATP deduction</strong> when gross monthly salary is under{' '}
-              <strong>{ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')} DKK</strong>.
-            </div>
+          <details
+            style={{
+              marginTop: 14,
+              border: '1px solid var(--fc-subtle-border)',
+              borderRadius: 6,
+              padding: 10,
+              background: 'var(--fc-card-bg)',
+              color: 'var(--fc-card-text)',
+            }}
+          >
+            <summary style={{ cursor: 'pointer', fontWeight: 800, fontSize: 14 }}>Assumptions</summary>
 
-            <div style={{ marginTop: 10, fontWeight: 650 }}>ATP contribution rates (employee share)</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Hours/month</th>
-                  <th style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Employee share</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Min. 117</td>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>94.65 DKK</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>78 – 116</td>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>63.10 DKK</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>39 – 77</td>
-                  <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>31.55 DKK</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '6px 0' }}>Under 39</td>
-                  <td style={{ padding: '6px 0', textAlign: 'right' }}>0.00 DKK</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13, lineHeight: 1.35, display: 'grid', gap: 14 }}>
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Period/annualization assumption</div>
+                <div>
+                  Monthly inputs are annualized as <strong>gross × 12</strong>. “Net (monthly)” is shown as <strong>net (annual) ÷ 12</strong>.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Non-negative base assumption</div>
+                <div>
+                  Negative inputs and intermediate bases are clamped to <strong>0</strong> (no negative income base, no negative deductions, no
+                  negative taxes).
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Ordering assumption (what is deducted where)</div>
+                <div>
+                  Employee pension and ATP are deducted <strong>before</strong> AM-bidrag. Personfradrag, beskæftigelsesfradrag, jobfradrag, and
+                  “other deductions” are deducted <strong>after</strong> AM-bidrag to compute taxable income.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Threshold base assumption</div>
+                <div>
+                  Bracket thresholds (mellemskat/topskat/toptopskat) are based on <strong>personal income after AM-bidrag</strong> (not taxable income).
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Bracket stacking (cumulative) assumption</div>
+                <div>
+                  Bracket taxes are modeled as <strong>cumulative</strong> taxes above each threshold, so they can stack when income exceeds multiple
+                  thresholds.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Rounding assumption</div>
+                <div>
+                  Each line item is rounded to the <strong>nearest DKK</strong> before totals are summed (including “Total tax” and net salary).
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Municipality/church assumption</div>
+                <div>
+                  If no municipality is selected, the municipal tax rate defaults to <strong>25.0%</strong>. Church tax is only applied when enabled
+                  and a municipality (and its church tax rate) is available.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>ATP assumption</div>
+                <div>
+                  ATP is only deducted when an employee works more than <strong>39 hours/month</strong>. Since this tool does not ask for hours, it
+                  uses a simple proxy: <strong>no ATP deduction</strong> when gross monthly salary is under{' '}
+                  <strong>{ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')} DKK</strong>.
+                </div>
+
+                <div style={{ marginTop: 10, fontWeight: 800 }}>ATP contribution rates (employee share)</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>
+                        Hours/month
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>
+                        Employee share
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Min. 117</td>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>94.65 DKK</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>78 – 116</td>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>63.10 DKK</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>39 – 77</td>
+                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>31.55 DKK</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 0' }}>Under 39</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right' }}>0.00 DKK</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Tax rate output assumption</div>
+                <div>
+                  “Effective tax rate” and “Marginal rate” are calculated using <strong>taxes only</strong> (AM-bidrag + municipal/church + state
+                  taxes) and exclude pension/ATP.
+                </div>
+              </div>
+            </div>
+          </details>
         </details>
       </div>
     </PageLayout>
