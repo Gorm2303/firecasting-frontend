@@ -879,6 +879,9 @@ const MoneyPerspectivePage: React.FC = () => {
       workTotalHours: number;
       investedThisYearHours: number;
       investedTotalHours: number;
+      investedTotalMoneyNominal: number;
+      investedTotalMoneyReal: number;
+      investedContributedMoneyReal: number;
     }> = [];
 
     for (let year = 1; year <= maxYear; year += 1) {
@@ -895,6 +898,12 @@ const MoneyPerspectivePage: React.FC = () => {
       const investedThisYearHours = deltaThisYearMoney > 0 ? (workHours(deltaThisYearMoney, wageHourly) ?? 0) : 0;
       const investedTotalHours = portfolioEndThisYear > 0 ? (workHours(portfolioEndThisYear, wageHourly) ?? 0) : 0;
 
+      const inflationStepYearly = 1 + inflationRate;
+      const inflationDiscount = Math.pow(inflationStepYearly, year);
+      const investedTotalMoneyNominal = portfolioEndThisYear;
+      const investedTotalMoneyReal = inflationDiscount > 0 ? investedTotalMoneyNominal / inflationDiscount : 0;
+      const investedContributedMoneyReal = baseMonthly > 0 ? baseMonthly * 12 * year : 0;
+
       if (projectionYears[emitIdx] === year) {
         rows.push({
           years: year,
@@ -902,6 +911,9 @@ const MoneyPerspectivePage: React.FC = () => {
           workTotalHours,
           investedThisYearHours,
           investedTotalHours,
+          investedTotalMoneyNominal,
+          investedTotalMoneyReal,
+          investedContributedMoneyReal,
         });
         emitIdx += 1;
       }
@@ -1101,6 +1113,30 @@ const MoneyPerspectivePage: React.FC = () => {
   const workTimeProjectionYear1 = useMemo(() => {
     return workTimeProjectionTable?.find((r) => r.years === 1) ?? null;
   }, [workTimeProjectionTable]);
+
+  const workTimeProjectionYear10 = useMemo(() => {
+    return workTimeProjectionTable?.find((r) => r.years === 10) ?? null;
+  }, [workTimeProjectionTable]);
+
+  const workTimeProjectionYear30 = useMemo(() => {
+    return workTimeProjectionTable?.find((r) => r.years === 30) ?? null;
+  }, [workTimeProjectionTable]);
+
+  const workTotalSummary10 = useMemo(() => {
+    const row = workTimeProjectionYear10;
+    if (!row) return null;
+    const workEquivalentPct = row.workTotalHours > 0 ? (100 * row.investedTotalHours) / row.workTotalHours : null;
+    const roiReal = row.investedContributedMoneyReal > 0 ? (100 * (row.investedTotalMoneyReal / row.investedContributedMoneyReal - 1)) : null;
+    return { workEquivalentPct, roiReal };
+  }, [workTimeProjectionYear10]);
+
+  const workTotalSummary30 = useMemo(() => {
+    const row = workTimeProjectionYear30;
+    if (!row) return null;
+    const workEquivalentPct = row.workTotalHours > 0 ? (100 * row.investedTotalHours) / row.workTotalHours : null;
+    const roiReal = row.investedContributedMoneyReal > 0 ? (100 * (row.investedTotalMoneyReal / row.investedContributedMoneyReal - 1)) : null;
+    return { workEquivalentPct, roiReal };
+  }, [workTimeProjectionYear30]);
 
   const workThisYear1PctOfWorkYear = useMemo(() => {
     const hoursThisYear = workTimeProjectionYear1?.workThisYearHours;
@@ -1556,6 +1592,52 @@ const MoneyPerspectivePage: React.FC = () => {
 
             <div
               style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
+                gap: 8,
+                alignItems: "baseline",
+                fontSize: 13,
+              }}
+            >
+              <div />
+              <div style={{ fontWeight: 800, textAlign: "right" }}>10 years</div>
+              <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
+
+              <div style={{ fontWeight: 800 }}>Work (total)</div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>
+                {workTimeProjectionYear10 ? formatHoursAsYmd(workTimeProjectionYear10.workTotalHours, 1, useWorkDaysInYmd) : "—"}
+              </div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>
+                {workTimeProjectionYear30 ? formatHoursAsYmd(workTimeProjectionYear30.workTotalHours, 1, useWorkDaysInYmd) : "—"}
+              </div>
+
+              <div style={{ fontWeight: 800 }}>If invested (total)</div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>
+                {workTimeProjectionYear10 ? formatHoursAsYmd(workTimeProjectionYear10.investedTotalHours, 1, useWorkDaysInYmd) : "—"}
+              </div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>
+                {workTimeProjectionYear30 ? formatHoursAsYmd(workTimeProjectionYear30.investedTotalHours, 1, useWorkDaysInYmd) : "—"}
+              </div>
+
+              <div />
+              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                Work-equivalent %: {workTotalSummary10?.workEquivalentPct == null ? "—" : `${formatNumber(workTotalSummary10.workEquivalentPct, 1)}%`}
+              </div>
+              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                Work-equivalent %: {workTotalSummary30?.workEquivalentPct == null ? "—" : `${formatNumber(workTotalSummary30.workEquivalentPct, 1)}%`}
+              </div>
+
+              <div />
+              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                ROI (real): {workTotalSummary10?.roiReal == null ? "—" : `${formatNumber(workTotalSummary10.roiReal, 1)}%`}
+              </div>
+              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                ROI (real): {workTotalSummary30?.roiReal == null ? "—" : `${formatNumber(workTotalSummary30.roiReal, 1)}%`}
+              </div>
+            </div>
+
+            <div
+              style={{
                 borderTop: "1px solid var(--fc-subtle-border)",
                 paddingTop: 10,
               }}
@@ -1576,8 +1658,8 @@ const MoneyPerspectivePage: React.FC = () => {
                 aria-label={workTimeProjectionOpen ? "Collapse work projection" : "Expand work projection"}
               >
                 {workTimeProjectionOpen
-                  ? "Work Projection of Repetitive Expenses ▾"
-                  : "Work Projection of Repetitive Expenses ▸"}
+                  ? "Work Projection of Recurring Expenses ▾"
+                  : "Work Projection of Recurring Expenses ▸"}
               </button>
 
               {workTimeProjectionOpen ? (
