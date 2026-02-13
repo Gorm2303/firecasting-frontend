@@ -655,6 +655,10 @@ const MoneyPerspectivePage: React.FC = () => {
       .reduce((sum, it) => sum + purchaseYearlyEquivalent(it.amount, it.type), 0);
   }, [itemsWithAmount]);
 
+  const valueThisYearExpenseTotal = useMemo(() => {
+    return oneTimeExpenseTotal + recurringYearlyExpenseTotal;
+  }, [oneTimeExpenseTotal, recurringYearlyExpenseTotal]);
+
   const oneTimeItemCount = useMemo(() => {
     return itemsWithAmount.filter((it) => it.type === "oneTime").length;
   }, [itemsWithAmount]);
@@ -1180,6 +1184,10 @@ const MoneyPerspectivePage: React.FC = () => {
     return futureValueThisYearRows.find((r) => r.years === 1) ?? null;
   }, [futureValueThisYearRows]);
 
+  const futureValueProjectionYear20 = useMemo(() => {
+    return futureValueThisYearRows.find((r) => r.years === 20) ?? null;
+  }, [futureValueThisYearRows]);
+
   const futureValueProjectionYear2 = useMemo(() => {
     return futureValueThisYearRows.find((r) => r.years === 2) ?? null;
   }, [futureValueThisYearRows]);
@@ -1615,7 +1623,7 @@ const MoneyPerspectivePage: React.FC = () => {
               <div style={perspectivesHeaderRowStyle}>
                 <div style={perspectivesTitleStyle}>Value</div>
                 <div style={perspectivesBigValueStyle}>
-                  {formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)}
+                  {formatCurrencyNoDecimals(valueThisYearExpenseTotal, displayCurrency)}
                 </div>
               </div>
 
@@ -1624,8 +1632,8 @@ const MoneyPerspectivePage: React.FC = () => {
                   <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
                     <div>Real (20 years)</div>
                     <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {workTimeProjectionYear20?.investedTotalMoneyReal != null
-                        ? formatCurrencyNoDecimals(workTimeProjectionYear20.investedTotalMoneyReal, displayCurrency)
+                      {futureValueProjectionYear20?.totalReal != null
+                        ? formatCurrencyNoDecimals(futureValueProjectionYear20.totalReal, displayCurrency)
                         : "—"}
                     </div>
                   </div>
@@ -1633,14 +1641,8 @@ const MoneyPerspectivePage: React.FC = () => {
                   <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
                     <div>Runway (20 years)</div>
                     <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {dailyCoreExpense != null && workTimeProjectionYear20?.investedTotalMoneyReal != null
-                        ? (() => {
-                            const runwayDays = equivalentCoreExpenseDaysInYearN(
-                              workTimeProjectionYear20.investedTotalMoneyReal,
-                              dailyCoreExpense,
-                            );
-                            return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
-                          })()
+                      {futureValueProjectionYear20?.totalRunwayDays != null
+                        ? formatRunwayDmy(futureValueProjectionYear20.totalRunwayDays, 1)
                         : "—"}
                     </div>
                   </div>
@@ -1649,9 +1651,9 @@ const MoneyPerspectivePage: React.FC = () => {
                     <div>Real value multiple</div>
                     <div>
                       {(() => {
-                        if (!(recurringYearlyExpenseTotal > 0)) return "—";
-                        if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
-                        const multiple = workTimeProjectionYear20.investedTotalMoneyReal / recurringYearlyExpenseTotal;
+                        if (!(valueThisYearExpenseTotal > 0)) return "—";
+                        if (futureValueProjectionYear20?.totalReal == null) return "—";
+                        const multiple = futureValueProjectionYear20.totalReal / valueThisYearExpenseTotal;
                         return Number.isFinite(multiple)
                           ? `${formatNumber(multiple, 1)}× yearly Value`
                           : "—";
@@ -1663,12 +1665,7 @@ const MoneyPerspectivePage: React.FC = () => {
                     <div>Runway multiple</div>
                     <div>
                       {(() => {
-                        if (dailyCoreExpense == null) return "—";
-                        if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
-                        const runwayDays = equivalentCoreExpenseDaysInYearN(
-                          workTimeProjectionYear20.investedTotalMoneyReal,
-                          dailyCoreExpense,
-                        );
+                        const runwayDays = futureValueProjectionYear20?.totalRunwayDays;
                         if (runwayDays == null) return "—";
                         const runwayYears = runwayDays / 365;
                         const multiple = runwayYears / 20;
