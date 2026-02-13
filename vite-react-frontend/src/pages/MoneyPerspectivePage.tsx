@@ -1658,8 +1658,8 @@ const MoneyPerspectivePage: React.FC = () => {
                 aria-label={workTimeProjectionOpen ? "Collapse work projection" : "Expand work projection"}
               >
                 {workTimeProjectionOpen
-                  ? "Work Projection of Recurring Expenses ▾"
-                  : "Work Projection of Recurring Expenses ▸"}
+                  ? "Future Work Projection ▾"
+                  : "Future Work Projection ▸"}
               </button>
 
               {workTimeProjectionOpen ? (
@@ -2189,8 +2189,8 @@ const MoneyPerspectivePage: React.FC = () => {
                 aria-label={futureValueProjectionOpen ? "Collapse value projection" : "Expand value projection"}
               >
                 {futureValueProjectionOpen
-                  ? "Value Projection of All Expenses ▾"
-                  : "Value Projection of All Expenses ▸"}
+                  ? "Future Value Projection ▾"
+                  : "Future Value Projection ▸"}
               </button>
 
               {futureValueProjectionOpen ? (
