@@ -1599,9 +1599,9 @@ const MoneyPerspectivePage: React.FC = () => {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
-                  gap: 8,
+                  gap: 10,
                   alignItems: "baseline",
-                  fontSize: 13,
+                  fontSize: 14,
                 }}
               >
                 <div />
@@ -1609,7 +1609,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
 
                 <div style={{ fontWeight: 800 }}>Work (total)</div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear10
                     ? formatHoursAsYmd(
                         workTimeProjectionYear10.workTotalHours,
@@ -1618,7 +1618,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       )
                     : "—"}
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear30
                     ? formatHoursAsYmd(
                         workTimeProjectionYear30.workTotalHours,
@@ -1629,7 +1629,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 </div>
 
                 <div style={{ fontWeight: 800 }}>If invested (total)</div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear10
                     ? formatHoursAsYmd(
                         workTimeProjectionYear10.investedTotalHours,
@@ -1638,7 +1638,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       )
                     : "—"}
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear30
                     ? formatHoursAsYmd(
                         workTimeProjectionYear30.investedTotalHours,
@@ -1649,13 +1649,13 @@ const MoneyPerspectivePage: React.FC = () => {
                 </div>
 
                 <div />
-                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   Work-equivalent %:{" "}
                   {workTotalSummary10?.workEquivalentPct == null
                     ? "—"
                     : `${formatNumber(workTotalSummary10.workEquivalentPct, 1)}%`}
                 </div>
-                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   Work-equivalent %:{" "}
                   {workTotalSummary30?.workEquivalentPct == null
                     ? "—"
@@ -1663,13 +1663,13 @@ const MoneyPerspectivePage: React.FC = () => {
                 </div>
 
                 <div />
-                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   ROI (real):{" "}
                   {workTotalSummary10?.roiReal == null
                     ? "—"
                     : `${formatNumber(workTotalSummary10.roiReal, 1)}%`}
                 </div>
-                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   ROI (real):{" "}
                   {workTotalSummary30?.roiReal == null
                     ? "—"
@@ -1681,9 +1681,9 @@ const MoneyPerspectivePage: React.FC = () => {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
-                  gap: 8,
+                  gap: 10,
                   alignItems: "baseline",
-                  fontSize: 13,
+                  fontSize: 14,
                 }}
               >
                 <div />
@@ -1691,7 +1691,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
 
                 <div style={{ fontWeight: 800 }}>Real (total)</div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear10?.investedTotalMoneyReal != null
                     ? formatCurrencyNoDecimals(
                         workTimeProjectionYear10.investedTotalMoneyReal,
@@ -1699,7 +1699,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       )
                     : "—"}
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {workTimeProjectionYear30?.investedTotalMoneyReal != null
                     ? formatCurrencyNoDecimals(
                         workTimeProjectionYear30.investedTotalMoneyReal,
@@ -1709,7 +1709,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 </div>
 
                 <div style={{ fontWeight: 800 }}>Runway (total)</div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {dailyCoreExpense != null && workTimeProjectionYear10?.investedTotalMoneyReal != null
                     ? (() => {
                         const runwayDays = equivalentCoreExpenseDaysInYearN(
@@ -1720,7 +1720,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       })()
                     : "—"}
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                <div style={{ textAlign: "right", fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                   {dailyCoreExpense != null && workTimeProjectionYear30?.investedTotalMoneyReal != null
                     ? (() => {
                         const runwayDays = equivalentCoreExpenseDaysInYearN(
@@ -1730,6 +1730,58 @@ const MoneyPerspectivePage: React.FC = () => {
                         return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
                       })()
                     : "—"}
+                </div>
+
+                <div />
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  {(() => {
+                    if (dailyCoreExpense == null) return "Runway multiple: —";
+                    if (workTimeProjectionYear10?.investedTotalMoneyReal == null) return "Runway multiple: —";
+                    const runwayDays = equivalentCoreExpenseDaysInYearN(
+                      workTimeProjectionYear10.investedTotalMoneyReal,
+                      dailyCoreExpense,
+                    );
+                    if (runwayDays == null) return "Runway multiple: —";
+                    const runwayYears = runwayDays / 365;
+                    const multiple = runwayYears / 10;
+                    return `Runway multiple: ${formatNumber(multiple, 2)}×`;
+                  })()}
+                </div>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  {(() => {
+                    if (dailyCoreExpense == null) return "Runway multiple: —";
+                    if (workTimeProjectionYear30?.investedTotalMoneyReal == null) return "Runway multiple: —";
+                    const runwayDays = equivalentCoreExpenseDaysInYearN(
+                      workTimeProjectionYear30.investedTotalMoneyReal,
+                      dailyCoreExpense,
+                    );
+                    if (runwayDays == null) return "Runway multiple: —";
+                    const runwayYears = runwayDays / 365;
+                    const multiple = runwayYears / 30;
+                    return `Runway multiple: ${formatNumber(multiple, 2)}×`;
+                  })()}
+                </div>
+
+                <div />
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  {(() => {
+                    if (!(recurringYearlyExpenseTotal > 0)) return "Real value multiple: —";
+                    if (workTimeProjectionYear10?.investedTotalMoneyReal == null) return "Real value multiple: —";
+                    const multiple = workTimeProjectionYear10.investedTotalMoneyReal / recurringYearlyExpenseTotal;
+                    return Number.isFinite(multiple)
+                      ? `Real value multiple: ${formatNumber(multiple, 1)}× yearly Value`
+                      : "Real value multiple: —";
+                  })()}
+                </div>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  {(() => {
+                    if (!(recurringYearlyExpenseTotal > 0)) return "Real value multiple: —";
+                    if (workTimeProjectionYear30?.investedTotalMoneyReal == null) return "Real value multiple: —";
+                    const multiple = workTimeProjectionYear30.investedTotalMoneyReal / recurringYearlyExpenseTotal;
+                    return Number.isFinite(multiple)
+                      ? `Real value multiple: ${formatNumber(multiple, 1)}× yearly Value`
+                      : "Real value multiple: —";
+                  })()}
                 </div>
               </div>
             </div>
