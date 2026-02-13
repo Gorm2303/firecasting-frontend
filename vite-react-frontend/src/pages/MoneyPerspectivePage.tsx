@@ -65,6 +65,43 @@ const subtleTextStyle: React.CSSProperties = {
   color: "var(--fc-card-muted)",
 };
 
+// Match the Salary Taxator "Net salary" summary-card pattern.
+const perspectivesCardStyle: React.CSSProperties = {
+  border: "1px solid var(--fc-card-border)",
+  background: "var(--fc-card-bg)",
+  color: "var(--fc-card-text)",
+  padding: 14,
+  borderRadius: 4,
+  display: "grid",
+  gap: 10,
+};
+
+const perspectivesHeaderRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "baseline",
+};
+
+const perspectivesTitleStyle: React.CSSProperties = {
+  fontWeight: 700,
+  fontSize: 26,
+};
+
+const perspectivesBigValueStyle: React.CSSProperties = {
+  fontWeight: 800,
+  fontSize: 32,
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+  textAlign: "right",
+};
+
+const perspectivesLineRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
 const assumptionsDetailsStyle: React.CSSProperties = {
   marginTop: 14,
   border: "1px solid var(--fc-subtle-border)",
@@ -1494,212 +1531,148 @@ const MoneyPerspectivePage: React.FC = () => {
           <div style={{ fontWeight: 900, fontSize: 22 }}>Perspectives</div>
           <div style={{ opacity: 0.75, margin: "2px 0", fontSize: 13, lineHeight: 1 }}>What will you do with the best hours and the best days of the rest of your life?</div>
           <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Once</div>
+            <div style={perspectivesCardStyle}>
+              <div style={perspectivesHeaderRowStyle}>
+                <div style={perspectivesTitleStyle}>Once</div>
                 {effectiveHourlyRate == null ? (
-                  <div style={subtleTextStyle}>Missing</div>
+                  <div style={{ ...perspectivesBigValueStyle, ...subtleTextStyle }}>Missing</div>
                 ) : (
-                  <div style={{ fontWeight: 900, fontSize: 22 }}>
+                  <div style={perspectivesBigValueStyle}>
                     {formatHoursAsYmd(results.workHrs ?? 0, 1, useWorkDaysInYmd)}
                   </div>
                 )}
               </div>
               {effectiveHourlyRate == null ? (
-                <div style={subtleTextStyle}>
-                  Set net salary to compute work.
-                </div>
+                <div style={subtleTextStyle}>Set net salary to compute work.</div>
               ) : null}
             </div>
 
-            <div style={{ display: "grid", gap: 8 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Work</div>
+            <div style={perspectivesCardStyle}>
+              <div style={perspectivesHeaderRowStyle}>
+                <div style={perspectivesTitleStyle}>Work</div>
                 {effectiveHourlyRate == null ? (
-                  <div style={subtleTextStyle}>Missing</div>
+                  <div style={{ ...perspectivesBigValueStyle, ...subtleTextStyle }}>Missing</div>
                 ) : (
-                  <div style={{ fontWeight: 900, fontSize: 22 }}>
-                    {formatHoursAsYmd(
-                      repetitiveWorkHoursPerYear ?? 0,
-                      1,
-                      useWorkDaysInYmd,
-                    )}
-                    <span style={{ ...subtleTextStyle, fontWeight: 800, fontSize: 13 }}>
-                      {" "}/ year
-                    </span>
+                  <div style={perspectivesBigValueStyle}>
+                    {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, useWorkDaysInYmd)}
                   </div>
                 )}
               </div>
+
               {effectiveHourlyRate == null ? (
-                <div style={subtleTextStyle}>
-                  Set net salary to compute work.
-                </div>
+                <div style={subtleTextStyle}>Set net salary to compute work.</div>
               ) : (
-                <div
-                  style={{
-                    ...subtleTextStyle,
-                    fontSize: 12,
-                    justifyItems: "end",
-                    textAlign: "right",
-                  }}
-                >
-                  <div>
+                <>
+                  <div style={{ opacity: 0.75, textAlign: "right" }}>per year</div>
+                  <div style={{ ...subtleTextStyle, fontSize: 12, textAlign: "right" }}>
                     {workThisYear1PctOfWorkYear == null
                       ? "—"
                       : `${formatNumber(workThisYear1PctOfWorkYear, 0)}% of work year`}
                   </div>
-                </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                      <div>Work (20 years)</div>
+                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                        {workTimeProjectionYear20
+                          ? formatHoursAsYmd(workTimeProjectionYear20.workTotalHours, 1, useWorkDaysInYmd)
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                      <div>If invested (20 years)</div>
+                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                        {workTimeProjectionYear20
+                          ? formatHoursAsYmd(workTimeProjectionYear20.investedTotalHours, 1, useWorkDaysInYmd)
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                      <div>Real (20 years)</div>
+                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                        {workTimeProjectionYear20?.investedTotalMoneyReal != null
+                          ? formatCurrencyNoDecimals(workTimeProjectionYear20.investedTotalMoneyReal, displayCurrency)
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                      <div>Runway (20 years)</div>
+                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                        {dailyCoreExpense != null && workTimeProjectionYear20?.investedTotalMoneyReal != null
+                          ? (() => {
+                              const runwayDays = equivalentCoreExpenseDaysInYearN(
+                                workTimeProjectionYear20.investedTotalMoneyReal,
+                                dailyCoreExpense,
+                              );
+                              return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
+                            })()
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
+                      <div>Work-equivalent %</div>
+                      <div>
+                        {workTotalSummary20?.workEquivalentPct == null
+                          ? "—"
+                          : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}%`}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
+                      <div>ROI (real)</div>
+                      <div>
+                        {workTotalSummary20?.roiReal == null
+                          ? "—"
+                          : `${formatNumber(workTotalSummary20.roiReal, 1)}%`}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
+                      <div>Real value multiple</div>
+                      <div>
+                        {(() => {
+                          if (!(recurringYearlyExpenseTotal > 0)) return "—";
+                          if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
+                          const multiple = workTimeProjectionYear20.investedTotalMoneyReal / recurringYearlyExpenseTotal;
+                          return Number.isFinite(multiple)
+                            ? `${formatNumber(multiple, 1)}× yearly Value`
+                            : "—";
+                        })()}
+                      </div>
+                    </div>
+
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.7 }}>
+                      <div>Runway multiple</div>
+                      <div>
+                        {(() => {
+                          if (dailyCoreExpense == null) return "—";
+                          if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
+                          const runwayDays = equivalentCoreExpenseDaysInYearN(
+                            workTimeProjectionYear20.investedTotalMoneyReal,
+                            dailyCoreExpense,
+                          );
+                          if (runwayDays == null) return "—";
+                          const runwayYears = runwayDays / 365;
+                          const multiple = runwayYears / 20;
+                          return `${formatNumber(multiple, 2)}×`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
-            <div style={{ display: "grid", gap: 8 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Value</div>
-                <div style={{ fontWeight: 900, fontSize: 22 }}>
+            <div style={perspectivesCardStyle}>
+              <div style={perspectivesHeaderRowStyle}>
+                <div style={perspectivesTitleStyle}>Value</div>
+                <div style={perspectivesBigValueStyle}>
                   {formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)}
                 </div>
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Work (20 years)</div>
-                <div style={{ textAlign: "right", fontWeight: 900, fontSize: 22, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                  {workTimeProjectionYear20
-                    ? formatHoursAsYmd(
-                        workTimeProjectionYear20.workTotalHours,
-                        1,
-                        useWorkDaysInYmd,
-                      )
-                    : "—"}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>If invested (20 years)</div>
-                <div style={{ textAlign: "right", fontWeight: 900, fontSize: 22, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                  {workTimeProjectionYear20
-                    ? formatHoursAsYmd(
-                        workTimeProjectionYear20.investedTotalHours,
-                        1,
-                        useWorkDaysInYmd,
-                      )
-                    : "—"}
-                </div>
-              </div>
-
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                Work-equivalent %:{" "}
-                {workTotalSummary20?.workEquivalentPct == null
-                  ? "—"
-                  : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}%`}
-              </div>
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                ROI (real):{" "}
-                {workTotalSummary20?.roiReal == null
-                  ? "—"
-                  : `${formatNumber(workTotalSummary20.roiReal, 1)}%`}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Real (20 years)</div>
-                <div style={{ textAlign: "right", fontWeight: 900, fontSize: 22, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                  {workTimeProjectionYear20?.investedTotalMoneyReal != null
-                    ? formatCurrencyNoDecimals(
-                        workTimeProjectionYear20.investedTotalMoneyReal,
-                        displayCurrency,
-                      )
-                    : "—"}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>Runway (20 years)</div>
-                <div style={{ textAlign: "right", fontWeight: 900, fontSize: 22, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                  {dailyCoreExpense != null && workTimeProjectionYear20?.investedTotalMoneyReal != null
-                    ? (() => {
-                        const runwayDays = equivalentCoreExpenseDaysInYearN(
-                          workTimeProjectionYear20.investedTotalMoneyReal,
-                          dailyCoreExpense,
-                        );
-                        return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
-                      })()
-                    : "—"}
-                </div>
-              </div>
-
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                {(() => {
-                  if (!(recurringYearlyExpenseTotal > 0)) return "Real value multiple: —";
-                  if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "Real value multiple: —";
-                  const multiple = workTimeProjectionYear20.investedTotalMoneyReal / recurringYearlyExpenseTotal;
-                  return Number.isFinite(multiple)
-                    ? `Real value multiple: ${formatNumber(multiple, 1)}× yearly Value`
-                    : "Real value multiple: —";
-                })()}
-              </div>
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                {(() => {
-                  if (dailyCoreExpense == null) return "Runway multiple: —";
-                  if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "Runway multiple: —";
-                  const runwayDays = equivalentCoreExpenseDaysInYearN(
-                    workTimeProjectionYear20.investedTotalMoneyReal,
-                    dailyCoreExpense,
-                  );
-                  if (runwayDays == null) return "Runway multiple: —";
-                  const runwayYears = runwayDays / 365;
-                  const multiple = runwayYears / 20;
-                  return `Runway multiple: ${formatNumber(multiple, 2)}×`;
-                })()}
               </div>
             </div>
 
