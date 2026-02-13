@@ -1466,12 +1466,12 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>One Time Expenses to Work</div>
+                <div style={{ fontWeight: 800 }}>Once</div>
                 {effectiveHourlyRate == null ? (
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
                   <div style={{ fontWeight: 900, fontSize: 22 }}>
-                    {formatNumber(results.workHrs ?? 0, 2)} hours
+                    {formatHoursAsYmd(results.workHrs ?? 0, 1, useWorkDaysInYmd)}
                   </div>
                 )}
               </div>
