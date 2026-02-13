@@ -1545,7 +1545,14 @@ const MoneyPerspectivePage: React.FC = () => {
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
                   <div style={{ fontWeight: 900, fontSize: 22 }}>
-                    {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, useWorkDaysInYmd)}
+                    {formatHoursAsYmd(
+                      repetitiveWorkHoursPerYear ?? 0,
+                      1,
+                      useWorkDaysInYmd,
+                    )}
+                    <span style={{ ...subtleTextStyle, fontWeight: 800, fontSize: 13 }}>
+                      {" "}/ year
+                    </span>
                   </div>
                 )}
               </div>
@@ -1558,17 +1565,16 @@ const MoneyPerspectivePage: React.FC = () => {
                   style={{
                     ...subtleTextStyle,
                     fontSize: 12,
-                    display: "grid",
-                    gap: 2,
                     justifyItems: "end",
                     textAlign: "right",
                   }}
                 >
                   <div>
                     {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, true)} working days
-                  </div>
-                  <div>
-                    {workThisYear1PctOfWorkYear == null ? "—" : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
+                    {" "}or{" "}
+                    {workThisYear1PctOfWorkYear == null
+                      ? "—"
+                      : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
                   </div>
                 </div>
               )}
@@ -1590,49 +1596,143 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
-                gap: 8,
-                alignItems: "baseline",
-                fontSize: 13,
-              }}
-            >
-              <div />
-              <div style={{ fontWeight: 800, textAlign: "right" }}>10 years</div>
-              <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
+                  gap: 8,
+                  alignItems: "baseline",
+                  fontSize: 13,
+                }}
+              >
+                <div />
+                <div style={{ fontWeight: 800, textAlign: "right" }}>10 years</div>
+                <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
 
-              <div style={{ fontWeight: 800 }}>Work (total)</div>
-              <div style={{ textAlign: "right", fontWeight: 700 }}>
-                {workTimeProjectionYear10 ? formatHoursAsYmd(workTimeProjectionYear10.workTotalHours, 1, useWorkDaysInYmd) : "—"}
-              </div>
-              <div style={{ textAlign: "right", fontWeight: 700 }}>
-                {workTimeProjectionYear30 ? formatHoursAsYmd(workTimeProjectionYear30.workTotalHours, 1, useWorkDaysInYmd) : "—"}
+                <div style={{ fontWeight: 800 }}>Work (total)</div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear10
+                    ? formatHoursAsYmd(
+                        workTimeProjectionYear10.workTotalHours,
+                        1,
+                        useWorkDaysInYmd,
+                      )
+                    : "—"}
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear30
+                    ? formatHoursAsYmd(
+                        workTimeProjectionYear30.workTotalHours,
+                        1,
+                        useWorkDaysInYmd,
+                      )
+                    : "—"}
+                </div>
+
+                <div style={{ fontWeight: 800 }}>If invested (total)</div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear10
+                    ? formatHoursAsYmd(
+                        workTimeProjectionYear10.investedTotalHours,
+                        1,
+                        useWorkDaysInYmd,
+                      )
+                    : "—"}
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear30
+                    ? formatHoursAsYmd(
+                        workTimeProjectionYear30.investedTotalHours,
+                        1,
+                        useWorkDaysInYmd,
+                      )
+                    : "—"}
+                </div>
+
+                <div />
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                  Work-equivalent %:{" "}
+                  {workTotalSummary10?.workEquivalentPct == null
+                    ? "—"
+                    : `${formatNumber(workTotalSummary10.workEquivalentPct, 1)}%`}
+                </div>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                  Work-equivalent %:{" "}
+                  {workTotalSummary30?.workEquivalentPct == null
+                    ? "—"
+                    : `${formatNumber(workTotalSummary30.workEquivalentPct, 1)}%`}
+                </div>
+
+                <div />
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                  ROI (real):{" "}
+                  {workTotalSummary10?.roiReal == null
+                    ? "—"
+                    : `${formatNumber(workTotalSummary10.roiReal, 1)}%`}
+                </div>
+                <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
+                  ROI (real):{" "}
+                  {workTotalSummary30?.roiReal == null
+                    ? "—"
+                    : `${formatNumber(workTotalSummary30.roiReal, 1)}%`}
+                </div>
               </div>
 
-              <div style={{ fontWeight: 800 }}>If invested (total)</div>
-              <div style={{ textAlign: "right", fontWeight: 700 }}>
-                {workTimeProjectionYear10 ? formatHoursAsYmd(workTimeProjectionYear10.investedTotalHours, 1, useWorkDaysInYmd) : "—"}
-              </div>
-              <div style={{ textAlign: "right", fontWeight: 700 }}>
-                {workTimeProjectionYear30 ? formatHoursAsYmd(workTimeProjectionYear30.investedTotalHours, 1, useWorkDaysInYmd) : "—"}
-              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) 1fr 1fr",
+                  gap: 8,
+                  alignItems: "baseline",
+                  fontSize: 13,
+                }}
+              >
+                <div />
+                <div style={{ fontWeight: 800, textAlign: "right" }}>10 years</div>
+                <div style={{ fontWeight: 800, textAlign: "right" }}>30 years</div>
 
-              <div />
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
-                Work-equivalent %: {workTotalSummary10?.workEquivalentPct == null ? "—" : `${formatNumber(workTotalSummary10.workEquivalentPct, 1)}%`}
-              </div>
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
-                Work-equivalent %: {workTotalSummary30?.workEquivalentPct == null ? "—" : `${formatNumber(workTotalSummary30.workEquivalentPct, 1)}%`}
-              </div>
+                <div style={{ fontWeight: 800 }}>Real (total)</div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear10?.investedTotalMoneyReal != null
+                    ? formatCurrencyNoDecimals(
+                        workTimeProjectionYear10.investedTotalMoneyReal,
+                        displayCurrency,
+                      )
+                    : "—"}
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {workTimeProjectionYear30?.investedTotalMoneyReal != null
+                    ? formatCurrencyNoDecimals(
+                        workTimeProjectionYear30.investedTotalMoneyReal,
+                        displayCurrency,
+                      )
+                    : "—"}
+                </div>
 
-              <div />
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
-                ROI (real): {workTotalSummary10?.roiReal == null ? "—" : `${formatNumber(workTotalSummary10.roiReal, 1)}%`}
-              </div>
-              <div style={{ textAlign: "right", ...subtleTextStyle, fontSize: 12 }}>
-                ROI (real): {workTotalSummary30?.roiReal == null ? "—" : `${formatNumber(workTotalSummary30.roiReal, 1)}%`}
+                <div style={{ fontWeight: 800 }}>Runway (total)</div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {dailyCoreExpense != null && workTimeProjectionYear10?.investedTotalMoneyReal != null
+                    ? (() => {
+                        const runwayDays = equivalentCoreExpenseDaysInYearN(
+                          workTimeProjectionYear10.investedTotalMoneyReal,
+                          dailyCoreExpense,
+                        );
+                        return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
+                      })()
+                    : "—"}
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 700 }}>
+                  {dailyCoreExpense != null && workTimeProjectionYear30?.investedTotalMoneyReal != null
+                    ? (() => {
+                        const runwayDays = equivalentCoreExpenseDaysInYearN(
+                          workTimeProjectionYear30.investedTotalMoneyReal,
+                          dailyCoreExpense,
+                        );
+                        return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
+                      })()
+                    : "—"}
+                </div>
               </div>
             </div>
 
