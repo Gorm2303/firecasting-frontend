@@ -1540,27 +1540,8 @@ const MoneyPerspectivePage: React.FC = () => {
               {workTimeProjectionOpen ? (
                 <>
                   <div style={{ ...subtleTextStyle, fontSize: 12, marginTop: 4 }}>
-                    Values are shown as Y/M/D (1d = 8h, 1m = 30.417d, 1y = 12m).
+                    Values are shown as Y/M/D (see Assumptions → Calendar).
                   </div>
-
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      marginTop: 8,
-                      ...subtleTextStyle,
-                      fontSize: 12,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={useWorkDaysInYmd}
-                      onChange={(e) => setUseWorkDaysInYmd(e.target.checked)}
-                      aria-label="Use only working days"
-                    />
-                    Use only working days (1d = 8h, 1m = 20d, 1y = 12m)
-                  </label>
 
                   <div style={{ overflowX: "auto", marginTop: 8 }}>
                     <table
@@ -2773,6 +2754,50 @@ const MoneyPerspectivePage: React.FC = () => {
                     <span aria-hidden style={inputGroupUnitStyle}>
                       %
                     </span>
+                  </div>
+
+                  <div style={labelStyle}>Calendar</div>
+                  <div style={{ gridColumn: "2 / span 2", display: "grid", gap: 6 }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        ...subtleTextStyle,
+                        fontSize: 12,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="moneyPerspectiveCalendarMode"
+                        checked={!useWorkDaysInYmd}
+                        onChange={() => setUseWorkDaysInYmd(false)}
+                        aria-label="Use calendar year for Y/M/D"
+                      />
+                      <span>
+                        Years/Months/Days: 1y = 12m = 365d = 2920h, 1m = 30.417d, 1d = 8h work.
+                      </span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        ...subtleTextStyle,
+                        fontSize: 12,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="moneyPerspectiveCalendarMode"
+                        checked={useWorkDaysInYmd}
+                        onChange={() => setUseWorkDaysInYmd(true)}
+                        aria-label="Use work calendar for Y/M/D"
+                      />
+                      <span>
+                        Use work calendar: 1y = 12m = 240d = 1920h, 1m = 20d, 1d = 8h work.
+                      </span>
+                    </label>
                   </div>
 
                   <div style={labelStyle}>Core expenses</div>
