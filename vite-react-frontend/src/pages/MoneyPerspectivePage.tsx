@@ -1602,7 +1602,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       <div>
                         {workTotalSummary20?.workEquivalentPct == null
                           ? "—"
-                          : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}%`}
+                          : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}% of Work (20y)`}
                       </div>
                     </div>
 
@@ -1611,7 +1611,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       <div>
                         {workTotalSummary20?.roiReal == null
                           ? "—"
-                          : `${formatNumber(workTotalSummary20.roiReal, 1)}%`}
+                          : `${formatNumber(workTotalSummary20.roiReal, 1)}% on contributions`}
                       </div>
                     </div>
                   </div>
@@ -1655,7 +1655,7 @@ const MoneyPerspectivePage: React.FC = () => {
                         if (futureValueProjectionYear20?.totalReal == null) return "—";
                         const multiple = futureValueProjectionYear20.totalReal / valueThisYearExpenseTotal;
                         return Number.isFinite(multiple)
-                          ? `${formatNumber(multiple, 1)}× yearly Value`
+                          ? `${formatNumber(multiple, 1)}× Value (this year)`
                           : "—";
                       })()}
                     </div>
@@ -1669,7 +1669,7 @@ const MoneyPerspectivePage: React.FC = () => {
                         if (runwayDays == null) return "—";
                         const runwayYears = runwayDays / 365;
                         const multiple = runwayYears / 20;
-                        return `${formatNumber(multiple, 2)}×`;
+                        return Number.isFinite(multiple) ? `${formatNumber(multiple, 2)}× 20y` : "—";
                       })()}
                     </div>
                   </div>
