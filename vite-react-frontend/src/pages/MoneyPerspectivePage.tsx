@@ -13,7 +13,6 @@ import {
   DAYS_PER_MONTH,
   applySimpleFeeDragToAnnualReturn,
   breakEvenMonths,
-  coreExpenseDays,
   equivalentCoreExpenseDaysInYearN,
   futureValueReal,
   monthlyBenefitMoneyFromHours,
@@ -63,6 +62,31 @@ const cardStyle: React.CSSProperties = {
 
 const subtleTextStyle: React.CSSProperties = {
   color: "var(--fc-card-muted)",
+};
+
+const assumptionsDetailsStyle: React.CSSProperties = {
+  marginTop: 14,
+  border: "1px solid var(--fc-subtle-border)",
+  borderRadius: 6,
+  padding: 10,
+  background: "var(--fc-card-bg)",
+  color: "var(--fc-card-text)",
+};
+
+const assumptionsSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 14,
+};
+
+const breakdownMainDetailsStyle: React.CSSProperties = {
+  marginTop: 14,
+};
+
+const breakdownMainSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 16,
 };
 
 const savedModalBtn = (variant: "ghost" | "disabled"): React.CSSProperties => {
@@ -155,10 +179,10 @@ const formatNumber = (value: number, digits = 2): string => {
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
 };
 
-const formatRunwayDmy = (runwayDays: number): string => {
+const formatRunwayDmy = (runwayDays: number, dayDigits = 0): string => {
   if (!Number.isFinite(runwayDays)) return "—";
 
-  const totalDays = Math.max(0, Math.round(runwayDays));
+  const totalDays = Math.max(0, runwayDays);
   const daysPerYear = 365;
 
   let remaining = totalDays;
@@ -168,7 +192,7 @@ const formatRunwayDmy = (runwayDays: number): string => {
   let months = Math.floor(remaining / DAYS_PER_MONTH);
   remaining -= months * DAYS_PER_MONTH;
 
-  let days = Math.round(remaining);
+  let days = dayDigits > 0 ? roundTo1Decimal(remaining) : Math.round(remaining);
 
   // Guard against floating rounding nudging us over the boundary.
   const maxDaysInMonth = Math.ceil(DAYS_PER_MONTH);
@@ -184,15 +208,15 @@ const formatRunwayDmy = (runwayDays: number): string => {
   const parts: string[] = [];
   if (years > 0) parts.push(`${years}y`);
   if (months > 0 || years > 0) parts.push(`${months}m`);
-  parts.push(`${days}d`);
+  parts.push(`${days.toFixed(dayDigits)}d`);
   return parts.join(" ");
 };
 
-const formatSignedRunwayDmy = (runwayDays: number): string => {
+const formatSignedRunwayDmy = (runwayDays: number, dayDigits = 0): string => {
   if (!Number.isFinite(runwayDays)) return "—";
-  if (runwayDays === 0) return "0d";
+  if (runwayDays === 0) return `0${dayDigits > 0 ? ".0" : ""}d`;
   const sign = runwayDays < 0 ? "-" : "";
-  return sign + formatRunwayDmy(Math.abs(runwayDays));
+  return sign + formatRunwayDmy(Math.abs(runwayDays), dayDigits);
 };
 
 const formatHoursAsYmd = (
@@ -762,74 +786,77 @@ const MoneyPerspectivePage: React.FC = () => {
     return amount / hourly;
   }, [effectiveHourlyRate, recurringYearlyExpenseTotal]);
 
-  const recurringYear0FirstInstanceAmount = useMemo(() => {
-    return itemsWithAmount
-      .filter((it) => it.type !== "oneTime")
-      .reduce((sum, it) => sum + it.amount, 0);
-  }, [itemsWithAmount]);
-
   const workTimeProjectionTable = useMemo(() => {
     const hourly0 = effectiveHourlyRate;
     if (hourly0 == null) return null;
-
-    const year0Hours = hourly0 > 0 ? recurringYear0FirstInstanceAmount / hourly0 : null;
-    if (year0Hours == null) return null;
-
-    const repetitiveYearlyAmount0 = recurringYearlyExpenseTotal;
-    const baseYearlyHours0 = hourly0 > 0 ? repetitiveYearlyAmount0 / hourly0 : null;
-    if (baseYearlyHours0 == null) return null;
+    if (!(hourly0 > 0)) return null;
 
     const inflationPct = Number(settings.investing.inflationPct ?? 0);
     const payRaisePct = Number(settings.compensation.payRaisePct ?? 0);
-    const i = Number.isFinite(inflationPct) ? inflationPct / 100 : 0;
-    const r = Number.isFinite(payRaisePct) ? payRaisePct / 100 : 0;
+    const annualReturnPct = Number(netAnnualReturnPct ?? 0);
 
-    const ratio = (1 + i) / (1 + r);
-    const ratioOk = Number.isFinite(ratio) && ratio > 0;
-    if (!ratioOk) return null;
-
-    const workingHoursPerMonth = settings.compensation.workingHoursPerMonth;
-    const annualWorkCapacityHours =
-      typeof workingHoursPerMonth === "number" && Number.isFinite(workingHoursPerMonth) && workingHoursPerMonth > 0
-        ? workingHoursPerMonth * 12
-        : null;
+    const inflationRate = Number.isFinite(inflationPct) ? inflationPct / 100 : 0;
+    const payRaiseRate = Number.isFinite(payRaisePct) ? payRaisePct / 100 : 0;
+    const annualReturnRate = Number.isFinite(annualReturnPct) ? annualReturnPct / 100 : 0;
 
     const projectionYears = [...HORIZON_TABLE_YEARS, ...EXTRA_DETAIL_YEARS]
       .filter((x, idx, arr) => arr.indexOf(x) === idx)
       .filter((x) => Number.isFinite(x) && x > 0)
       .sort((a, b) => a - b);
 
-    const careerYears = projectionYears.length ? projectionYears[projectionYears.length - 1] : null;
-    const careerWorkCapacityHours =
-      annualWorkCapacityHours != null && careerYears != null ? annualWorkCapacityHours * careerYears : null;
+    const maxYear = projectionYears.length ? projectionYears[projectionYears.length - 1]! : 0;
 
-    const cumulativeHoursFromYearly = (years: number): number => {
-      if (years <= 0) return 0;
-      if (ratio === 1) return baseYearlyHours0 * years;
-      // Sum_{k=1..years} base * ratio^k
-      return (
-        baseYearlyHours0 *
-        ratio *
-        (Math.pow(ratio, years) - 1) /
-        (ratio - 1)
-      );
+    const hourlyRateInYearN = (yearN: number): number => {
+      const factor = Math.pow(1 + payRaiseRate, Math.max(0, yearN - 1));
+      return hourly0 * factor;
     };
 
-    return projectionYears.map((years) => {
-      const thisYearHours = baseYearlyHours0 * Math.pow(ratio, years);
-      const cumulativeTotalHours = year0Hours + cumulativeHoursFromYearly(years);
+    const repetitiveExpenseMoneyInYearN = (yearN: number): number => {
+      const factor = Math.pow(1 + inflationRate, Math.max(0, yearN - 1));
+      return recurringYearlyExpenseTotal * factor;
+    };
 
-      return {
-        years,
-        thisYearHours,
-        cumulativeTotalHours,
-        workPctThisYear:
-          annualWorkCapacityHours != null ? thisYearHours / annualWorkCapacityHours : null,
-        careerPctTotal:
-          careerWorkCapacityHours != null ? cumulativeTotalHours / careerWorkCapacityHours : null,
-      };
-    });
-  }, [effectiveHourlyRate, recurringYear0FirstInstanceAmount, recurringYearlyExpenseTotal, settings.compensation.payRaisePct, settings.compensation.workingHoursPerMonth, settings.investing.inflationPct]);
+    let workTotalHours = 0;
+    let portfolioMoney = 0;
+    let emitIdx = 0;
+    const rows: Array<{
+      years: number;
+      workThisYearHours: number;
+      workTotalHours: number;
+      investedThisYearHours: number;
+      investedTotalHours: number;
+    }> = [];
+
+    for (let year = 1; year <= maxYear; year += 1) {
+      const wageHourly = hourlyRateInYearN(year);
+      if (!Number.isFinite(wageHourly) || !(wageHourly > 0)) return null;
+
+      const expenseMoney = repetitiveExpenseMoneyInYearN(year);
+      const workThisYearHours = expenseMoney > 0 ? (workHours(expenseMoney, wageHourly) ?? 0) : 0;
+      workTotalHours += workThisYearHours;
+
+      const returnEarnedMoney = portfolioMoney * annualReturnRate;
+      const returnEarnedHours = returnEarnedMoney > 0 ? (workHours(returnEarnedMoney, wageHourly) ?? 0) : 0;
+      const avoidedExpenseHours = expenseMoney > 0 ? (workHours(expenseMoney, wageHourly) ?? 0) : 0;
+      const investedThisYearHours = returnEarnedHours + avoidedExpenseHours;
+
+      portfolioMoney = portfolioMoney + returnEarnedMoney + expenseMoney;
+      const investedTotalHours = portfolioMoney > 0 ? (workHours(portfolioMoney, wageHourly) ?? 0) : 0;
+
+      if (projectionYears[emitIdx] === year) {
+        rows.push({
+          years: year,
+          workThisYearHours,
+          workTotalHours,
+          investedThisYearHours,
+          investedTotalHours,
+        });
+        emitIdx += 1;
+      }
+    }
+
+    return rows;
+  }, [effectiveHourlyRate, netAnnualReturnPct, recurringYearlyExpenseTotal, settings.compensation.payRaisePct, settings.investing.inflationPct]);
 
   const horizonTable = useMemo(() => {
     const daily = dailyCoreExpense;
@@ -867,7 +894,6 @@ const MoneyPerspectivePage: React.FC = () => {
     settings.investing.annualReturnPct,
     settings.investing.feeDragPct,
     settings.investing.inflationPct,
-    year0Cost,
   ]);
 
   const monthlyBenefitMoney = useMemo(() => {
@@ -897,6 +923,7 @@ const MoneyPerspectivePage: React.FC = () => {
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [breakEvenOpen, setBreakEvenOpen] = useState(false);
   const [workTimeProjectionOpen, setWorkTimeProjectionOpen] = useState(false);
+  const [futureValueProjectionOpen, setFutureValueProjectionOpen] = useState(false);
 
   const [useWorkDaysInYmd, setUseWorkDaysInYmd] = useState(false);
   const [showNominalFv, setShowNominalFv] = useState(false);
@@ -908,7 +935,7 @@ const MoneyPerspectivePage: React.FC = () => {
       settings.investing.inflationPct >= 0;
 
     const fvNominalAtYear = (years: number): number | null => {
-      if (years === 0) return year0Cost;
+      if (years <= 0) return 0;
       return futureValueNominalTotalForItems(
         itemsWithAmount,
         settings.investing.annualReturnPct,
@@ -920,44 +947,38 @@ const MoneyPerspectivePage: React.FC = () => {
     const fvRealAtYear = (years: number): number | null => {
       const nom = fvNominalAtYear(years);
       if (nom == null) return null;
-      if (years === 0) return nom;
+      if (years <= 0) return 0;
       if (!inflationOk) return null;
       return futureValueReal(nom, settings.investing.inflationPct, years);
-    };
-
-    const runwayDaysAtYear = (years: number): number | null => {
-      if (daily == null) return null;
-      const real = fvRealAtYear(years);
-      if (real == null) return null;
-      if (years === 0) return coreExpenseDays(real, daily);
-      return equivalentCoreExpenseDaysInYearN(real, daily);
     };
 
     return horizonTable.map((r) => {
       const years = r.years;
       const totalNominal = fvNominalAtYear(years);
       const totalReal = fvRealAtYear(years);
-      const totalRunwayDays = runwayDaysAtYear(years);
+      const totalRunwayDays =
+        daily != null && totalReal != null ? equivalentCoreExpenseDaysInYearN(totalReal, daily) : null;
 
       const prevYears = years - 1;
-      const prevNominal = fvNominalAtYear(prevYears);
-      const prevReal = fvRealAtYear(prevYears);
-      const prevRunwayDays = runwayDaysAtYear(prevYears);
+      const prevNominal = prevYears > 0 ? fvNominalAtYear(prevYears) : 0;
+      const prevReal = prevYears > 0 ? fvRealAtYear(prevYears) : 0;
+
+      const nominalThisYear =
+        totalNominal != null && prevNominal != null ? totalNominal - prevNominal : null;
+      const realThisYear =
+        totalReal != null && prevReal != null ? totalReal - prevReal : null;
+      const runwayThisYearDays =
+        daily != null && realThisYear != null
+          ? equivalentCoreExpenseDaysInYearN(realThisYear, daily)
+          : null;
 
       return {
         years,
-        nominalThisYear:
-          totalNominal != null && prevNominal != null
-            ? totalNominal - prevNominal
-            : null,
+        nominalThisYear,
         totalNominal,
-        realThisYear:
-          totalReal != null && prevReal != null ? totalReal - prevReal : null,
+        realThisYear,
         totalReal,
-        runwayThisYearDays:
-          totalRunwayDays != null && prevRunwayDays != null
-            ? totalRunwayDays - prevRunwayDays
-            : null,
+        runwayThisYearDays,
         totalRunwayDays,
       };
     });
@@ -968,8 +989,23 @@ const MoneyPerspectivePage: React.FC = () => {
     settings.investing.annualReturnPct,
     settings.investing.feeDragPct,
     settings.investing.inflationPct,
-    year0Cost,
   ]);
+
+  const workTimeProjectionYear1 = useMemo(() => {
+    return workTimeProjectionTable?.find((r) => r.years === 1) ?? null;
+  }, [workTimeProjectionTable]);
+
+  const workTimeProjectionYear2 = useMemo(() => {
+    return workTimeProjectionTable?.find((r) => r.years === 2) ?? null;
+  }, [workTimeProjectionTable]);
+
+  const futureValueProjectionYear1 = useMemo(() => {
+    return futureValueThisYearRows.find((r) => r.years === 1) ?? null;
+  }, [futureValueThisYearRows]);
+
+  const futureValueProjectionYear2 = useMemo(() => {
+    return futureValueThisYearRows.find((r) => r.years === 2) ?? null;
+  }, [futureValueThisYearRows]);
 
   const [savedListsOpen, setSavedListsOpen] = useState(false);
   const [savedLists, setSavedLists] = useState<SavedExpenseList[]>(() => listSavedExpenseLists());
@@ -1316,7 +1352,7 @@ const MoneyPerspectivePage: React.FC = () => {
 
         <div style={cardStyle}>
           <div style={{ fontWeight: 900, fontSize: 22 }}>Perspectives</div>
-
+          <div style={{ opacity: 0.75, margin: "2px 0", fontSize: 13, lineHeight: 1 }}>What will you do with the best hours and the best days of the rest of your life?</div>
           <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
             <div style={{ display: "grid", gap: 8 }}>
               <div
@@ -1327,7 +1363,7 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>One Time Expenses to Work Time</div>
+                <div style={{ fontWeight: 800 }}>One Time Expenses to Work</div>
                 {effectiveHourlyRate == null ? (
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
@@ -1338,7 +1374,7 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
               {effectiveHourlyRate == null ? (
                 <div style={subtleTextStyle}>
-                  Set net salary to compute work time.
+                  Set net salary to compute work.
                 </div>
               ) : null}
             </div>
@@ -1352,7 +1388,7 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>Repetitive Expenses to Work Time</div>
+                <div style={{ fontWeight: 800 }}>Repetitive Expenses to Work</div>
                 {effectiveHourlyRate == null ? (
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
@@ -1363,7 +1399,7 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
               {effectiveHourlyRate == null ? (
                 <div style={subtleTextStyle}>
-                  Set net salary to compute work time.
+                  Set net salary to compute work.
                 </div>
               ) : null}
             </div>
@@ -1387,17 +1423,17 @@ const MoneyPerspectivePage: React.FC = () => {
                   textAlign: "left",
                 }}
                 aria-expanded={workTimeProjectionOpen}
-                aria-label={workTimeProjectionOpen ? "Collapse work time projection" : "Expand work time projection"}
+                aria-label={workTimeProjectionOpen ? "Collapse work projection" : "Expand work projection"}
               >
                 {workTimeProjectionOpen
-                  ? "Work Time Projection of Repetitive Expenses ▾"
-                  : "Work Time Projection of Repetitive Expenses ▸"}
+                  ? "Work Projection of Repetitive Expenses ▾"
+                  : "Work Projection of Repetitive Expenses ▸"}
               </button>
 
               {workTimeProjectionOpen ? (
                 <>
                   <div style={{ ...subtleTextStyle, fontSize: 12, marginTop: 4 }}>
-                    Projects work hours after inflation increases expenses and pay raise increases wage. Values are shown as Y/M/D where 1d = 8 hours.
+                    Values are shown as Y/M/D (1d = 8h, 1m = 30.417d, 1y = 12m).
                   </div>
 
                   <label
@@ -1416,7 +1452,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       onChange={(e) => setUseWorkDaysInYmd(e.target.checked)}
                       aria-label="Use only working days"
                     />
-                    Use only working days (no weekends, no holidays, 1d = 8h, 1m = 20 work days, 1y = 240 work days)
+                    Use only working days (1d = 8h, 1m = 20d, 1y = 12m)
                   </label>
 
                   <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -1445,7 +1481,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            % of Work (This year)
+                            Work (this year)
                           </th>
                           <th
                             style={{
@@ -1454,7 +1490,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Work (This year)
+                            Work (total)
                           </th>
                           <th
                             style={{
@@ -1463,7 +1499,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Career % (Total)
+                            If invested (this year)
                           </th>
                           <th
                             style={{
@@ -1472,7 +1508,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Total (Y/M/D)
+                            If invested (total)
                           </th>
                         </tr>
                       </thead>
@@ -1494,9 +1530,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 borderBottom: "1px solid var(--fc-subtle-border)",
                               }}
                             >
-                              {r.workPctThisYear != null
-                                ? `${(r.workPctThisYear * 100).toFixed(1)}%`
-                                : "—"}
+                              {formatHoursAsYmd(r.workThisYearHours, 1, useWorkDaysInYmd)}
                             </td>
                             <td
                               style={{
@@ -1505,9 +1539,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 borderBottom: "1px solid var(--fc-subtle-border)",
                               }}
                             >
-                              {r.thisYearHours != null
-                                ? formatHoursAsYmd(r.thisYearHours, 1, useWorkDaysInYmd)
-                                : "—"}
+                              {formatHoursAsYmd(r.workTotalHours, 1, useWorkDaysInYmd)}
                             </td>
                             <td
                               style={{
@@ -1516,9 +1548,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 borderBottom: "1px solid var(--fc-subtle-border)",
                               }}
                             >
-                              {r.careerPctTotal != null
-                                ? `${(r.careerPctTotal * 100).toFixed(1)}%`
-                                : "—"}
+                              {formatHoursAsYmd(r.investedThisYearHours, 1, useWorkDaysInYmd)}
                             </td>
                             <td
                               style={{
@@ -1527,9 +1557,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 borderBottom: "1px solid var(--fc-subtle-border)",
                               }}
                             >
-                              {r.cumulativeTotalHours != null
-                                ? formatHoursAsYmd(r.cumulativeTotalHours, 1, useWorkDaysInYmd)
-                                : "—"}
+                              {formatHoursAsYmd(r.investedTotalHours, 1, useWorkDaysInYmd)}
                             </td>
                           </tr>
                         ))}
@@ -1538,10 +1566,245 @@ const MoneyPerspectivePage: React.FC = () => {
 
                     {effectiveHourlyRate == null ? (
                       <div style={{ ...subtleTextStyle, marginTop: 6 }}>
-                        Set net salary to show projected work time.
+                        Set net salary to show projected work.
                       </div>
                     ) : null}
                   </div>
+
+                  <details style={breakdownMainDetailsStyle}>
+                    <summary style={breakdownMainSummaryStyle}>Breakdown + calculation</summary>
+                    <div style={{ opacity: 0.75, margin: "10px 0", fontSize: 13, lineHeight: 1.35 }}>
+                      This is the full yearly path from repetitive expenses → work, and a counterfactual “if invested” portfolio → equivalent work.
+                    </div>
+
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <colgroup>
+                        <col style={{ width: "38%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "44%" }} />
+                      </colgroup>
+                      <tbody>
+                        {(() => {
+                          const iPct = Number(settings.investing.inflationPct ?? 0);
+                          const pPct = Number(settings.compensation.payRaisePct ?? 0);
+                          const rPct = Number(netAnnualReturnPct ?? 0);
+                          const i = Number.isFinite(iPct) ? iPct / 100 : 0;
+                          const p = Number.isFinite(pPct) ? pPct / 100 : 0;
+                          const r = Number.isFinite(rPct) ? rPct / 100 : 0;
+                          const wage1 = effectiveHourlyRate;
+                          const wage2 = wage1 != null ? wage1 * (1 + p) : null;
+                          const expense1 = recurringYearlyExpenseTotal;
+                          const expense2 = expense1 * (1 + i);
+                          const portfolio1 = expense1;
+                          const return2 = portfolio1 * r;
+                          const portfolio2 = portfolio1 + return2 + expense2;
+
+                          const rows = [
+                            { label: "Inputs", value: "", note: "", milestone: true },
+                            {
+                              label: "expense_1",
+                              value: formatCurrencyNoDecimals(expense1, displayCurrency),
+                              note: "yearly sum of recurring expenses",
+                            },
+                            {
+                              label: "wage_1",
+                              value: wage1 != null ? `${formatNumber(wage1, 2)} ${displayCurrency}/h` : "—",
+                              note: "effective hourly wage (derived from net salary settings)",
+                            },
+                            {
+                              label: "inflation (i)",
+                              value: Number.isFinite(iPct) ? formatNumber(i, 4) : "—",
+                              note: "used to inflate expense each year",
+                            },
+                            {
+                              label: "pay raise (p)",
+                              value: Number.isFinite(pPct) ? formatNumber(p, 4) : "—",
+                              note: "used to grow wage each year",
+                            },
+                            {
+                              label: "net return (r)",
+                              value: Number.isFinite(rPct) ? formatNumber(r, 4) : "—",
+                              note: "annual return minus fee drag",
+                            },
+
+                            { label: "Year 1", value: "", note: "", milestone: true },
+                            {
+                              label: "Work (this year)_1",
+                              value:
+                                workTimeProjectionYear1 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear1.workThisYearHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: `expense_1 / wage_1 = ${formatCurrencyNoDecimals(expense1, displayCurrency)} / ${wage1 != null ? `${formatNumber(wage1, 2)} ${displayCurrency}/h` : "—"}`,
+                            },
+                            {
+                              label: "Work (total)_1",
+                              value:
+                                workTimeProjectionYear1 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear1.workTotalHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "Work (total)_0 + Work (this year)_1 (baseline total_0 = 0)",
+                            },
+                            {
+                              label: "If invested (this year)_1",
+                              value:
+                                workTimeProjectionYear1 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear1.investedThisYearHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "(Portfolio_0 × r)/wage_1 + expense_1/wage_1 (Portfolio_0 = 0)",
+                            },
+                            {
+                              label: "Portfolio_1",
+                              value: formatCurrencyNoDecimals(portfolio1, displayCurrency),
+                              note: "Portfolio_0 + (Portfolio_0 × r) + expense_1 = 0 + 0 + expense_1",
+                            },
+                            {
+                              label: "If invested (total)_1",
+                              value:
+                                workTimeProjectionYear1 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear1.investedTotalHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "Portfolio_1 / wage_1",
+                            },
+
+                            { label: "Year 2", value: "", note: "", milestone: true },
+                            {
+                              label: "expense_2",
+                              value: formatCurrencyNoDecimals(expense2, displayCurrency),
+                              note: `expense_1 × (1 + i)^1 = ${formatCurrencyNoDecimals(expense1, displayCurrency)} × (1 + ${Number.isFinite(iPct) ? formatNumber(i, 4) : "—"})`,
+                            },
+                            {
+                              label: "wage_2",
+                              value: wage2 != null ? `${formatNumber(wage2, 2)} ${displayCurrency}/h` : "—",
+                              note: `wage_1 × (1 + p)^1 = ${wage1 != null ? `${formatNumber(wage1, 2)} ${displayCurrency}/h` : "—"} × (1 + ${Number.isFinite(pPct) ? formatNumber(p, 4) : "—"})`,
+                            },
+                            {
+                              label: "Work (this year)_2",
+                              value:
+                                workTimeProjectionYear2 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear2.workThisYearHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "expense_2 / wage_2",
+                            },
+                            {
+                              label: "Work (total)_2",
+                              value:
+                                workTimeProjectionYear2 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear2.workTotalHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "Work (total)_1 + Work (this year)_2",
+                            },
+                            {
+                              label: "Return_2",
+                              value: formatCurrencyNoDecimals(return2, displayCurrency),
+                              note: `Portfolio_1 × r = ${formatCurrencyNoDecimals(portfolio1, displayCurrency)} × ${Number.isFinite(rPct) ? formatNumber(r, 4) : "—"}`,
+                            },
+                            {
+                              label: "If invested (this year)_2",
+                              value:
+                                workTimeProjectionYear2 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear2.investedThisYearHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "Return_2/wage_2 + expense_2/wage_2",
+                            },
+                            {
+                              label: "Portfolio_2",
+                              value: formatCurrencyNoDecimals(portfolio2, displayCurrency),
+                              note: "Portfolio_1 + Return_2 + expense_2",
+                            },
+                            {
+                              label: "If invested (total)_2",
+                              value:
+                                workTimeProjectionYear2 != null
+                                  ? `${formatHoursAsYmd(workTimeProjectionYear2.investedTotalHours, 1, useWorkDaysInYmd)}`
+                                  : "—",
+                              note: "Portfolio_2 / wage_2",
+                            },
+                          ] as const;
+
+                          const milestoneLabels = new Set(["Inputs", "Year 1", "Year 2"]);
+
+                          return rows.map(({ label, value, note }, idx) => {
+                            const isMilestone = milestoneLabels.has(label);
+                            const showTopSeparator = isMilestone && idx !== 0;
+                            const paddingTop = showTopSeparator ? 14 : 7;
+                            return (
+                              <tr key={`${label}-${idx}`}>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 0`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    fontWeight: isMilestone ? 700 : 400,
+                                  }}
+                                >
+                                  {label}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 0`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    textAlign: "right",
+                                    fontVariantNumeric: "tabular-nums",
+                                    fontWeight: isMilestone ? 700 : 400,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {value}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 26px`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    opacity: 0.75,
+                                  }}
+                                >
+                                  {note}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+
+                    <details style={assumptionsDetailsStyle}>
+                      <summary style={assumptionsSummaryStyle}>Assumptions</summary>
+                      <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13, lineHeight: 1.35, display: "grid", gap: 14 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Year indexing assumption</div>
+                          <div>
+                            Year 1 is the current year. Totals use a baseline of <strong>0</strong> at year 0.
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Inflation and pay raise assumption</div>
+                          <div>
+                            Repetitive expenses inflate by <strong>i</strong> each year; wage grows by <strong>p</strong> each year.
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Return and contribution timing assumption</div>
+                          <div>
+                            The “if invested” portfolio earns <strong>r</strong> on the prior balance each year, then the year’s expense is added as a contribution.
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Money → hours conversion assumption</div>
+                          <div>
+                            Hours are computed as <strong>money / wage in that year</strong>. The Y/M/D formatting uses 8h/day; optional “work-days” mode uses 20 work days/month and 240 work days/year.
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Interpretation assumption</div>
+                          <div>
+                            “If invested” is a counterfactual based on fixed rates; it can be interpreted as a median (50th percentile) outcome in a simulation.
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </details>
                 </>
               ) : null}
             </div>
@@ -1552,11 +1815,28 @@ const MoneyPerspectivePage: React.FC = () => {
                 paddingTop: 10,
               }}
             >
-              <div style={{ fontWeight: 900 }}>Future Value Projection of All Expenses</div>
-              <div style={{ ...subtleTextStyle, fontSize: 12, marginTop: 4 }}>
-                Includes one-time and repetitive expenses (converted to monthly equivalents) and compounds monthly.
-              </div>
+              <button
+                type="button"
+                onClick={() => setFutureValueProjectionOpen((v) => !v)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "inherit",
+                  fontWeight: 900,
+                  textAlign: "left",
+                }}
+                aria-expanded={futureValueProjectionOpen}
+                aria-label={futureValueProjectionOpen ? "Collapse value projection" : "Expand value projection"}
+              >
+                {futureValueProjectionOpen
+                  ? "Value Projection of All Expenses ▾"
+                  : "Value Projection of All Expenses ▸"}
+              </button>
 
+              {futureValueProjectionOpen ? (
+                <>
               <label
                 style={{
                   display: "flex",
@@ -1571,9 +1851,9 @@ const MoneyPerspectivePage: React.FC = () => {
                   type="checkbox"
                   checked={showNominalFv}
                   onChange={(e) => setShowNominalFv(e.target.checked)}
-                  aria-label="Show nominal future value"
+                  aria-label="Show nominal value projection"
                 />
-                Show nominal (instead of real). Runway stays real.
+                Show nominal (non-inflation-adjusted) instead of real (inflation-adjusted). Runway stays real.
               </label>
 
               <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -1602,7 +1882,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           borderBottom: "1px solid var(--fc-subtle-border)",
                         }}
                       >
-                        {showNominalFv ? "Nominal this year" : "Real this year"}
+                        {showNominalFv ? "Nominal (this year)" : "Real (this year)"}
                       </th>
                       <th
                         style={{
@@ -1611,7 +1891,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           borderBottom: "1px solid var(--fc-subtle-border)",
                         }}
                       >
-                        {showNominalFv ? "Total Nominal" : "Total Real"}
+                        {showNominalFv ? "Nominal (total)" : "Real (total)"}
                       </th>
                       <th
                         style={{
@@ -1620,7 +1900,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           borderBottom: "1px solid var(--fc-subtle-border)",
                         }}
                       >
-                        Runway this year
+                        Runway (this year)
                       </th>
                       <th
                         style={{
@@ -1629,7 +1909,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           borderBottom: "1px solid var(--fc-subtle-border)",
                         }}
                       >
-                        Runway (Y/M/D)
+                        Runway (total)
                       </th>
                     </tr>
                   </thead>
@@ -1684,7 +1964,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           {dailyCoreExpense == null
                             ? "—"
                             : r.runwayThisYearDays != null
-                              ? formatSignedRunwayDmy(r.runwayThisYearDays)
+                              ? formatSignedRunwayDmy(r.runwayThisYearDays, 1)
                               : "—"}
                         </td>
                         <td
@@ -1697,7 +1977,7 @@ const MoneyPerspectivePage: React.FC = () => {
                           {dailyCoreExpense == null
                             ? "—"
                             : r.totalRunwayDays != null
-                              ? formatRunwayDmy(r.totalRunwayDays)
+                              ? formatRunwayDmy(r.totalRunwayDays, 1)
                               : "—"}
                         </td>
                       </tr>
@@ -1711,18 +1991,298 @@ const MoneyPerspectivePage: React.FC = () => {
                   </div>
                 ) : null}
               </div>
+
+              <details style={breakdownMainDetailsStyle}>
+                <summary style={breakdownMainSummaryStyle}>Breakdown + calculation</summary>
+                <div style={{ opacity: 0.75, margin: "10px 0", fontSize: 13, lineHeight: 1.35 }}>
+                  This is the full yearly path from expenses → nominal value projection → real (inflation-adjusted) value projection → runway days.
+                  The first two columns can display either nominal or real; runway is always based on real.
+                </div>
+
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <colgroup>
+                    <col style={{ width: "38%" }} />
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "44%" }} />
+                  </colgroup>
+                  <tbody>
+                    {(() => {
+                      const annualReturnPct = Number(settings.investing.annualReturnPct ?? 0);
+                      const feeDragPct = Number(settings.investing.feeDragPct ?? 0);
+                      const netAnnualPct = Number(netAnnualReturnPct ?? 0);
+                      const r = Number.isFinite(netAnnualPct) ? netAnnualPct / 100 : 0;
+                      const rMonthly = r / 12;
+                      const inflationPct = Number(settings.investing.inflationPct ?? 0);
+                      const i = Number.isFinite(inflationPct) ? inflationPct / 100 : 0;
+                      const upfront = oneTimeExpenseTotal;
+                      const recurringMonthly = recurringYearlyExpenseTotal / 12;
+
+                      const step = 1 + rMonthly;
+                      const pow = (n: number): number | null => (step > 0 ? Math.pow(step, n) : null);
+                      const nominalUpfront = (years: number): number | null => {
+                        const n = Math.round(12 * years);
+                        const p = pow(n);
+                        if (p == null) return null;
+                        return upfront * p;
+                      };
+                      const nominalRecurring = (years: number): number | null => {
+                        const n = Math.round(12 * years);
+                        if (n <= 0) return 0;
+                        const p = pow(n);
+                        if (p == null) return null;
+                        if (rMonthly === 0) return recurringMonthly * n;
+                        return recurringMonthly * ((p - 1) / rMonthly);
+                      };
+
+                      const rows = [
+                        { label: "Inputs", value: "", note: "", milestone: true },
+                        {
+                          label: "upfront (one-time)",
+                          value: formatCurrencyNoDecimals(upfront, displayCurrency),
+                          note: "sum of one-time expenses",
+                        },
+                        {
+                          label: "recurring (monthly)",
+                          value: formatCurrencyNoDecimals(recurringMonthly, displayCurrency),
+                          note: `recurring_yearly / 12 = ${formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)} / 12`,
+                        },
+                        {
+                          label: "annual return (gross)",
+                          value: Number.isFinite(annualReturnPct) ? formatNumber(annualReturnPct / 100, 4) : "—",
+                          note: "annualReturnPct",
+                        },
+                        {
+                          label: "fee drag",
+                          value: Number.isFinite(feeDragPct) ? formatNumber(feeDragPct / 100, 4) : "—",
+                          note: "feeDragPct",
+                        },
+                        {
+                          label: "annual return (net)",
+                          value: Number.isFinite(netAnnualPct) ? formatNumber(r, 4) : "—",
+                          note: "(annualReturnPct − feeDragPct) / 100",
+                        },
+                        {
+                          label: "inflation (i)",
+                          value: Number.isFinite(inflationPct) ? formatNumber(i, 4) : "—",
+                          note: "inflationPct / 100",
+                        },
+                        {
+                          label: "dailyCoreExpense",
+                          value: dailyCoreExpense != null ? `${formatNumber(dailyCoreExpense, 2)} ${displayCurrency}/day` : "—",
+                          note: "derived from core expenses settings",
+                        },
+
+                        { label: "Year 1", value: "", note: "", milestone: true },
+                        {
+                          label: "step_1",
+                          value: step > 0 ? formatNumber(step, 6) : "—",
+                          note: "1 + r/12",
+                        },
+                        {
+                          label: "Nominal(upfront)_1",
+                          value: nominalUpfront(1) != null ? formatCurrencyNoDecimals(nominalUpfront(1)!, displayCurrency) : "—",
+                          note: `upfront × step^(12×1) = ${formatCurrencyNoDecimals(upfront, displayCurrency)} × ${step > 0 ? formatNumber(step, 6) : "—"}^12`,
+                        },
+                        {
+                          label: "Nominal(recurring)_1",
+                          value:
+                            nominalRecurring(1) != null
+                              ? formatCurrencyNoDecimals(nominalRecurring(1)!, displayCurrency)
+                              : "—",
+                          note:
+                            rMonthly === 0
+                              ? "recurringMonthly × 12"
+                              : "recurringMonthly × ((step^(12×1) − 1) / (r/12))",
+                        },
+                        {
+                          label: "Nominal(total)_1",
+                          value:
+                            futureValueProjectionYear1?.totalNominal != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear1.totalNominal, displayCurrency)
+                              : "—",
+                          note: "Nominal(upfront)_1 + Nominal(recurring)_1",
+                        },
+                        {
+                          label: "Nominal(this year)_1",
+                          value:
+                            futureValueProjectionYear1?.nominalThisYear != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear1.nominalThisYear, displayCurrency)
+                              : "—",
+                          note: "Nominal(total)_1 − Nominal(total)_0 (baseline total_0 = 0)",
+                        },
+                        {
+                          label: "Real(total)_1",
+                          value:
+                            futureValueProjectionYear1?.totalReal != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear1.totalReal, displayCurrency)
+                              : "—",
+                          note: `Nominal(total)_1 / (1 + i)^1 = ${futureValueProjectionYear1?.totalNominal != null ? formatCurrencyNoDecimals(futureValueProjectionYear1.totalNominal, displayCurrency) : "—"} / (1 + ${Number.isFinite(inflationPct) ? formatNumber(i, 4) : "—"})^1`,
+                        },
+                        {
+                          label: "Real(this year)_1",
+                          value:
+                            futureValueProjectionYear1?.realThisYear != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear1.realThisYear, displayCurrency)
+                              : "—",
+                          note: "Real(total)_1 − Real(total)_0 (baseline total_0 = 0)",
+                        },
+                        {
+                          label: "Runway(this year)_1",
+                          value:
+                            futureValueProjectionYear1?.runwayThisYearDays != null
+                              ? formatSignedRunwayDmy(futureValueProjectionYear1.runwayThisYearDays, 1)
+                              : "—",
+                          note: "Real(this year)_1 / dailyCoreExpense",
+                        },
+                        {
+                          label: "Runway(total)_1",
+                          value:
+                            futureValueProjectionYear1?.totalRunwayDays != null
+                              ? formatRunwayDmy(futureValueProjectionYear1.totalRunwayDays, 1)
+                              : "—",
+                          note: "Real(total)_1 / dailyCoreExpense",
+                        },
+
+                        { label: "Year 2", value: "", note: "", milestone: true },
+                        {
+                          label: "Nominal(total)_2",
+                          value:
+                            futureValueProjectionYear2?.totalNominal != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear2.totalNominal, displayCurrency)
+                              : "—",
+                          note: "Nominal(upfront)_2 + Nominal(recurring)_2",
+                        },
+                        {
+                          label: "Nominal(this year)_2",
+                          value:
+                            futureValueProjectionYear2?.nominalThisYear != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear2.nominalThisYear, displayCurrency)
+                              : "—",
+                          note: "Nominal(total)_2 − Nominal(total)_1",
+                        },
+                        {
+                          label: "Real(total)_2",
+                          value:
+                            futureValueProjectionYear2?.totalReal != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear2.totalReal, displayCurrency)
+                              : "—",
+                          note: `Nominal(total)_2 / (1 + i)^2 = ${futureValueProjectionYear2?.totalNominal != null ? formatCurrencyNoDecimals(futureValueProjectionYear2.totalNominal, displayCurrency) : "—"} / (1 + ${Number.isFinite(inflationPct) ? formatNumber(i, 4) : "—"})^2`,
+                        },
+                        {
+                          label: "Real(this year)_2",
+                          value:
+                            futureValueProjectionYear2?.realThisYear != null
+                              ? formatCurrencyNoDecimals(futureValueProjectionYear2.realThisYear, displayCurrency)
+                              : "—",
+                          note: "Real(total)_2 − Real(total)_1",
+                        },
+                        {
+                          label: "Runway(this year)_2",
+                          value:
+                            futureValueProjectionYear2?.runwayThisYearDays != null
+                              ? formatSignedRunwayDmy(futureValueProjectionYear2.runwayThisYearDays, 1)
+                              : "—",
+                          note: "Real(this year)_2 / dailyCoreExpense",
+                        },
+                        {
+                          label: "Runway(total)_2",
+                          value:
+                            futureValueProjectionYear2?.totalRunwayDays != null
+                              ? formatRunwayDmy(futureValueProjectionYear2.totalRunwayDays, 1)
+                              : "—",
+                          note: "Real(total)_2 / dailyCoreExpense",
+                        },
+                      ] as const;
+
+                      const milestoneLabels = new Set(["Inputs", "Year 1", "Year 2"]);
+
+                      return rows.map(({ label, value, note }, idx) => {
+                        const isMilestone = milestoneLabels.has(label);
+                        const showTopSeparator = isMilestone && idx !== 0;
+                        const paddingTop = showTopSeparator ? 14 : 7;
+                        return (
+                          <tr key={`${label}-${idx}`}>
+                            <td
+                              style={{
+                                padding: `${paddingTop}px 0 7px 0`,
+                                borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                                fontWeight: isMilestone ? 700 : 400,
+                              }}
+                            >
+                              {label}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${paddingTop}px 0 7px 0`,
+                                borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                fontWeight: isMilestone ? 700 : 400,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {value}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${paddingTop}px 0 7px 26px`,
+                                borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                                opacity: 0.75,
+                              }}
+                            >
+                              {note}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+
+                <details style={assumptionsDetailsStyle}>
+                  <summary style={assumptionsSummaryStyle}>Assumptions</summary>
+                  <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13, lineHeight: 1.35, display: "grid", gap: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Compounding assumption</div>
+                      <div>
+                        One-time and recurring contributions use <strong>monthly compounding</strong> (12 compounds/year). Recurring contributions are modeled as a fixed monthly contribution.
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Net return assumption</div>
+                      <div>
+                        Net return is modeled as <strong>annualReturnPct − feeDragPct</strong>.
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Inflation adjustment assumption</div>
+                      <div>
+                        Real values are computed as <strong>nominal / (1 + i)^years</strong>.
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Runway assumption</div>
+                      <div>
+                        Runway days are computed as <strong>real value / dailyCoreExpense</strong> and formatted using 365d/year and 30.417d/month.
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Interpretation assumption</div>
+                      <div>
+                        “Value” is a deterministic projection using fixed rates; it can be interpreted as a median (50th percentile) outcome in a simulation.
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </details>
+                </>
+              ) : null}
             </div>
           </div>
-
-          <div style={{ ...subtleTextStyle, fontSize: 13, marginTop: 12 }}>
-            Notes: The table assumes monthly compounding (12×/year). For
-            weekly/monthly/yearly items, it converts each amount into an
-            equivalent monthly contribution. Year 0 is the first purchase.
-            Future values can be interpreted as the median (50th percentile)
-            outcome in a simulation.
-          </div>
         </div>
-
           <div style={cardStyle}>
             <div
               style={{
