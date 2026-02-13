@@ -284,7 +284,7 @@ const HORIZON_TABLE_YEARS: number[] = Array.from(
   (_, i) => (i + 1) * 5,
 ); // 5..50
 
-const EXTRA_DETAIL_YEARS: number[] = [1, 2, 3, 4, 6, 7, 8, 9];
+const EXTRA_DETAIL_YEARS: number[] = [1, 2, 3, 4];
 
 const PAGE_DRAFT_STORAGE_KEY = "firecasting:moneyPerspective:pageDraft:v3";
 
