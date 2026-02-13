@@ -1589,31 +1589,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
-                      <div>Real (20 years)</div>
-                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                        {workTimeProjectionYear20?.investedTotalMoneyReal != null
-                          ? formatCurrencyNoDecimals(workTimeProjectionYear20.investedTotalMoneyReal, displayCurrency)
-                          : "—"}
-                      </div>
-                    </div>
-
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
-                      <div>Runway (20 years)</div>
-                      <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                        {dailyCoreExpense != null && workTimeProjectionYear20?.investedTotalMoneyReal != null
-                          ? (() => {
-                              const runwayDays = equivalentCoreExpenseDaysInYearN(
-                                workTimeProjectionYear20.investedTotalMoneyReal,
-                                dailyCoreExpense,
-                              );
-                              return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
-                            })()
-                          : "—"}
-                      </div>
-                    </div>
-
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75, fontSize: 12 }}>
                       <div>Work-equivalent %</div>
                       <div>
                         {workTotalSummary20?.workEquivalentPct == null
@@ -1622,44 +1598,12 @@ const MoneyPerspectivePage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
+                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75, fontSize: 12 }}>
                       <div>ROI (real)</div>
                       <div>
                         {workTotalSummary20?.roiReal == null
                           ? "—"
                           : `${formatNumber(workTotalSummary20.roiReal, 1)}%`}
-                      </div>
-                    </div>
-
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.75 }}>
-                      <div>Real value multiple</div>
-                      <div>
-                        {(() => {
-                          if (!(recurringYearlyExpenseTotal > 0)) return "—";
-                          if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
-                          const multiple = workTimeProjectionYear20.investedTotalMoneyReal / recurringYearlyExpenseTotal;
-                          return Number.isFinite(multiple)
-                            ? `${formatNumber(multiple, 1)}× yearly Value`
-                            : "—";
-                        })()}
-                      </div>
-                    </div>
-
-                    <div style={{ ...perspectivesLineRowStyle, opacity: 0.7 }}>
-                      <div>Runway multiple</div>
-                      <div>
-                        {(() => {
-                          if (dailyCoreExpense == null) return "—";
-                          if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
-                          const runwayDays = equivalentCoreExpenseDaysInYearN(
-                            workTimeProjectionYear20.investedTotalMoneyReal,
-                            dailyCoreExpense,
-                          );
-                          if (runwayDays == null) return "—";
-                          const runwayYears = runwayDays / 365;
-                          const multiple = runwayYears / 20;
-                          return `${formatNumber(multiple, 2)}×`;
-                        })()}
                       </div>
                     </div>
                   </div>
@@ -1674,6 +1618,66 @@ const MoneyPerspectivePage: React.FC = () => {
                   {formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)}
                 </div>
               </div>
+
+              {effectiveHourlyRate == null ? null : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                    <div>Real (20 years)</div>
+                    <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {workTimeProjectionYear20?.investedTotalMoneyReal != null
+                        ? formatCurrencyNoDecimals(workTimeProjectionYear20.investedTotalMoneyReal, displayCurrency)
+                        : "—"}
+                    </div>
+                  </div>
+
+                  <div style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}>
+                    <div>Runway (20 years)</div>
+                    <div style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {dailyCoreExpense != null && workTimeProjectionYear20?.investedTotalMoneyReal != null
+                        ? (() => {
+                            const runwayDays = equivalentCoreExpenseDaysInYearN(
+                              workTimeProjectionYear20.investedTotalMoneyReal,
+                              dailyCoreExpense,
+                            );
+                            return runwayDays != null ? formatRunwayDmy(runwayDays, 1) : "—";
+                          })()
+                        : "—"}
+                    </div>
+                  </div>
+
+                  <div style={{ ...perspectivesLineRowStyle, opacity: 0.75, fontSize: 12 }}>
+                    <div>Real value multiple</div>
+                    <div>
+                      {(() => {
+                        if (!(recurringYearlyExpenseTotal > 0)) return "—";
+                        if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
+                        const multiple = workTimeProjectionYear20.investedTotalMoneyReal / recurringYearlyExpenseTotal;
+                        return Number.isFinite(multiple)
+                          ? `${formatNumber(multiple, 1)}× yearly Value`
+                          : "—";
+                      })()}
+                    </div>
+                  </div>
+
+                  <div style={{ ...perspectivesLineRowStyle, opacity: 0.7, fontSize: 12 }}>
+                    <div>Runway multiple</div>
+                    <div>
+                      {(() => {
+                        if (dailyCoreExpense == null) return "—";
+                        if (workTimeProjectionYear20?.investedTotalMoneyReal == null) return "—";
+                        const runwayDays = equivalentCoreExpenseDaysInYearN(
+                          workTimeProjectionYear20.investedTotalMoneyReal,
+                          dailyCoreExpense,
+                        );
+                        if (runwayDays == null) return "—";
+                        const runwayYears = runwayDays / 365;
+                        const multiple = runwayYears / 20;
+                        return `${formatNumber(multiple, 2)}×`;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div
