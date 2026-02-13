@@ -1540,12 +1540,12 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>Recurring Expenses to Work</div>
+                <div style={{ fontWeight: 800 }}>Work</div>
                 {effectiveHourlyRate == null ? (
                   <div style={subtleTextStyle}>Missing</div>
                 ) : (
                   <div style={{ fontWeight: 900, fontSize: 22 }}>
-                    {formatNumber(repetitiveWorkHoursPerYear ?? 0, 2)} hours/year
+                    {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, useWorkDaysInYmd)}
                   </div>
                 )}
               </div>
@@ -1565,10 +1565,10 @@ const MoneyPerspectivePage: React.FC = () => {
                   }}
                 >
                   <div>
-                    = {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, true)} working days
+                    {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, true)} working days
                   </div>
                   <div>
-                    = {workThisYear1PctOfWorkYear == null ? "—" : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
+                    {workThisYear1PctOfWorkYear == null ? "—" : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
                   </div>
                 </div>
               )}
@@ -1583,7 +1583,7 @@ const MoneyPerspectivePage: React.FC = () => {
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>Value of All Expenses</div>
+                <div style={{ fontWeight: 800 }}>Value</div>
                 <div style={{ fontWeight: 900, fontSize: 22 }}>
                   {formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)}
                 </div>
