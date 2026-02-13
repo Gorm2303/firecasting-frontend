@@ -1570,11 +1570,9 @@ const MoneyPerspectivePage: React.FC = () => {
                   }}
                 >
                   <div>
-                    {formatHoursAsYmd(repetitiveWorkHoursPerYear ?? 0, 1, true)} working days
-                    {" "}or{" "}
                     {workThisYear1PctOfWorkYear == null
                       ? "—"
-                      : `${formatNumber(workThisYear1PctOfWorkYear, 0)}%`} of your work year
+                      : `${formatNumber(workThisYear1PctOfWorkYear, 0)}% of work year`}
                   </div>
                 </div>
               )}
