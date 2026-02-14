@@ -9,9 +9,11 @@ import {
 
 describe('moneyPerspective/purchases', () => {
   it('converts purchase amounts to monthly/yearly equivalents', () => {
+    expect(purchaseMonthlyEquivalent(10, 'daily')).toBeCloseTo(10 * (365 / 12), 10);
     expect(purchaseMonthlyEquivalent(1200, 'yearly')).toBeCloseTo(100, 12);
     expect(purchaseMonthlyEquivalent(100, 'weekly')).toBeCloseTo((100 * 52) / 12, 12);
 
+    expect(purchaseYearlyEquivalent(10, 'daily')).toBe(3650);
     expect(purchaseYearlyEquivalent(100, 'monthly')).toBe(1200);
     expect(purchaseYearlyEquivalent(100, 'weekly')).toBe(5200);
   });
