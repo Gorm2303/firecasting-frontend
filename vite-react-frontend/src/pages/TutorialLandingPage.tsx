@@ -28,10 +28,7 @@ const TutorialLandingPage: React.FC = () => {
 
   return (
     <PageLayout variant="constrained" maxWidthPx={900}>
-      <h1 style={{ textAlign: 'center', marginBottom: 6 }}>Tutor</h1>
-      <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
-        Choose a track. Both are interactive and use the real form.
-      </p>
+      <h1 style={{ textAlign: 'center' }}>Tutor</h1>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginTop: 18 }}>
         <div style={card}>

@@ -1,6 +1,6 @@
-import { futureValueNominal, futureValueNominalRecurringMonthly } from './calculations';
+import { DAYS_PER_MONTH, futureValueNominal, futureValueNominalRecurringMonthly } from './calculations';
 
-export type PurchaseAmountType = 'oneTime' | 'weekly' | 'monthly' | 'yearly';
+export type PurchaseAmountType = 'oneTime' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export type PurchaseAmountItem = {
   amount: number;
@@ -11,6 +11,8 @@ export function purchaseMonthlyEquivalent(amount: number, purchaseType: Purchase
   switch (purchaseType) {
     case 'oneTime':
       return amount;
+    case 'daily':
+      return amount * DAYS_PER_MONTH;
     case 'weekly':
       return (amount * 52) / 12;
     case 'monthly':
@@ -24,6 +26,8 @@ export function purchaseYearlyEquivalent(amount: number, purchaseType: PurchaseA
   switch (purchaseType) {
     case 'oneTime':
       return amount;
+    case 'daily':
+      return amount * 365;
     case 'weekly':
       return amount * 52;
     case 'monthly':

@@ -510,7 +510,7 @@ const SimulationPage: React.FC = () => {
     <PageLayout variant="wide">
     <div style={{ maxWidth: 1500, margin: '0 auto' }}>
       <PageLayout variant="constrained" maxWidthPx={980} paddingPx={0}>
-        <h1 style={{ display: 'flex', justifyContent: 'center' }}>FIRE Simulator</h1>
+        <h1 style={{ textAlign: "center" }}>FIRE Simulator</h1>
 
         <div role="group" aria-label="Simulation tools" className="fc-sim-tools" style={{
           display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center',
