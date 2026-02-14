@@ -31,10 +31,7 @@ import {
   decodeExpenseListFromShareParam,
   encodeExpenseListToShareParam,
 } from "../utils/shareExpenseListLink";
-import {
-  draftToNumberOrZero,
-  isValidDecimalDraft,
-} from "../utils/numberInput";
+import { draftToNumberOrZero, isValidDecimalDraft } from "../utils/numberInput";
 import {
   DAYS_PER_MONTH,
   applySimpleFeeDragToAnnualReturn,
@@ -372,7 +369,8 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
     : 0;
 
   const inflationPctLocal = Number(inflationPct ?? 0);
-  const inflationOk = Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+  const inflationOk =
+    Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
   const inflationRate = inflationOk ? inflationPctLocal / 100 : 0;
   const stepInflationYearly = 1 + inflationRate;
 
@@ -409,15 +407,14 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
     }
   }
 
-  const investedEndOfYearReal: Array<number | null> = investedEndOfYearNominal.map(
-    (nominal, year) => {
+  const investedEndOfYearReal: Array<number | null> =
+    investedEndOfYearNominal.map((nominal, year) => {
       if (nominal == null) return null;
       if (year === 0) return nominal;
       if (!inflationOk || stepInflationYearly === 1) return nominal;
       const denom = Math.pow(stepInflationYearly, Math.max(0, year - 1));
       return denom > 0 ? nominal / denom : null;
-    },
-  );
+    });
 
   const recurringYearlyBase = recurringMonthlyBase * 12;
   const sumInflatedYearlyRecurring = (years: number): number => {
@@ -455,11 +452,13 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
 
     // “Expenses” (formerly “Value”) is the non-invested cost of the expenses.
     // Nominal: in the money of that year. Real: deflated back to Year 1 (today) money.
-    const valueThisYearNominal = (years === 1 ? upfront : 0) + recurringYearlyInYearN;
+    const valueThisYearNominal =
+      (years === 1 ? upfront : 0) + recurringYearlyInYearN;
     const valueTotalNominal = upfront + sumInflatedYearlyRecurring(years);
-    const denom = !inflationOk || stepInflationYearly === 1
-      ? 1
-      : Math.pow(stepInflationYearly, Math.max(0, years - 1));
+    const denom =
+      !inflationOk || stepInflationYearly === 1
+        ? 1
+        : Math.pow(stepInflationYearly, Math.max(0, years - 1));
     const valueThisYearReal = denom > 0 ? valueThisYearNominal / denom : 0;
     const valueTotalReal = denom > 0 ? valueTotalNominal / denom : 0;
 
@@ -1111,9 +1110,7 @@ const MoneyPerspectivePage: React.FC = () => {
 
       const portfolioEndThisYear = investedByYear.get(year)?.totalNominal;
       const portfolioEndPrevYear =
-        year > 1
-          ? investedByYear.get(year - 1)?.totalNominal
-          : 0;
+        year > 1 ? investedByYear.get(year - 1)?.totalNominal : 0;
       if (portfolioEndThisYear == null || portfolioEndPrevYear == null)
         return null;
       const deltaThisYearMoney = portfolioEndThisYear - portfolioEndPrevYear;
@@ -1247,6 +1244,7 @@ const MoneyPerspectivePage: React.FC = () => {
     const oneTime = itemsWithAmount
       .filter((it) => it.type === "oneTime")
       .map((it) => ({
+        id: it.id,
         name: it.name,
         value: it.amount,
       }))
@@ -1258,6 +1256,7 @@ const MoneyPerspectivePage: React.FC = () => {
       .map((it) => {
         const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
         return {
+          id: it.id,
           name: it.name,
           value: baseYearly,
         };
@@ -1275,6 +1274,7 @@ const MoneyPerspectivePage: React.FC = () => {
     const oneTime = itemsWithAmount
       .filter((it) => it.type === "oneTime")
       .map((it) => ({
+        id: it.id,
         name: it.name,
         hours: workHours(it.amount, hourly) ?? 0,
       }))
@@ -1286,6 +1286,7 @@ const MoneyPerspectivePage: React.FC = () => {
       .map((it) => {
         const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
         return {
+          id: it.id,
           name: it.name,
           hours: workHours(baseYearly, hourly) ?? 0,
         };
@@ -1303,6 +1304,7 @@ const MoneyPerspectivePage: React.FC = () => {
     const oneTime = itemsWithAmount
       .filter((it) => it.type === "oneTime")
       .map((it) => ({
+        id: it.id,
         name: it.name,
         days: it.amount / daily,
       }))
@@ -1314,6 +1316,7 @@ const MoneyPerspectivePage: React.FC = () => {
       .map((it) => {
         const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
         return {
+          id: it.id,
           name: it.name,
           days: baseYearly / daily,
         };
@@ -1569,9 +1572,7 @@ const MoneyPerspectivePage: React.FC = () => {
 
   return (
     <PageLayout variant="constrained" maxWidthPx={600}>
-      <h1 style={{ textAlign: "center" }}>
-        Money Perspectivator
-      </h1>
+      <h1 style={{ textAlign: "center" }}>Money Perspectivator</h1>
 
       <div style={{ display: "grid", gap: 14 }}>
         <div style={cardStyle}>
@@ -1685,7 +1686,8 @@ const MoneyPerspectivePage: React.FC = () => {
                 const next = e.target.value as MoneyPerspectiveSalaryPeriod;
                 const current = settings.compensation;
                 if (next === current.period) return;
-                const effectiveHourly = effectiveHourlyFromSalarySettings(current);
+                const effectiveHourly =
+                  effectiveHourlyFromSalarySettings(current);
                 if (effectiveHourly == null) {
                   const nextComp = { ...current, period: next };
                   setSettings((s) => ({ ...s, compensation: nextComp }));
@@ -2003,27 +2005,36 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
 
               {valuePerspectiveBreakdownOpen ? (
-                <div
-                  style={{
-                    border: "1px solid var(--fc-subtle-border)",
-                    borderRadius: 6,
-                    padding: 10,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
+                <div style={{ display: "grid", gap: 6 }}>
                   {valuePerspectiveBreakdown.oneTime.length > 0 ? (
                     <>
-                      <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                        One time
+                      <div
+                        style={{
+                          ...perspectivesLineRowStyle,
+                          ...subtleTextStyle,
+                          opacity: 0.55,
+                          fontSize: 12,
+                        }}
+                      >
+                        <div>One time</div>
+                        <div />
                       </div>
                       {valuePerspectiveBreakdown.oneTime.map((it) => (
                         <div
-                          key={`oneTime-${it.name}`}
-                          style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}
+                          key={`oneTime-${it.id}`}
+                          style={{
+                            ...perspectivesLineRowStyle,
+                            opacity: 0.75,
+                            fontSize: 12,
+                          }}
                         >
                           <div>{it.name}</div>
-                          <div>
+                          <div
+                            style={{
+                              fontVariantNumeric: "tabular-nums",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             {formatCurrencyNoDecimals(
                               it.value,
                               displayCurrency,
@@ -2036,16 +2047,33 @@ const MoneyPerspectivePage: React.FC = () => {
 
                   {valuePerspectiveBreakdown.perYear.length > 0 ? (
                     <>
-                      <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                        Per year
+                      <div
+                        style={{
+                          ...perspectivesLineRowStyle,
+                          ...subtleTextStyle,
+                          opacity: 0.55,
+                          fontSize: 12,
+                        }}
+                      >
+                        <div>Per year</div>
+                        <div />
                       </div>
                       {valuePerspectiveBreakdown.perYear.map((it) => (
                         <div
-                          key={`perYear-${it.name}`}
-                          style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}
+                          key={`perYear-${it.id}`}
+                          style={{
+                            ...perspectivesLineRowStyle,
+                            opacity: 0.75,
+                            fontSize: 12,
+                          }}
                         >
                           <div>{it.name}</div>
-                          <div>
+                          <div
+                            style={{
+                              fontVariantNumeric: "tabular-nums",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             {formatCurrencyNoDecimals(
                               it.value,
                               displayCurrency,
@@ -2162,36 +2190,50 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
 
               {workPerspectiveBreakdownOpen ? (
-                <div
-                  style={{
-                    border: "1px solid var(--fc-subtle-border)",
-                    borderRadius: 6,
-                    padding: 10,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
+                <div style={{ display: "grid", gap: 6 }}>
                   {workPerspectiveBreakdown == null ? (
-                    <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                      Set net salary to compute work breakdown.
+                    <div
+                      style={{
+                        ...perspectivesLineRowStyle,
+                        ...subtleTextStyle,
+                        opacity: 0.75,
+                        fontSize: 12,
+                      }}
+                    >
+                      <div>Set net salary to compute work breakdown.</div>
+                      <div />
                     </div>
                   ) : (
                     <>
                       {workPerspectiveBreakdown.oneTime.length > 0 ? (
                         <>
-                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                            One time
+                          <div
+                            style={{
+                              ...perspectivesLineRowStyle,
+                              ...subtleTextStyle,
+                              opacity: 0.55,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div>One time</div>
+                            <div />
                           </div>
                           {workPerspectiveBreakdown.oneTime.map((it) => (
                             <div
-                              key={`oneTime-${it.name}`}
+                              key={`oneTime-${it.id}`}
                               style={{
                                 ...perspectivesLineRowStyle,
-                                opacity: 0.9,
+                                opacity: 0.75,
+                                fontSize: 12,
                               }}
                             >
                               <div>{it.name}</div>
-                              <div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {formatHoursAsYmd(
                                   it.hours,
                                   1,
@@ -2205,19 +2247,33 @@ const MoneyPerspectivePage: React.FC = () => {
 
                       {workPerspectiveBreakdown.perYear.length > 0 ? (
                         <>
-                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                            Per year
+                          <div
+                            style={{
+                              ...perspectivesLineRowStyle,
+                              ...subtleTextStyle,
+                              opacity: 0.55,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div>Per year</div>
+                            <div />
                           </div>
                           {workPerspectiveBreakdown.perYear.map((it) => (
                             <div
-                              key={`perYear-${it.name}`}
+                              key={`perYear-${it.id}`}
                               style={{
                                 ...perspectivesLineRowStyle,
-                                opacity: 0.9,
+                                opacity: 0.75,
+                                fontSize: 12,
                               }}
                             >
                               <div>{it.name}</div>
-                              <div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {formatHoursAsYmd(
                                   it.hours,
                                   1,
@@ -2341,36 +2397,52 @@ const MoneyPerspectivePage: React.FC = () => {
               </div>
 
               {runwayPerspectiveBreakdownOpen ? (
-                <div
-                  style={{
-                    border: "1px solid var(--fc-subtle-border)",
-                    borderRadius: 6,
-                    padding: 10,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
+                <div style={{ display: "grid", gap: 6 }}>
                   {runwayPerspectiveBreakdown == null ? (
-                    <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                      Set core expenses to compute runway breakdown.
+                    <div
+                      style={{
+                        ...perspectivesLineRowStyle,
+                        ...subtleTextStyle,
+                        opacity: 0.75,
+                        fontSize: 12,
+                      }}
+                    >
+                      <div>Set core expenses to compute runway breakdown.</div>
+                      <div />
                     </div>
                   ) : (
                     <>
                       {runwayPerspectiveBreakdown.oneTime.length > 0 ? (
                         <>
-                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                            One time
+                          <div
+                            style={{
+                              ...perspectivesLineRowStyle,
+                              ...subtleTextStyle,
+                              opacity: 0.55,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div>One time</div>
+                            <div />
                           </div>
                           {runwayPerspectiveBreakdown.oneTime.map((it) => (
                             <div
-                              key={`oneTime-${it.name}`}
+                              key={`oneTime-${it.id}`}
                               style={{
                                 ...perspectivesLineRowStyle,
-                                opacity: 0.9,
+                                opacity: 0.75,
+                                fontSize: 12,
                               }}
                             >
                               <div>{it.name}</div>
-                              <div>{formatRunwayDmy(it.days, 1)}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatRunwayDmy(it.days, 1)}
+                              </div>
                             </div>
                           ))}
                         </>
@@ -2378,19 +2450,35 @@ const MoneyPerspectivePage: React.FC = () => {
 
                       {runwayPerspectiveBreakdown.perYear.length > 0 ? (
                         <>
-                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
-                            Per year
+                          <div
+                            style={{
+                              ...perspectivesLineRowStyle,
+                              ...subtleTextStyle,
+                              opacity: 0.55,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div>Per year</div>
+                            <div />
                           </div>
                           {runwayPerspectiveBreakdown.perYear.map((it) => (
                             <div
-                              key={`perYear-${it.name}`}
+                              key={`perYear-${it.id}`}
                               style={{
                                 ...perspectivesLineRowStyle,
-                                opacity: 0.9,
+                                opacity: 0.75,
+                                fontSize: 12,
                               }}
                             >
                               <div>{it.name}</div>
-                              <div>{formatRunwayDmy(it.days, 1)}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatRunwayDmy(it.days, 1)}
+                              </div>
                             </div>
                           ))}
                         </>
@@ -2679,23 +2767,23 @@ const MoneyPerspectivePage: React.FC = () => {
                       </tbody>
                     </table>
 
-                          {effectiveHourlyRate == null ? (
-                            <div style={{ ...subtleTextStyle, marginTop: 6 }}>
-                              Set net salary to show projected work.
-                            </div>
-                          ) : (
-                            <div
-                              style={{
-                                ...subtleTextStyle,
-                                marginTop: 6,
-                                fontSize: 12,
-                              }}
-                            >
-                              Note: “Nominal vs real” doesn’t change hours if your wage
-                              is inflation-adjusted too (hours = money / wage, and both
-                              scale with inflation).
-                            </div>
-                          )}
+                    {effectiveHourlyRate == null ? (
+                      <div style={{ ...subtleTextStyle, marginTop: 6 }}>
+                        Set net salary to show projected work.
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          ...subtleTextStyle,
+                          marginTop: 6,
+                          fontSize: 12,
+                        }}
+                      >
+                        Note: “Nominal vs real” doesn’t change hours if your
+                        wage is inflation-adjusted too (hours = money / wage,
+                        and both scale with inflation).
+                      </div>
+                    )}
                   </div>
 
                   <details style={breakdownMainDetailsStyle}>
@@ -3173,7 +3261,8 @@ const MoneyPerspectivePage: React.FC = () => {
                           <div>
                             Year 1 is the current year. “(year)” deltas use a
                             year 0 baseline of <strong>0</strong>. One-time
-                            expenses are deposited at the <strong>start of Year 1</strong>
+                            expenses are deposited at the{" "}
+                            <strong>start of Year 1</strong>
                             (recurring items contribute monthly).
                           </div>
                         </div>
@@ -3496,8 +3585,8 @@ const MoneyPerspectivePage: React.FC = () => {
                       Expenses columns are the non-invested cost of the expense
                       list, shown as either nominal (money of that year) or real
                       (deflated back to Year 1 money) based on the toggle above.
-                      “If invested (year)” shows the portfolio change during that
-                      year (including the one-time deposit in Year 1).
+                      “If invested (year)” shows the portfolio change during
+                      that year (including the one-time deposit in Year 1).
                     </div>
 
                     <table
@@ -4142,12 +4231,10 @@ const MoneyPerspectivePage: React.FC = () => {
                         style={breakdownSelectStyle}
                         aria-label="Select runway projection breakdown column"
                       >
-                        <option value="runwayThisYear">
-                            Runway (year)
-                        </option>
+                        <option value="runwayThisYear">Runway (year)</option>
                         <option value="runwayTotal">Runway (total)</option>
                         <option value="investedRunwayThisYear">
-                            If invested (year)
+                          If invested (year)
                         </option>
                         <option value="investedRunwayTotal">
                           If invested (total)
@@ -4496,9 +4583,9 @@ const MoneyPerspectivePage: React.FC = () => {
                           <div>
                             “Runway” uses the <strong>Expenses</strong> columns
                             (non-invested). “If invested” uses the invested
-                            projection’s values. Nominal vs real does not
-                            change runway when core expenses are
-                            inflation-adjusted too.
+                            projection’s values. Nominal vs real does not change
+                            runway when core expenses are inflation-adjusted
+                            too.
                           </div>
                         </div>
                       </div>
@@ -4853,20 +4940,24 @@ const MoneyPerspectivePage: React.FC = () => {
                 uses {formatNumber(DAYS_PER_MONTH, 3)} days/month.
               </div>
 
-              <div style={{ ...subtleTextStyle, fontSize: 13, lineHeight: 1.35 }}>
+              <div
+                style={{ ...subtleTextStyle, fontSize: 13, lineHeight: 1.35 }}
+              >
                 <div style={{ fontWeight: 800, marginBottom: 6 }}>Forces</div>
-                <strong>Expenses</strong> represents the money-value of the expenses in the year
-                they occur, so recurring expenses inflate with inflation.
-                <strong> Work</strong> represents the time required to earn that money, so it
-                depends on both expense inflation and wage growth (pay raise).
-                <strong> Runway</strong> converts money into time covered by core expenses, so
-                it depends on inflating core expenses.
+                <strong>Expenses</strong> represents the money-value of the
+                expenses in the year they occur, so recurring expenses inflate
+                with inflation.
+                <strong> Work</strong> represents the time required to earn that
+                money, so it depends on both expense inflation and wage growth
+                (pay raise).
+                <strong> Runway</strong> converts money into time covered by
+                core expenses, so it depends on inflating core expenses.
                 <div style={{ marginTop: 6 }}>
-                  The “<strong>If invested</strong>” path deposits one-time expenses at the
-                  start of Year 1, then for each month adds the (monthly-equivalent)
-                  recurring amount and applies monthly return. After 12 additions, the
-                  annual fee is subtracted and next year’s recurring amount is increased
-                  by inflation.
+                  The “<strong>If invested</strong>” path deposits one-time
+                  expenses at the start of Year 1, then for each month adds the
+                  (monthly-equivalent) recurring amount and applies monthly
+                  return. After 12 additions, the annual fee is subtracted and
+                  next year’s recurring amount is increased by inflation.
                 </div>
               </div>
             </div>
