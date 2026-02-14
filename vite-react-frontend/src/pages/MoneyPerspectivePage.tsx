@@ -339,6 +339,8 @@ type CashflowFvRowsParams = {
 
 function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
   years: number;
+  valueThisYearNominal: number;
+  valueTotalNominal: number;
   valueThisYearReal: number;
   valueTotalReal: number;
   nominalThisYear: number | null;
@@ -367,8 +369,7 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
     : 0;
 
   const inflationPctLocal = Number(inflationPct ?? 0);
-  const inflationOk =
-    Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+  const inflationOk = Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
   const inflationRate = inflationOk ? inflationPctLocal / 100 : 0;
   const stepInflationYearly = 1 + inflationRate;
 
@@ -378,22 +379,23 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
   const maxYear = yearsSorted.length ? yearsSorted[yearsSorted.length - 1]! : 0;
 
   // Counterfactual “if invested” mechanics:
-  // - upfront (one-time) is deposited at the start (year 0 baseline)
+  // - upfront (one-time) is deposited at the start of Year 1 (so Year 1 “this year” includes it)
   // - for each month in a year: add monthly spending, then apply monthly return
   // - after 12 months: subtract annual fee, then apply yearly inflation to next year's monthly spending
   const investedEndOfYearNominal: Array<number | null> = Array.from(
     { length: maxYear + 1 },
     () => null,
   );
-  investedEndOfYearNominal[0] = upfront;
+  investedEndOfYearNominal[0] = 0;
 
   if (!Number.isFinite(stepRMonthly) || !(stepRMonthly > 0)) {
     // Invalid return settings (e.g., r so negative that 1+r/12 <= 0) => invested values are undefined.
     for (let y = 1; y <= maxYear; y += 1) investedEndOfYearNominal[y] = null;
   } else {
-    let balance = upfront;
+    let balance = 0;
     let monthlySpend = recurringMonthlyBase;
     for (let year = 1; year <= maxYear; year += 1) {
+      if (year === 1 && upfront > 0) balance += upfront;
       for (let m = 1; m <= 12; m += 1) {
         if (monthlySpend > 0) balance += monthlySpend;
         balance *= stepRMonthly;
@@ -404,14 +406,15 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
     }
   }
 
-  const investedEndOfYearReal: Array<number | null> =
-    investedEndOfYearNominal.map((nominal, year) => {
+  const investedEndOfYearReal: Array<number | null> = investedEndOfYearNominal.map(
+    (nominal, year) => {
       if (nominal == null) return null;
       if (year === 0) return nominal;
-      if (!inflationOk) return null;
-      const denom = Math.pow(stepInflationYearly, year);
+      if (!inflationOk || stepInflationYearly === 1) return nominal;
+      const denom = Math.pow(stepInflationYearly, Math.max(0, year - 1));
       return denom > 0 ? nominal / denom : null;
-    });
+    },
+  );
 
   const recurringYearlyBase = recurringMonthlyBase * 12;
   const sumInflatedYearlyRecurring = (years: number): number => {
@@ -447,13 +450,20 @@ function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
           : recurringYearlyBase
         : 0;
 
-    // “Value” is the non-invested cost of the expenses in the money of that year.
-    const valueThisYearReal =
-      (years === 1 ? upfront : 0) + recurringYearlyInYearN;
-    const valueTotalReal = upfront + sumInflatedYearlyRecurring(years);
+    // “Expenses” (formerly “Value”) is the non-invested cost of the expenses.
+    // Nominal: in the money of that year. Real: deflated back to Year 1 (today) money.
+    const valueThisYearNominal = (years === 1 ? upfront : 0) + recurringYearlyInYearN;
+    const valueTotalNominal = upfront + sumInflatedYearlyRecurring(years);
+    const denom = !inflationOk || stepInflationYearly === 1
+      ? 1
+      : Math.pow(stepInflationYearly, Math.max(0, years - 1));
+    const valueThisYearReal = denom > 0 ? valueThisYearNominal / denom : 0;
+    const valueTotalReal = denom > 0 ? valueTotalNominal / denom : 0;
 
     return {
       years,
+      valueThisYearNominal,
+      valueTotalNominal,
       valueThisYearReal,
       valueTotalReal,
       nominalThisYear,
@@ -1100,7 +1110,7 @@ const MoneyPerspectivePage: React.FC = () => {
       const portfolioEndPrevYear =
         year > 1
           ? investedByYear.get(year - 1)?.totalNominal
-          : oneTimeExpenseTotal;
+          : 0;
       if (portfolioEndThisYear == null || portfolioEndPrevYear == null)
         return null;
       const deltaThisYearMoney = portfolioEndThisYear - portfolioEndPrevYear;
@@ -1223,6 +1233,173 @@ const MoneyPerspectivePage: React.FC = () => {
   const [useWorkDaysInYmd, setUseWorkDaysInYmd] = useState(false);
   const [showNominalFv, setShowNominalFv] = useState(false);
 
+  const [valuePerspectiveBreakdownOpen, setValuePerspectiveBreakdownOpen] =
+    useState(false);
+  const [workPerspectiveBreakdownOpen, setWorkPerspectiveBreakdownOpen] =
+    useState(false);
+  const [runwayPerspectiveBreakdownOpen, setRunwayPerspectiveBreakdownOpen] =
+    useState(false);
+
+  const [valuePerspectiveBreakdownYear, setValuePerspectiveBreakdownYear] =
+    useState(1);
+  const [workPerspectiveBreakdownYear, setWorkPerspectiveBreakdownYear] =
+    useState(1);
+  const [runwayPerspectiveBreakdownYear, setRunwayPerspectiveBreakdownYear] =
+    useState(1);
+
+  const perspectiveBreakdownYearOptions = useMemo(
+    () => Array.from({ length: 20 }, (_, i) => i + 1),
+    [],
+  );
+
+  const valuePerspectiveBreakdown = useMemo(() => {
+    const yearN = valuePerspectiveBreakdownYear;
+    const inflationPctLocal = Number(settings.investing.inflationPct ?? 0);
+    const inflationOk =
+      Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+    const i = inflationOk ? inflationPctLocal / 100 : 0;
+    const stepInflationYearly = 1 + i;
+    const inflationFactor =
+      showNominalFv && inflationOk && stepInflationYearly !== 1
+        ? Math.pow(stepInflationYearly, Math.max(0, yearN - 1))
+        : 1;
+
+    const oneTime = itemsWithAmount
+      .filter((it) => it.type === "oneTime")
+      .map((it) => ({
+        name: it.name,
+        value: yearN === 1 ? it.amount : 0,
+      }))
+      .filter((x) => x.value > 0)
+      .sort((a, b) => a.value - b.value);
+
+    const perYear = itemsWithAmount
+      .filter((it) => it.type !== "oneTime")
+      .map((it) => {
+        const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
+        return {
+          name: it.name,
+          value: baseYearly * inflationFactor,
+        };
+      })
+      .filter((x) => x.value > 0)
+      .sort((a, b) => a.value - b.value);
+
+    return { oneTime, perYear };
+  }, [
+    itemsWithAmount,
+    settings.investing.inflationPct,
+    showNominalFv,
+    valuePerspectiveBreakdownYear,
+  ]);
+
+  const workPerspectiveBreakdown = useMemo(() => {
+    const yearN = workPerspectiveBreakdownYear;
+    const hourly0 = effectiveHourlyRate;
+    if (hourly0 == null || !(hourly0 > 0)) return null;
+
+    const inflationPctLocal = Number(settings.investing.inflationPct ?? 0);
+    const inflationOk =
+      Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+    const i = inflationOk ? inflationPctLocal / 100 : 0;
+    const stepInflationYearly = 1 + i;
+    const inflationFactor =
+      inflationOk && stepInflationYearly !== 1
+        ? Math.pow(stepInflationYearly, Math.max(0, yearN - 1))
+        : 1;
+
+    const payRaisePctLocal = Number(settings.compensation.payRaisePct ?? 0);
+    const payRaiseRate =
+      Number.isFinite(payRaisePctLocal) ? payRaisePctLocal / 100 : 0;
+    const hourlyRateInYearN =
+      hourly0 * Math.pow(1 + payRaiseRate, Math.max(0, yearN - 1));
+
+    const oneTime = itemsWithAmount
+      .filter((it) => it.type === "oneTime")
+      .map((it) => ({
+        name: it.name,
+        hours:
+          yearN === 1
+            ? (workHours(it.amount, hourlyRateInYearN) ?? 0)
+            : 0,
+      }))
+      .filter((x) => x.hours > 0)
+      .sort((a, b) => a.hours - b.hours);
+
+    const perYear = itemsWithAmount
+      .filter((it) => it.type !== "oneTime")
+      .map((it) => {
+        const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
+        const money = baseYearly * inflationFactor;
+        return {
+          name: it.name,
+          hours: workHours(money, hourlyRateInYearN) ?? 0,
+        };
+      })
+      .filter((x) => x.hours > 0)
+      .sort((a, b) => a.hours - b.hours);
+
+    return { oneTime, perYear };
+  }, [
+    effectiveHourlyRate,
+    itemsWithAmount,
+    settings.compensation.payRaisePct,
+    settings.investing.inflationPct,
+    workPerspectiveBreakdownYear,
+  ]);
+
+  const runwayPerspectiveBreakdown = useMemo(() => {
+    const yearN = runwayPerspectiveBreakdownYear;
+    const daily0 = dailyCoreExpense;
+    if (daily0 == null || !(daily0 > 0)) return null;
+
+    const inflationPctLocal = Number(settings.investing.inflationPct ?? 0);
+    const inflationOk =
+      Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+    const i = inflationOk ? inflationPctLocal / 100 : 0;
+    const stepInflationYearly = 1 + i;
+
+    const inflationFactor =
+      showNominalFv && inflationOk && stepInflationYearly !== 1
+        ? Math.pow(stepInflationYearly, Math.max(0, yearN - 1))
+        : 1;
+
+    const dailyCoreInYearN =
+      showNominalFv && inflationOk && stepInflationYearly !== 1
+        ? daily0 * Math.pow(stepInflationYearly, Math.max(0, yearN - 1))
+        : daily0;
+
+    const oneTime = itemsWithAmount
+      .filter((it) => it.type === "oneTime")
+      .map((it) => ({
+        name: it.name,
+        days: yearN === 1 ? it.amount / dailyCoreInYearN : 0,
+      }))
+      .filter((x) => x.days > 0)
+      .sort((a, b) => a.days - b.days);
+
+    const perYear = itemsWithAmount
+      .filter((it) => it.type !== "oneTime")
+      .map((it) => {
+        const baseYearly = purchaseYearlyEquivalent(it.amount, it.type);
+        const money = baseYearly * inflationFactor;
+        return {
+          name: it.name,
+          days: money / dailyCoreInYearN,
+        };
+      })
+      .filter((x) => x.days > 0)
+      .sort((a, b) => a.days - b.days);
+
+    return { oneTime, perYear };
+  }, [
+    dailyCoreExpense,
+    itemsWithAmount,
+    settings.investing.inflationPct,
+    showNominalFv,
+    runwayPerspectiveBreakdownYear,
+  ]);
+
   const [workProjectionBreakdownColumn, setWorkProjectionBreakdownColumn] =
     useState<WorkProjectionBreakdownColumn>("workThisYear");
   const [
@@ -1291,6 +1468,8 @@ const MoneyPerspectivePage: React.FC = () => {
 
       return {
         years: r.years,
+        valueThisYearNominal: r.valueThisYearNominal,
+        valueTotalNominal: r.valueTotalNominal,
         valueThisYearReal: r.valueThisYearReal,
         valueTotalReal: r.valueTotalReal,
         nominalThisYear: r.nominalThisYear,
@@ -1328,13 +1507,16 @@ const MoneyPerspectivePage: React.FC = () => {
 
     return futureValueThisYearRows.map((r) => {
       const dailyInYear = dailyCoreExpenseInYearN(r.years);
+      const core = showNominalFv ? dailyInYear : daily;
+      const valueThisYear = showNominalFv ? r.valueThisYearNominal : r.valueThisYearReal;
+      const valueTotal = showNominalFv ? r.valueTotalNominal : r.valueTotalReal;
       const runwayThisYearDays =
-        dailyInYear != null
-          ? equivalentCoreExpenseDaysInYearN(r.valueThisYearReal, dailyInYear)
+        core != null
+          ? equivalentCoreExpenseDaysInYearN(valueThisYear, core)
           : null;
       const runwayTotalDays =
-        dailyInYear != null
-          ? equivalentCoreExpenseDaysInYearN(r.valueTotalReal, dailyInYear)
+        core != null
+          ? equivalentCoreExpenseDaysInYearN(valueTotal, core)
           : null;
       return {
         years: r.years,
@@ -1347,6 +1529,7 @@ const MoneyPerspectivePage: React.FC = () => {
   }, [
     dailyCoreExpense,
     futureValueThisYearRows,
+    showNominalFv,
     settings.investing.inflationPct,
   ]);
 
@@ -1463,7 +1646,7 @@ const MoneyPerspectivePage: React.FC = () => {
   }, []);
 
   return (
-    <PageLayout variant="constrained" maxWidthPx={650}>
+    <PageLayout variant="constrained" maxWidthPx={600}>
       <h1 style={{ textAlign: "center" }}>
         Money Perspectivator
       </h1>
@@ -1526,6 +1709,79 @@ const MoneyPerspectivePage: React.FC = () => {
                 </span>
               </button>
             </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "110px minmax(0, 1fr) 120px",
+              gap: 10,
+              alignItems: "center",
+              marginTop: 10,
+              minWidth: 0,
+            }}
+          >
+            <div style={{ ...labelStyle, fontSize: 13 }}>Net salary</div>
+            <div style={{ ...inputGroupStyle, width: "100%", minWidth: 0 }}>
+              <input
+                value={netSalaryDraft}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!isValidDecimalDraft(v)) return;
+                  setNetSalaryDraft(v);
+                  const n = roundTo1Decimal(draftToNumberOrZero(v));
+                  setSettings((s) => ({
+                    ...s,
+                    compensation: { ...s.compensation, amount: n },
+                  }));
+                }}
+                inputMode="decimal"
+                style={inputGroupInputStyle}
+                aria-label="Net salary amount (top)"
+              />
+              <span aria-hidden style={inputGroupUnitStyle}>
+                {displayCurrency}
+              </span>
+            </div>
+
+            <select
+              value={settings.compensation.period}
+              onChange={(e) => {
+                const next = e.target.value as MoneyPerspectiveSalaryPeriod;
+                const current = settings.compensation;
+                if (next === current.period) return;
+                const effectiveHourly = effectiveHourlyFromSalarySettings(current);
+                if (effectiveHourly == null) {
+                  const nextComp = { ...current, period: next };
+                  setSettings((s) => ({ ...s, compensation: nextComp }));
+                  return;
+                }
+
+                const hours =
+                  current.workingHoursPerMonth > 0
+                    ? current.workingHoursPerMonth
+                    : 160;
+                const amount = roundTo1Decimal(
+                  salaryAmountFromEffectiveHourly(effectiveHourly, hours, next),
+                );
+                const nextComp = {
+                  ...current,
+                  workingHoursPerMonth: hours,
+                  period: next,
+                  amount,
+                };
+                setSettings((s) => ({ ...s, compensation: nextComp }));
+                setNetSalaryDraft(toDraft(amount));
+              }}
+              style={{ ...controlStyle, width: "100%", minWidth: 0, height: 34, fontSize: 14 }}
+              aria-label="Net salary period (top)"
+            >
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
           </div>
 
           <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
@@ -1782,7 +2038,19 @@ const MoneyPerspectivePage: React.FC = () => {
             of your life?
           </div>
           <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
-            <div style={perspectivesCardStyle}>
+            <div
+              style={{ ...perspectivesCardStyle, cursor: "pointer" }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={valuePerspectiveBreakdownOpen}
+              onClick={() => setValuePerspectiveBreakdownOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setValuePerspectiveBreakdownOpen((v) => !v);
+                }
+              }}
+            >
               <div style={perspectivesHeaderRowStyle}>
                 <div style={perspectivesTitleStyle}>Value</div>
                 <div style={perspectivesBigValueStyle}>
@@ -1852,9 +2120,109 @@ const MoneyPerspectivePage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {valuePerspectiveBreakdownOpen ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div
+                    style={{
+                      ...perspectivesLineRowStyle,
+                      alignItems: "center",
+                      opacity: 0.9,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 12 }}>
+                      Breakdown
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <select
+                        style={breakdownSelectStyle}
+                        value={valuePerspectiveBreakdownYear}
+                        onChange={(e) =>
+                          setValuePerspectiveBreakdownYear(
+                            Number(e.target.value),
+                          )
+                        }
+                        aria-label="Breakdown year"
+                      >
+                        {perspectiveBreakdownYearOptions.map((y) => (
+                          <option key={y} value={y}>
+                            Year {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {valuePerspectiveBreakdown.oneTime.length > 0 ? (
+                    <>
+                      <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                        One time
+                      </div>
+                      {valuePerspectiveBreakdown.oneTime.map((it) => (
+                        <div
+                          key={`oneTime-${it.name}`}
+                          style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}
+                        >
+                          <div>{it.name}</div>
+                          <div
+                            style={{
+                              fontVariantNumeric: "tabular-nums",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {formatCurrencyNoDecimals(
+                              it.value,
+                              displayCurrency,
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+
+                  {valuePerspectiveBreakdown.perYear.length > 0 ? (
+                    <>
+                      <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                        Per year
+                      </div>
+                      {valuePerspectiveBreakdown.perYear.map((it) => (
+                        <div
+                          key={`perYear-${it.name}`}
+                          style={{ ...perspectivesLineRowStyle, opacity: 0.9 }}
+                        >
+                          <div>{it.name}</div>
+                          <div
+                            style={{
+                              fontVariantNumeric: "tabular-nums",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {formatCurrencyNoDecimals(
+                              it.value,
+                              displayCurrency,
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
-            <div style={perspectivesCardStyle}>
+            <div
+              style={{ ...perspectivesCardStyle, cursor: "pointer" }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={workPerspectiveBreakdownOpen}
+              onClick={() => setWorkPerspectiveBreakdownOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setWorkPerspectiveBreakdownOpen((v) => !v);
+                }
+              }}
+            >
               <div style={perspectivesHeaderRowStyle}>
                 <div style={perspectivesTitleStyle}>Work</div>
                 {effectiveHourlyRate == null ? (
@@ -1880,9 +2248,6 @@ const MoneyPerspectivePage: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div style={{ opacity: 0.75, textAlign: "right" }}>
-                    this year
-                  </div>
                   <div
                     style={{
                       ...subtleTextStyle,
@@ -1964,9 +2329,125 @@ const MoneyPerspectivePage: React.FC = () => {
                   </div>
                 </>
               )}
+
+              {workPerspectiveBreakdownOpen ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div
+                    style={{
+                      ...perspectivesLineRowStyle,
+                      alignItems: "center",
+                      opacity: 0.9,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 12 }}>
+                      Breakdown
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <select
+                        style={breakdownSelectStyle}
+                        value={workPerspectiveBreakdownYear}
+                        onChange={(e) =>
+                          setWorkPerspectiveBreakdownYear(
+                            Number(e.target.value),
+                          )
+                        }
+                        aria-label="Breakdown year"
+                      >
+                        {perspectiveBreakdownYearOptions.map((y) => (
+                          <option key={y} value={y}>
+                            Year {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {workPerspectiveBreakdown == null ? (
+                    <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                      Set net salary to compute work breakdown.
+                    </div>
+                  ) : (
+                    <>
+                      {workPerspectiveBreakdown.oneTime.length > 0 ? (
+                        <>
+                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                            One time
+                          </div>
+                          {workPerspectiveBreakdown.oneTime.map((it) => (
+                            <div
+                              key={`oneTime-${it.name}`}
+                              style={{
+                                ...perspectivesLineRowStyle,
+                                opacity: 0.9,
+                              }}
+                            >
+                              <div>{it.name}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatHoursAsYmd(
+                                  it.hours,
+                                  1,
+                                  useWorkDaysInYmd,
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+
+                      {workPerspectiveBreakdown.perYear.length > 0 ? (
+                        <>
+                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                            Per year
+                          </div>
+                          {workPerspectiveBreakdown.perYear.map((it) => (
+                            <div
+                              key={`perYear-${it.name}`}
+                              style={{
+                                ...perspectivesLineRowStyle,
+                                opacity: 0.9,
+                              }}
+                            >
+                              <div>{it.name}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatHoursAsYmd(
+                                  it.hours,
+                                  1,
+                                  useWorkDaysInYmd,
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
 
-            <div style={perspectivesCardStyle}>
+            <div
+              style={{ ...perspectivesCardStyle, cursor: "pointer" }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={runwayPerspectiveBreakdownOpen}
+              onClick={() => setRunwayPerspectiveBreakdownOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setRunwayPerspectiveBreakdownOpen((v) => !v);
+                }
+              }}
+            >
               <div style={perspectivesHeaderRowStyle}>
                 <div style={perspectivesTitleStyle}>Runway</div>
                 {dailyCoreExpense == null ? (
@@ -2034,6 +2515,102 @@ const MoneyPerspectivePage: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {runwayPerspectiveBreakdownOpen ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div
+                    style={{
+                      ...perspectivesLineRowStyle,
+                      alignItems: "center",
+                      opacity: 0.9,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 12 }}>
+                      Breakdown
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <select
+                        style={breakdownSelectStyle}
+                        value={runwayPerspectiveBreakdownYear}
+                        onChange={(e) =>
+                          setRunwayPerspectiveBreakdownYear(
+                            Number(e.target.value),
+                          )
+                        }
+                        aria-label="Breakdown year"
+                      >
+                        {perspectiveBreakdownYearOptions.map((y) => (
+                          <option key={y} value={y}>
+                            Year {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {runwayPerspectiveBreakdown == null ? (
+                    <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                      Set core expenses to compute runway breakdown.
+                    </div>
+                  ) : (
+                    <>
+                      {runwayPerspectiveBreakdown.oneTime.length > 0 ? (
+                        <>
+                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                            One time
+                          </div>
+                          {runwayPerspectiveBreakdown.oneTime.map((it) => (
+                            <div
+                              key={`oneTime-${it.name}`}
+                              style={{
+                                ...perspectivesLineRowStyle,
+                                opacity: 0.9,
+                              }}
+                            >
+                              <div>{it.name}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatRunwayDmy(it.days, 1)}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+
+                      {runwayPerspectiveBreakdown.perYear.length > 0 ? (
+                        <>
+                          <div style={{ ...subtleTextStyle, fontSize: 12 }}>
+                            Per year
+                          </div>
+                          {runwayPerspectiveBreakdown.perYear.map((it) => (
+                            <div
+                              key={`perYear-${it.name}`}
+                              style={{
+                                ...perspectivesLineRowStyle,
+                                opacity: 0.9,
+                              }}
+                            >
+                              <div>{it.name}</div>
+                              <div
+                                style={{
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatRunwayDmy(it.days, 1)}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div
@@ -2145,7 +2722,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Work (this year)
+                            Work (year)
                           </th>
                           <th
                             style={{
@@ -2163,7 +2740,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            If invested (this year)
+                            If invested (year)
                           </th>
                           <th
                             style={{
@@ -2284,10 +2861,10 @@ const MoneyPerspectivePage: React.FC = () => {
                         style={breakdownSelectStyle}
                         aria-label="Select work projection breakdown column"
                       >
-                        <option value="workThisYear">Work (this year)</option>
+                        <option value="workThisYear">Work (year)</option>
                         <option value="workTotal">Work (total)</option>
                         <option value="investedThisYear">
-                          If invested (this year)
+                          If invested (year)
                         </option>
                         <option value="investedTotal">
                           If invested (total)
@@ -2429,7 +3006,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 note: "",
                               },
                               {
-                                label: "Work (this year)_1",
+                                label: "Work (year)_1",
                                 value:
                                   workTimeProjectionYear1 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear1.workThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2440,7 +3017,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             workTotal: [
                               { label: "Year 1", value: "", note: "" },
                               {
-                                label: "Work (this year)_1",
+                                label: "Work (year)_1",
                                 value:
                                   workTimeProjectionYear1 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear1.workThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2478,10 +3055,10 @@ const MoneyPerspectivePage: React.FC = () => {
                                         displayCurrency,
                                       )
                                     : "—",
-                                note: "ΔB1 = B1 − B0, where B0 = upfront (one-time) deposit",
+                                note: "ΔB1 = B1 − B0, where B0 = 0 and the upfront (one-time) amount is deposited at the start of Year 1",
                               },
                               {
-                                label: "If invested (this year)_1",
+                                label: "If invested (year)_1",
                                 value:
                                   workTimeProjectionYear1 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear1.investedThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2548,7 +3125,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             workThisYear: [
                               ...year2CommonRows,
                               {
-                                label: "Work (this year)_2",
+                                label: "Work (year)_2",
                                 value:
                                   workTimeProjectionYear2 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear2.workThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2559,7 +3136,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             workTotal: [
                               ...year2CommonRows,
                               {
-                                label: "Work (this year)_2",
+                                label: "Work (year)_2",
                                 value:
                                   workTimeProjectionYear2 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear2.workThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2572,7 +3149,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                   workTimeProjectionYear2 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear2.workTotalHours, 1, useWorkDaysInYmd)}`
                                     : "—",
-                                note: "Work (total)_1 + Work (this year)_2",
+                                note: "Work (total)_1 + Work (year)_2",
                               },
                             ],
                             investedThisYear: [
@@ -2611,7 +3188,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                 note: "ΔB2 = B2 − B1",
                               },
                               {
-                                label: "If invested (this year)_2",
+                                label: "If invested (year)_2",
                                 value:
                                   workTimeProjectionYear2 != null
                                     ? `${formatHoursAsYmd(workTimeProjectionYear2.investedThisYearHours, 1, useWorkDaysInYmd)}`
@@ -2729,10 +3306,10 @@ const MoneyPerspectivePage: React.FC = () => {
                             Year indexing assumption
                           </div>
                           <div>
-                            Year 1 is the current year. “This year” deltas use
-                            year 0 as a baseline that includes{" "}
-                            <strong>upfront (one-time)</strong> items (recurring
-                            items contribute 0 at year 0).
+                            Year 1 is the current year. “(year)” deltas use a
+                            year 0 baseline of <strong>0</strong>. One-time
+                            expenses are deposited at the <strong>start of Year 1</strong>
+                            (recurring items contribute monthly).
                           </div>
                         </div>
                         <div>
@@ -2824,13 +3401,13 @@ const MoneyPerspectivePage: React.FC = () => {
                 aria-expanded={futureValueProjectionOpen}
                 aria-label={
                   futureValueProjectionOpen
-                    ? "Collapse value projection"
-                    : "Expand value projection"
+                    ? "Collapse expenses projection"
+                    : "Expand expenses projection"
                 }
               >
                 {futureValueProjectionOpen
-                  ? "Future Value Projection ▾"
-                  : "Future Value Projection ▸"}
+                  ? "Future Expenses Projection ▾"
+                  : "Future Expenses Projection ▸"}
               </button>
 
               {futureValueProjectionOpen ? (
@@ -2849,10 +3426,10 @@ const MoneyPerspectivePage: React.FC = () => {
                       type="checkbox"
                       checked={showNominalFv}
                       onChange={(e) => setShowNominalFv(e.target.checked)}
-                      aria-label="Show nominal invested value projection"
+                      aria-label="Show nominal values for expenses and invested projections"
                     />
                     Show nominal (non-inflation-adjusted) instead of real
-                    (inflation-adjusted) for the “If invested” columns.
+                    (inflation-adjusted) for the Expenses, Runway and “If invested” columns.
                   </label>
 
                   <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -2881,7 +3458,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Value (this year)
+                            Expenses (year)
                           </th>
                           <th
                             style={{
@@ -2890,7 +3467,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Value (total)
+                            Expenses (total)
                           </th>
                           <th
                             style={{
@@ -2899,7 +3476,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            If invested (this year)
+                            If invested (year)
                           </th>
                           <th
                             style={{
@@ -2933,7 +3510,9 @@ const MoneyPerspectivePage: React.FC = () => {
                               }}
                             >
                               {formatCurrencyNoDecimals(
-                                r.valueThisYearReal,
+                                showNominalFv
+                                  ? r.valueThisYearNominal
+                                  : r.valueThisYearReal,
                                 displayCurrency,
                               )}
                             </td>
@@ -2946,7 +3525,9 @@ const MoneyPerspectivePage: React.FC = () => {
                               }}
                             >
                               {formatCurrencyNoDecimals(
-                                r.valueTotalReal,
+                                showNominalFv
+                                  ? r.valueTotalNominal
+                                  : r.valueTotalReal,
                                 displayCurrency,
                               )}
                             </td>
@@ -3029,10 +3610,10 @@ const MoneyPerspectivePage: React.FC = () => {
                         style={breakdownSelectStyle}
                         aria-label="Select value projection breakdown column"
                       >
-                        <option value="valueThisYear">Value (this year)</option>
-                        <option value="valueTotal">Value (total)</option>
+                        <option value="valueThisYear">Expenses (year)</option>
+                        <option value="valueTotal">Expenses (total)</option>
                         <option value="investedThisYear">
-                          If invested (this year)
+                          If invested (year)
                         </option>
                         <option value="investedTotal">
                           If invested (total)
@@ -3047,10 +3628,11 @@ const MoneyPerspectivePage: React.FC = () => {
                         lineHeight: 1.35,
                       }}
                     >
-                      Value columns are the non-invested cost of the expense
-                      list in the money of that year (inflates with inflation).
-                      “If invested” columns show the counterfactual portfolio
-                      balance deltas, either nominal or real.
+                      Expenses columns are the non-invested cost of the expense
+                      list, shown as either nominal (money of that year) or real
+                      (deflated back to Year 1 money) based on the toggle above.
+                      “If invested (year)” shows the portfolio change during that
+                      year (including the one-time deposit in Year 1).
                     </div>
 
                     <table
@@ -3123,39 +3705,39 @@ const MoneyPerspectivePage: React.FC = () => {
                               value: Number.isFinite(inflationPct)
                                 ? formatNumber(i, 4)
                                 : "—",
-                              note: "applied yearly to the recurring monthly amount, and used to compute real values",
+                              note: "applied yearly to the recurring monthly amount, and used to compute real values (in Year 1 money)",
                             },
                           ] as const;
 
                           const year1ValueThisYear = {
-                            label: "Value in Year 1",
+                            label: "Expenses in Year 1",
                             value: formatCurrencyNoDecimals(
                               upfront + recurringYearlyBase,
                               displayCurrency,
                             ),
-                            note: "Year 1 includes upfront + yearly recurring (Year 1 money)",
+                            note: "Year 1 expenses = upfront + yearly recurring (Year 1 money)",
                           };
 
                           const year2ValueThisYear = {
-                            label: "Value in Year 2",
+                            label: "Expenses in Year 2",
                             value: formatCurrencyNoDecimals(
                               recurringYearlyBase * stepInflationYearly,
                               displayCurrency,
                             ),
-                            note: "Year 2 adds only recurring, inflated once by (1 + i)",
+                            note: "Year 2 expenses adds only recurring, inflated once by (1 + i)",
                           };
 
                           const year1ValueTotal = {
-                            label: "Value total end of Year 1",
+                            label: "Expenses total end of Year 1",
                             value: formatCurrencyNoDecimals(
                               upfront + recurringYearlyBase,
                               displayCurrency,
                             ),
-                            note: "Value total(Y) = upfront + Σ yearlyRecurring(year k)",
+                            note: "Expenses total(Y) = upfront + Σ yearlyRecurring(year k)",
                           };
 
                           const year2ValueTotal = {
-                            label: "Value total end of Year 2",
+                            label: "Expenses total end of Year 2",
                             value: formatCurrencyNoDecimals(
                               upfront +
                                 recurringYearlyBase +
@@ -3441,15 +4023,16 @@ const MoneyPerspectivePage: React.FC = () => {
                           </div>
                           <div>
                             Real values are computed as{" "}
-                            <strong>nominal / (1 + i)^years</strong>.
+                            <strong>nominal / (1 + i)^(year - 1)</strong> (Year
+                            1 money).
                           </div>
                         </div>
                         <div>
                           <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                            Value columns assumption
+                            Expenses columns assumption
                           </div>
                           <div>
-                            “Value” columns show the{" "}
+                            “Expenses” columns show the{" "}
                             <strong>non-invested</strong> cost in the{" "}
                             <strong>money of that year</strong>. Recurring
                             inflates each year; Year 1 includes upfront +
@@ -3462,7 +4045,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             Interpretation assumption
                           </div>
                           <div>
-                            “Value” is a deterministic projection using fixed
+                            “Expenses” is a deterministic projection using fixed
                             rates; it can be interpreted as a median (50th
                             percentile) outcome in a simulation.
                           </div>
@@ -3524,7 +4107,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       aria-label="Show nominal invested runway projection"
                     />
                     Show nominal (non-inflation-adjusted) instead of real
-                    (inflation-adjusted) for the “If invested” columns.
+                    (inflation-adjusted) for the Expenses, Runway and “If invested” columns.
                   </label>
 
                   <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -3553,7 +4136,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            Runway (this year)
+                            Runway (year)
                           </th>
                           <th
                             style={{
@@ -3571,7 +4154,7 @@ const MoneyPerspectivePage: React.FC = () => {
                               borderBottom: "1px solid var(--fc-subtle-border)",
                             }}
                           >
-                            If invested (this year)
+                            If invested (year)
                           </th>
                           <th
                             style={{
@@ -3703,11 +4286,11 @@ const MoneyPerspectivePage: React.FC = () => {
                         aria-label="Select runway projection breakdown column"
                       >
                         <option value="runwayThisYear">
-                          Runway (this year)
+                            Runway (year)
                         </option>
                         <option value="runwayTotal">Runway (total)</option>
                         <option value="investedRunwayThisYear">
-                          If invested (this year)
+                            If invested (year)
                         </option>
                         <option value="investedRunwayTotal">
                           If invested (total)
@@ -3801,15 +4384,15 @@ const MoneyPerspectivePage: React.FC = () => {
                             runwayThisYear: [
                               { label: "Year 1", value: "", note: "" },
                               {
-                                label: "Value in Year 1",
+                                label: "Expenses in Year 1",
                                 value: formatCurrencyNoDecimals(
                                   upfront + yearlyRecurring,
                                   displayCurrency,
                                 ),
-                                note: "Year 1 value = upfront + Year 1 recurring",
+                                note: "Year 1 expenses = upfront + Year 1 recurring",
                               },
                               {
-                                label: "Runway (this year)",
+                                label: "Runway (year)",
                                 value:
                                   d != null && year1?.runwayThisYearDays != null
                                     ? formatSignedRunwayDmy(
@@ -3817,18 +4400,18 @@ const MoneyPerspectivePage: React.FC = () => {
                                         1,
                                       )
                                     : "—",
-                                note: "runway(this year) = value(this year) / dailyCoreExpense(year)",
+                                note: "runway(year) = expenses(year) / dailyCoreExpense(year)",
                               },
                             ],
                             runwayTotal: [
                               { label: "Year 1", value: "", note: "" },
                               {
-                                label: "Value total end of Year 1",
+                                label: "Expenses total end of Year 1",
                                 value: formatCurrencyNoDecimals(
                                   upfront + yearlyRecurring,
                                   displayCurrency,
                                 ),
-                                note: "value(total,Y) = upfront + Σ yearlyRecurring(year k)",
+                                note: "expenses(total,Y) = upfront + Σ yearlyRecurring(year k)",
                               },
                               {
                                 label: "Runway (total)",
@@ -3836,7 +4419,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                   d != null && year1?.runwayTotalDays != null
                                     ? formatRunwayDmy(year1.runwayTotalDays, 1)
                                     : "—",
-                                note: "runway(total) = value(total) / dailyCoreExpense(year)",
+                                note: "runway(total) = expenses(total) / dailyCoreExpense(year)",
                               },
                             ],
                             investedRunwayThisYear: [
@@ -3851,7 +4434,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                         1,
                                       )
                                     : "—",
-                                note: `invested runway(this year) = invested ${showNominalFv ? "nominal" : "real"}(this year) / core expenses in that year`,
+                                note: `invested runway(year) = invested ${showNominalFv ? "nominal" : "real"}(year) / core expenses in that year`,
                               },
                             ],
                             investedRunwayTotal: [
@@ -3882,15 +4465,15 @@ const MoneyPerspectivePage: React.FC = () => {
                             runwayThisYear: [
                               { label: "Year 2", value: "", note: "" },
                               {
-                                label: "Value in Year 2",
+                                label: "Expenses in Year 2",
                                 value: formatCurrencyNoDecimals(
                                   yearlyRecurringY2,
                                   displayCurrency,
                                 ),
-                                note: "Year 2 value = Year 1 recurring inflated by (1 + i)",
+                                note: "Year 2 expenses = Year 1 recurring inflated by (1 + i)",
                               },
                               {
-                                label: "Runway (this year)",
+                                label: "Runway (year)",
                                 value:
                                   d != null && year2?.runwayThisYearDays != null
                                     ? formatSignedRunwayDmy(
@@ -3898,13 +4481,13 @@ const MoneyPerspectivePage: React.FC = () => {
                                         1,
                                       )
                                     : "—",
-                                note: "runway(this year) = value(this year) / dailyCoreExpense(year)",
+                                note: "runway(year) = expenses(year) / dailyCoreExpense(year)",
                               },
                             ],
                             runwayTotal: [
                               { label: "Year 2", value: "", note: "" },
                               {
-                                label: "Value total end of Year 2",
+                                label: "Expenses total end of Year 2",
                                 value: formatCurrencyNoDecimals(
                                   upfront + yearlyRecurring + yearlyRecurringY2,
                                   displayCurrency,
@@ -3917,7 +4500,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                   d != null && year2?.runwayTotalDays != null
                                     ? formatRunwayDmy(year2.runwayTotalDays, 1)
                                     : "—",
-                                note: "runway(total) = value(total) / dailyCoreExpense(year)",
+                                note: "runway(total) = expenses(total) / dailyCoreExpense(year)",
                               },
                             ],
                             investedRunwayThisYear: [
@@ -3932,7 +4515,7 @@ const MoneyPerspectivePage: React.FC = () => {
                                         1,
                                       )
                                     : "—",
-                                note: `invested runway(this year) = invested ${showNominalFv ? "nominal" : "real"}(this year) / core expenses in that year`,
+                                note: `invested runway(year) = invested ${showNominalFv ? "nominal" : "real"}(year) / core expenses in that year`,
                               },
                             ],
                             investedRunwayTotal: [
@@ -4160,32 +4743,6 @@ const MoneyPerspectivePage: React.FC = () => {
                   }}
                 >
                   {`${formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency)} (${recurringItemCount} item${recurringItemCount === 1 ? "" : "s"})`}
-                </div>
-
-                <div style={labelStyle}>Forces</div>
-                <div
-                  style={{
-                    gridColumn: "2 / span 2",
-                    ...subtleTextStyle,
-                    fontSize: 12,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  <strong>Value</strong> represents the money-value of the
-                  expenses in the year they occur, so recurring expenses inflate
-                  with inflation.
-                  <strong> Work</strong> represents the time required to earn
-                  that money, so it depends on both expense inflation and wage
-                  growth (pay raise).
-                  <strong> Runway</strong> converts money into time covered by
-                  core expenses, so it depends on inflating core expenses.
-                  <div style={{ marginTop: 6 }}>
-                    The “<strong>If invested</strong>” path deposits one-time
-                    expenses at the start, then for each month adds the
-                    (monthly-equivalent) recurring amount and applies monthly
-                    return. After 12 additions, the annual fee is subtracted and
-                    next year’s recurring amount is increased by inflation.
-                  </div>
                 </div>
 
                 <div style={labelStyle}>Net salary</div>
@@ -4436,6 +4993,23 @@ const MoneyPerspectivePage: React.FC = () => {
                 Notes: Core expenses are meant to cover necessities (rent, food,
                 utilities; excludes discretionary). Monthly↔daily conversion
                 uses {formatNumber(DAYS_PER_MONTH, 3)} days/month.
+              </div>
+
+              <div style={{ ...subtleTextStyle, fontSize: 13, lineHeight: 1.35 }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Forces</div>
+                <strong>Value</strong> represents the money-value of the expenses in the year
+                they occur, so recurring expenses inflate with inflation.
+                <strong> Work</strong> represents the time required to earn that money, so it
+                depends on both expense inflation and wage growth (pay raise).
+                <strong> Runway</strong> converts money into time covered by core expenses, so
+                it depends on inflating core expenses.
+                <div style={{ marginTop: 6 }}>
+                  The “<strong>If invested</strong>” path deposits one-time expenses at the
+                  start of Year 1, then for each month adds the (monthly-equivalent)
+                  recurring amount and applies monthly return. After 12 additions, the
+                  annual fee is subtracted and next year’s recurring amount is increased
+                  by inflation.
+                </div>
               </div>
             </div>
           ) : null}
