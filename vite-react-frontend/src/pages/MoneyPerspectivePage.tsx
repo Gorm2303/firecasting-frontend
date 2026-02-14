@@ -310,11 +310,142 @@ type WorkProjectionBreakdownColumn =
   | "investedThisYear"
   | "investedTotal";
 
-type ValueProjectionBreakdownColumn =
+type FutureValueProjectionBreakdownColumn =
   | "valueThisYear"
   | "valueTotal"
+  | "investedThisYear"
+  | "investedTotal";
+
+type FutureRunwayProjectionBreakdownColumn =
   | "runwayThisYear"
-  | "runwayTotal";
+  | "runwayTotal"
+  | "investedRunwayThisYear"
+  | "investedRunwayTotal";
+
+type CashflowFvRowsParams = {
+  yearsList: number[];
+  upfront: number;
+  recurringMonthlyBase: number;
+  annualReturnPct: number;
+  feeDragPct: number;
+  inflationPct: number;
+};
+
+function computeCashflowFvRows(params: CashflowFvRowsParams): Array<{
+  years: number;
+  valueThisYearReal: number;
+  valueTotalReal: number;
+  nominalThisYear: number | null;
+  totalNominal: number | null;
+  realThisYear: number | null;
+  totalReal: number | null;
+}> {
+  const {
+    yearsList,
+    upfront,
+    recurringMonthlyBase,
+    annualReturnPct,
+    feeDragPct,
+    inflationPct,
+  } = params;
+
+  const annualReturnPctLocal = Number(annualReturnPct ?? 0);
+  const feeDragPctLocal = Number(feeDragPct ?? 0);
+  const netAnnualReturnPctLocal = applySimpleFeeDragToAnnualReturn(
+    annualReturnPctLocal,
+    feeDragPctLocal,
+  );
+  const annualReturnRate = Number.isFinite(netAnnualReturnPctLocal)
+    ? netAnnualReturnPctLocal / 100
+    : 0;
+  const rMonthly = annualReturnRate / 12;
+  const stepR = 1 + rMonthly;
+
+  const inflationPctLocal = Number(inflationPct ?? 0);
+  const inflationRate =
+    Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0
+      ? inflationPctLocal / 100
+      : 0;
+  const stepG = Math.pow(1 + inflationRate, 1 / 12);
+  const gMonthly = stepG - 1;
+
+  const fvGrowingMonthly = (months: number): number | null => {
+    const n = Math.max(0, Math.round(months));
+    if (n <= 0) return 0;
+    if (!(recurringMonthlyBase > 0)) return 0;
+    if (!(stepR > 0)) return null;
+
+    if (rMonthly === gMonthly) {
+      return recurringMonthlyBase * n * Math.pow(stepR, n - 1);
+    }
+    return (
+      recurringMonthlyBase *
+      ((Math.pow(stepR, n) - Math.pow(stepG, n)) / (stepR - stepG))
+    );
+  };
+
+  const fvUpfrontAtYear = (years: number): number | null => {
+    if (years < 0) return 0;
+    if (!(upfront > 0)) return 0;
+    if (years === 0) return upfront;
+    return futureValueNominal(upfront, annualReturnPctLocal, 12, years, feeDragPctLocal);
+  };
+
+  const fvNominalAtYear = (years: number): number | null => {
+    if (years < 0) return 0;
+    const upfrontFv = fvUpfrontAtYear(years);
+    if (upfrontFv == null) return null;
+    if (years === 0) return upfrontFv;
+
+    const recurringFv = fvGrowingMonthly(12 * years);
+    if (recurringFv == null) return null;
+    return upfrontFv + recurringFv;
+  };
+
+  const inflationOk =
+    Number.isFinite(inflationPctLocal) && inflationPctLocal >= 0;
+
+  const fvRealAtYear = (years: number): number | null => {
+    const nom = fvNominalAtYear(years);
+    if (nom == null) return null;
+    if (years < 0) return 0;
+    if (years === 0) return nom;
+    if (!inflationOk) return null;
+    return futureValueReal(nom, inflationPctLocal, years);
+  };
+
+  const yearsSorted = [...yearsList]
+    .filter((y) => Number.isFinite(y) && y > 0)
+    .sort((a, b) => a - b);
+
+  return yearsSorted.map((years) => {
+    const totalNominal = fvNominalAtYear(years);
+    const totalReal = fvRealAtYear(years);
+
+    const prevYears = years - 1;
+    const prevNominal = prevYears >= 0 ? fvNominalAtYear(prevYears) : 0;
+    const prevReal = prevYears >= 0 ? fvRealAtYear(prevYears) : 0;
+
+    const nominalThisYear =
+      totalNominal != null && prevNominal != null ? totalNominal - prevNominal : null;
+    const realThisYear =
+      totalReal != null && prevReal != null ? totalReal - prevReal : null;
+
+    const recurringYearlyReal = recurringMonthlyBase * 12;
+    const valueThisYearReal = years === 1 ? upfront + recurringYearlyReal : recurringYearlyReal;
+    const valueTotalReal = upfront + years * recurringYearlyReal;
+
+    return {
+      years,
+      valueThisYearReal,
+      valueTotalReal,
+      nominalThisYear,
+      totalNominal,
+      realThisYear,
+      totalReal,
+    };
+  });
+}
 
 const HORIZON_TABLE_YEARS: number[] = Array.from(
   { length: 10 },
@@ -858,34 +989,13 @@ const MoneyPerspectivePage: React.FC = () => {
 
     const inflationRate = Number.isFinite(inflationPct) && inflationPct >= 0 ? inflationPct / 100 : 0;
     const payRaiseRate = Number.isFinite(payRaisePct) ? payRaisePct / 100 : 0;
-    const annualReturnRate = Number.isFinite(annualReturnPct) ? annualReturnPct / 100 : 0;
 
     // For consistency with the value projection: model recurring expenses as monthly contributions
     // that grow with inflation, while the portfolio compounds monthly.
-    const rMonthly = annualReturnRate / 12;
-    const stepR = 1 + rMonthly;
-    if (!(stepR > 0)) return null;
-
-    const stepG = Math.pow(1 + inflationRate, 1 / 12);
-    const gMonthly = stepG - 1;
 
     const baseMonthly = recurringYearlyExpenseTotal / 12;
     const baseYearly = recurringYearlyExpenseTotal;
     const stepInflationYearly = 1 + inflationRate;
-
-    const fvGrowingMonthly = (months: number): number => {
-      const n = Math.max(0, Math.round(months));
-      if (n <= 0) return 0;
-      if (!(baseMonthly > 0)) return 0;
-
-      // Payments are made at the end of each month.
-      // FV = P * sum_{t=1..n} (1+g)^{t-1} * (1+r)^{n-t}
-      // = P * ((1+r)^n - (1+g)^n) / (r - g)
-      if (rMonthly === gMonthly) {
-        return baseMonthly * n * Math.pow(stepR, n - 1);
-      }
-      return baseMonthly * ((Math.pow(stepR, n) - Math.pow(stepG, n)) / (stepR - stepG));
-    };
 
     const expenseMoneyInYearN = (yearN: number): number => {
       if (!(baseYearly > 0)) return 0;
@@ -904,6 +1014,18 @@ const MoneyPerspectivePage: React.FC = () => {
       .sort((a, b) => a - b);
 
     const maxYear = projectionYears.length ? projectionYears[projectionYears.length - 1]! : 0;
+
+    const investedNominalRows = computeCashflowFvRows({
+      yearsList: Array.from({ length: maxYear }, (_, i) => i + 1),
+      upfront: 0,
+      recurringMonthlyBase: baseMonthly,
+      annualReturnPct: annualReturnPct,
+      feeDragPct: 0,
+      inflationPct: inflationPct,
+    });
+    const investedNominalByYear = new Map<number, number | null>(
+      investedNominalRows.map((r) => [r.years, r.totalNominal]),
+    );
 
     const hourlyRateInYearN = (yearN: number): number => {
       const factor = Math.pow(1 + payRaiseRate, Math.max(0, yearN - 1));
@@ -933,8 +1055,9 @@ const MoneyPerspectivePage: React.FC = () => {
       const workThisYearHours = expenseMoney > 0 ? (workHours(expenseMoney, wageHourly) ?? 0) : 0;
       workTotalHours += workThisYearHours;
 
-      const portfolioEndThisYear = fvGrowingMonthly(12 * year);
-      const portfolioEndPrevYear = fvGrowingMonthly(12 * (year - 1));
+      const portfolioEndThisYear = investedNominalByYear.get(year);
+      const portfolioEndPrevYear = year > 1 ? investedNominalByYear.get(year - 1) : 0;
+      if (portfolioEndThisYear == null || portfolioEndPrevYear == null) return null;
       const deltaThisYearMoney = portfolioEndThisYear - portfolioEndPrevYear;
       const investedThisYearHours = deltaThisYearMoney > 0 ? (workHours(deltaThisYearMoney, wageHourly) ?? 0) : 0;
       const investedTotalHours = portfolioEndThisYear > 0 ? (workHours(portfolioEndThisYear, wageHourly) ?? 0) : 0;
@@ -1029,39 +1152,22 @@ const MoneyPerspectivePage: React.FC = () => {
   const [breakEvenOpen, setBreakEvenOpen] = useState(false);
   const [workTimeProjectionOpen, setWorkTimeProjectionOpen] = useState(false);
   const [futureValueProjectionOpen, setFutureValueProjectionOpen] = useState(false);
+  const [futureRunwayProjectionOpen, setFutureRunwayProjectionOpen] = useState(false);
 
   const [useWorkDaysInYmd, setUseWorkDaysInYmd] = useState(false);
   const [showNominalFv, setShowNominalFv] = useState(false);
 
   const [workProjectionBreakdownColumn, setWorkProjectionBreakdownColumn] =
     useState<WorkProjectionBreakdownColumn>("workThisYear");
-  const [valueProjectionBreakdownColumn, setValueProjectionBreakdownColumn] =
-    useState<ValueProjectionBreakdownColumn>("valueThisYear");
+  const [futureValueProjectionBreakdownColumn, setFutureValueProjectionBreakdownColumn] =
+    useState<FutureValueProjectionBreakdownColumn>("valueThisYear");
+  const [futureRunwayProjectionBreakdownColumn, setFutureRunwayProjectionBreakdownColumn] =
+    useState<FutureRunwayProjectionBreakdownColumn>("runwayThisYear");
 
   const futureValueThisYearRows = useMemo(() => {
     const daily = dailyCoreExpense;
-    const inflationOk =
-      Number.isFinite(settings.investing.inflationPct) &&
-      settings.investing.inflationPct >= 0;
 
-    const annualReturnPct = Number(settings.investing.annualReturnPct ?? 0);
-    const feeDragPct = settings.investing.feeDragPct;
-    const netAnnualReturnPctLocal = applySimpleFeeDragToAnnualReturn(
-      annualReturnPct,
-      feeDragPct,
-    );
-    const annualReturnRate = Number.isFinite(netAnnualReturnPctLocal)
-      ? netAnnualReturnPctLocal / 100
-      : 0;
-    const rMonthly = annualReturnRate / 12;
-    const stepR = 1 + rMonthly;
-
-    const inflationPct = Number(settings.investing.inflationPct ?? 0);
-    const inflationRate = Number.isFinite(inflationPct) && inflationPct >= 0 ? inflationPct / 100 : 0;
-    const stepG = Math.pow(1 + inflationRate, 1 / 12);
-    const gMonthly = stepG - 1;
-
-    const sumUpfront = itemsWithAmount
+    const upfront = itemsWithAmount
       .filter((it) => it.type === "oneTime")
       .reduce((sum, it) => sum + it.amount, 0);
 
@@ -1069,75 +1175,33 @@ const MoneyPerspectivePage: React.FC = () => {
       .filter((it) => it.type !== "oneTime")
       .reduce((sum, it) => sum + purchaseMonthlyEquivalent(it.amount, it.type), 0);
 
-    const fvGrowingMonthly = (months: number): number | null => {
-      const n = Math.max(0, Math.round(months));
-      if (n <= 0) return 0;
-      if (!(recurringMonthlyBase > 0)) return 0;
-      if (!(stepR > 0)) return null;
+    const rows = computeCashflowFvRows({
+      yearsList: horizonTable.map((r) => r.years),
+      upfront,
+      recurringMonthlyBase,
+      annualReturnPct: settings.investing.annualReturnPct,
+      feeDragPct: settings.investing.feeDragPct,
+      inflationPct: settings.investing.inflationPct,
+    });
 
-      if (rMonthly === gMonthly) {
-        return recurringMonthlyBase * n * Math.pow(stepR, n - 1);
-      }
-      return (
-        recurringMonthlyBase *
-        ((Math.pow(stepR, n) - Math.pow(stepG, n)) / (stepR - stepG))
-      );
-    };
-
-    const fvUpfrontAtYear = (years: number): number | null => {
-      if (years < 0) return 0;
-      if (!(sumUpfront > 0)) return 0;
-      if (years === 0) return sumUpfront;
-      // Keep consistent with other FV calcs: monthly compounding.
-      return futureValueNominal(sumUpfront, annualReturnPct, 12, years, feeDragPct);
-    };
-
-    const fvNominalAtYear = (years: number): number | null => {
-      if (years < 0) return 0;
-      const upfrontFv = fvUpfrontAtYear(years);
-      if (upfrontFv == null) return null;
-      if (years === 0) return upfrontFv;
-
-      const recurringFv = fvGrowingMonthly(12 * years);
-      if (recurringFv == null) return null;
-      return upfrontFv + recurringFv;
-    };
-
-    const fvRealAtYear = (years: number): number | null => {
-      const nom = fvNominalAtYear(years);
-      if (nom == null) return null;
-      if (years < 0) return 0;
-      if (years === 0) return nom;
-      if (!inflationOk) return null;
-      return futureValueReal(nom, settings.investing.inflationPct, years);
-    };
-
-    return horizonTable.map((r) => {
-      const years = r.years;
-      const totalNominal = fvNominalAtYear(years);
-      const totalReal = fvRealAtYear(years);
+    return rows.map((r) => {
       const totalRunwayDays =
-        daily != null && totalReal != null ? equivalentCoreExpenseDaysInYearN(totalReal, daily) : null;
-
-      const prevYears = years - 1;
-      const prevNominal = prevYears >= 0 ? fvNominalAtYear(prevYears) : 0;
-      const prevReal = prevYears >= 0 ? fvRealAtYear(prevYears) : 0;
-
-      const nominalThisYear =
-        totalNominal != null && prevNominal != null ? totalNominal - prevNominal : null;
-      const realThisYear =
-        totalReal != null && prevReal != null ? totalReal - prevReal : null;
+        daily != null && r.totalReal != null
+          ? equivalentCoreExpenseDaysInYearN(r.totalReal, daily)
+          : null;
       const runwayThisYearDays =
-        daily != null && realThisYear != null
-          ? equivalentCoreExpenseDaysInYearN(realThisYear, daily)
+        daily != null && r.realThisYear != null
+          ? equivalentCoreExpenseDaysInYearN(r.realThisYear, daily)
           : null;
 
       return {
-        years,
-        nominalThisYear,
-        totalNominal,
-        realThisYear,
-        totalReal,
+        years: r.years,
+        valueThisYearReal: r.valueThisYearReal,
+        valueTotalReal: r.valueTotalReal,
+        nominalThisYear: r.nominalThisYear,
+        totalNominal: r.totalNominal,
+        realThisYear: r.realThisYear,
+        totalReal: r.totalReal,
         runwayThisYearDays,
         totalRunwayDays,
       };
@@ -1150,6 +1214,27 @@ const MoneyPerspectivePage: React.FC = () => {
     settings.investing.feeDragPct,
     settings.investing.inflationPct,
   ]);
+
+  const futureRunwayProjectionRows = useMemo(() => {
+    const daily = dailyCoreExpense;
+    return futureValueThisYearRows.map((r) => {
+      const runwayThisYearDays =
+        daily != null
+          ? equivalentCoreExpenseDaysInYearN(r.valueThisYearReal, daily)
+          : null;
+      const runwayTotalDays =
+        daily != null
+          ? equivalentCoreExpenseDaysInYearN(r.valueTotalReal, daily)
+          : null;
+      return {
+        years: r.years,
+        runwayThisYearDays,
+        runwayTotalDays,
+        investedRunwayThisYearDays: r.runwayThisYearDays,
+        investedRunwayTotalDays: r.totalRunwayDays,
+      };
+    });
+  }, [dailyCoreExpense, futureValueThisYearRows]);
 
   const workTimeProjectionYear1 = useMemo(() => {
     return workTimeProjectionTable?.find((r) => r.years === 1) ?? null;
@@ -2177,6 +2262,14 @@ const MoneyPerspectivePage: React.FC = () => {
                           </div>
                         </div>
                         <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Projection modes assumption</div>
+                          <div>
+                            <strong>Work</strong> converts recurring expenses into hours using the wage in that year (with pay raise).
+                            <strong> Value</strong> models upfront + recurring as a cashflow (and a counterfactual “if invested” path).
+                            <strong> Runway</strong> expresses those values as runway days using core expenses.
+                          </div>
+                        </div>
+                        <div>
                           <div style={{ fontWeight: 800, marginBottom: 6 }}>Inflation and pay raise assumption</div>
                           <div>
                             Repetitive expenses inflate by <strong>i</strong> each year; wage grows by <strong>p</strong> each year.
@@ -2250,9 +2343,9 @@ const MoneyPerspectivePage: React.FC = () => {
                   type="checkbox"
                   checked={showNominalFv}
                   onChange={(e) => setShowNominalFv(e.target.checked)}
-                  aria-label="Show nominal value projection"
+                  aria-label="Show nominal invested value projection"
                 />
-                Show nominal (non-inflation-adjusted) instead of real (inflation-adjusted). Runway stays real.
+                Show nominal (non-inflation-adjusted) instead of real (inflation-adjusted) for the invested columns.
               </label>
 
               <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -2281,6 +2374,24 @@ const MoneyPerspectivePage: React.FC = () => {
                           borderBottom: "1px solid var(--fc-subtle-border)",
                         }}
                       >
+                        Value (this year)
+                      </th>
+                      <th
+                        style={{
+                          textAlign: "right",
+                          padding: "6px 8px",
+                          borderBottom: "1px solid var(--fc-subtle-border)",
+                        }}
+                      >
+                        Value (total)
+                      </th>
+                      <th
+                        style={{
+                          textAlign: "right",
+                          padding: "6px 8px",
+                          borderBottom: "1px solid var(--fc-subtle-border)",
+                        }}
+                      >
                         {showNominalFv ? "Nominal (this year)" : "Real (this year)"}
                       </th>
                       <th
@@ -2291,24 +2402,6 @@ const MoneyPerspectivePage: React.FC = () => {
                         }}
                       >
                         {showNominalFv ? "Nominal (total)" : "Real (total)"}
-                      </th>
-                      <th
-                        style={{
-                          textAlign: "right",
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--fc-subtle-border)",
-                        }}
-                      >
-                        Runway (this year)
-                      </th>
-                      <th
-                        style={{
-                          textAlign: "right",
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--fc-subtle-border)",
-                        }}
-                      >
-                        Runway (total)
                       </th>
                     </tr>
                   </thead>
@@ -2322,6 +2415,24 @@ const MoneyPerspectivePage: React.FC = () => {
                           }}
                         >
                           {r.years}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            padding: "6px 8px",
+                            borderBottom: "1px solid var(--fc-subtle-border)",
+                          }}
+                        >
+                          {formatCurrencyNoDecimals(r.valueThisYearReal, displayCurrency)}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            padding: "6px 8px",
+                            borderBottom: "1px solid var(--fc-subtle-border)",
+                          }}
+                        >
+                          {formatCurrencyNoDecimals(r.valueTotalReal, displayCurrency)}
                         </td>
                         <td
                           style={{
@@ -2353,42 +2464,10 @@ const MoneyPerspectivePage: React.FC = () => {
                               ? formatCurrencyNoDecimals(r.totalReal, displayCurrency)
                               : "—"}
                         </td>
-                        <td
-                          style={{
-                            textAlign: "right",
-                            padding: "6px 8px",
-                            borderBottom: "1px solid var(--fc-subtle-border)",
-                          }}
-                        >
-                          {dailyCoreExpense == null
-                            ? "—"
-                            : r.runwayThisYearDays != null
-                              ? formatSignedRunwayDmy(r.runwayThisYearDays, 1)
-                              : "—"}
-                        </td>
-                        <td
-                          style={{
-                            textAlign: "right",
-                            padding: "6px 8px",
-                            borderBottom: "1px solid var(--fc-subtle-border)",
-                          }}
-                        >
-                          {dailyCoreExpense == null
-                            ? "—"
-                            : r.totalRunwayDays != null
-                              ? formatRunwayDmy(r.totalRunwayDays, 1)
-                              : "—"}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-
-                {dailyCoreExpense == null ? (
-                  <div style={{ ...subtleTextStyle, marginTop: 6 }}>
-                    Set core expenses to show runway days.
-                  </div>
-                ) : null}
               </div>
 
               <details style={breakdownMainDetailsStyle}>
@@ -2406,27 +2485,27 @@ const MoneyPerspectivePage: React.FC = () => {
                     Break down column:
                   </div>
                   <select
-                    value={valueProjectionBreakdownColumn}
+                    value={futureValueProjectionBreakdownColumn}
                     onChange={(e) =>
-                      setValueProjectionBreakdownColumn(
-                        e.target.value as ValueProjectionBreakdownColumn,
+                      setFutureValueProjectionBreakdownColumn(
+                        e.target.value as FutureValueProjectionBreakdownColumn,
                       )
                     }
                     style={breakdownSelectStyle}
                     aria-label="Select value projection breakdown column"
                   >
-                    <option value="valueThisYear">
+                    <option value="valueThisYear">Value (this year)</option>
+                    <option value="valueTotal">Value (total)</option>
+                    <option value="investedThisYear">
                       {showNominalFv ? "Nominal (this year)" : "Real (this year)"}
                     </option>
-                    <option value="valueTotal">
+                    <option value="investedTotal">
                       {showNominalFv ? "Nominal (total)" : "Real (total)"}
                     </option>
-                    <option value="runwayThisYear">Runway (this year)</option>
-                    <option value="runwayTotal">Runway (total)</option>
                   </select>
                 </div>
                 <div style={{ opacity: 0.75, margin: "10px 0", fontSize: 13, lineHeight: 1.35 }}>
-                  Runway is always based on real.
+                  Value columns are the non-invested cumulative cost (in today’s money). Invested columns can be shown as nominal or real.
                 </div>
 
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -2478,12 +2557,31 @@ const MoneyPerspectivePage: React.FC = () => {
                           value: Number.isFinite(inflationPct) ? formatNumber(i, 4) : "—",
                           note: "used to compute real values and to grow the recurring monthly amount",
                         },
-                        {
-                          label: "Daily core expense (d)",
-                          value: dailyCoreExpense != null ? `${formatNumber(dailyCoreExpense, 2)} ${displayCurrency}/day` : "—",
-                          note: "derived from core expenses settings",
-                        },
                       ] as const;
+
+                      const year1ValueThisYear = {
+                        label: "Value in Year 1",
+                        value: formatCurrencyNoDecimals(oneTimeExpenseTotal + recurringYearlyExpenseTotal, displayCurrency),
+                        note: "Year 1 includes upfront + recurring (in today’s money)",
+                      };
+
+                      const year2ValueThisYear = {
+                        label: "Value in Year 2",
+                        value: formatCurrencyNoDecimals(recurringYearlyExpenseTotal, displayCurrency),
+                        note: "Year 2 adds only the recurring yearly amount (in today’s money)",
+                      };
+
+                      const year1ValueTotal = {
+                        label: "Value total end of Year 1",
+                        value: formatCurrencyNoDecimals(oneTimeExpenseTotal + 1 * recurringYearlyExpenseTotal, displayCurrency),
+                        note: "Value total(Y) = upfront + Y × yearly recurring (all in today’s money)",
+                      };
+
+                      const year2ValueTotal = {
+                        label: "Value total end of Year 2",
+                        value: formatCurrencyNoDecimals(oneTimeExpenseTotal + 2 * recurringYearlyExpenseTotal, displayCurrency),
+                        note: "Value total(Y) = upfront + Y × yearly recurring (all in today’s money)",
+                      };
 
                       const year1NominalTotal = {
                         label: "Nominal total end of Year 1 (N1)",
@@ -2521,7 +2619,7 @@ const MoneyPerspectivePage: React.FC = () => {
                         note: `R2 = N2 / (1 + i)^2 = ${futureValueProjectionYear2?.totalNominal != null ? formatCurrencyNoDecimals(futureValueProjectionYear2.totalNominal, displayCurrency) : "—"} / (1 + ${Number.isFinite(inflationPct) ? formatNumber(i, 4) : "—"})^2`,
                       };
 
-                      const year1ValueThisYear = showNominalFv
+                      const year1InvestedThisYear = showNominalFv
                         ? {
                             label: "Nominal change in Year 1 (ΔN1)",
                             value:
@@ -2539,7 +2637,7 @@ const MoneyPerspectivePage: React.FC = () => {
                             note: "ΔR1 = R1 − R0, where R0 = upfront U (recurring contributes 0 at year 0)",
                           };
 
-                      const year2ValueThisYear = showNominalFv
+                      const year2InvestedThisYear = showNominalFv
                         ? {
                             label: "Nominal change in Year 2 (ΔN2)",
                             value:
@@ -2557,110 +2655,50 @@ const MoneyPerspectivePage: React.FC = () => {
                             note: "ΔR2 = R2 − R1",
                           };
 
-                      const year1RunwayThisYear = {
-                        label: "Runway change in Year 1",
-                        value:
-                          futureValueProjectionYear1?.runwayThisYearDays != null
-                            ? formatSignedRunwayDmy(futureValueProjectionYear1.runwayThisYearDays, 1)
-                            : "—",
-                        note: "runway change = ΔR1 / d",
-                      };
-
-                      const year2RunwayThisYear = {
-                        label: "Runway change in Year 2",
-                        value:
-                          futureValueProjectionYear2?.runwayThisYearDays != null
-                            ? formatSignedRunwayDmy(futureValueProjectionYear2.runwayThisYearDays, 1)
-                            : "—",
-                        note: "runway change = ΔR2 / d",
-                      };
-
-                      const year1RunwayTotal = {
-                        label: "Runway total end of Year 1",
-                        value:
-                          futureValueProjectionYear1?.totalRunwayDays != null
-                            ? formatRunwayDmy(futureValueProjectionYear1.totalRunwayDays, 1)
-                            : "—",
-                        note: "runway total = R1 / d",
-                      };
-
-                      const year2RunwayTotal = {
-                        label: "Runway total end of Year 2",
-                        value:
-                          futureValueProjectionYear2?.totalRunwayDays != null
-                            ? formatRunwayDmy(futureValueProjectionYear2.totalRunwayDays, 1)
-                            : "—",
-                        note: "runway total = R2 / d",
-                      };
-
-                      const year1RowsByColumn: Record<ValueProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
+                      const year1RowsByColumn: Record<FutureValueProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
                         valueThisYear: [
                           { label: "Year 1", value: "", note: "" },
-                          ...(showNominalFv ? [year1NominalTotal] : [year1NominalTotal, year1RealTotal]),
                           year1ValueThisYear,
                         ],
                         valueTotal: [
                           { label: "Year 1", value: "", note: "" },
+                          year1ValueTotal,
+                        ],
+                        investedThisYear: [
+                          { label: "Year 1", value: "", note: "" },
                           ...(showNominalFv ? [year1NominalTotal] : [year1NominalTotal, year1RealTotal]),
+                          year1InvestedThisYear,
                         ],
-                        runwayThisYear: [
+                        investedTotal: [
                           { label: "Year 1", value: "", note: "" },
-                          year1NominalTotal,
-                          year1RealTotal,
-                          {
-                            label: "Real change in Year 1 (ΔR1)",
-                            value:
-                              futureValueProjectionYear1?.realThisYear != null
-                                ? formatCurrencyNoDecimals(futureValueProjectionYear1.realThisYear, displayCurrency)
-                                : "—",
-                            note: "ΔR1 = R1 − R0, where R0 = upfront U",
-                          },
-                          year1RunwayThisYear,
-                        ],
-                        runwayTotal: [
-                          { label: "Year 1", value: "", note: "" },
-                          year1NominalTotal,
-                          year1RealTotal,
-                          year1RunwayTotal,
+                          ...(showNominalFv ? [year1NominalTotal] : [year1NominalTotal, year1RealTotal]),
                         ],
                       };
 
-                      const year2RowsByColumn: Record<ValueProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
+                      const year2RowsByColumn: Record<FutureValueProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
                         valueThisYear: [
                           { label: "Year 2", value: "", note: "" },
-                          ...(showNominalFv ? [year2NominalTotal] : [year2NominalTotal, year2RealTotal]),
                           year2ValueThisYear,
                         ],
                         valueTotal: [
                           { label: "Year 2", value: "", note: "" },
+                          year2ValueTotal,
+                        ],
+                        investedThisYear: [
+                          { label: "Year 2", value: "", note: "" },
                           ...(showNominalFv ? [year2NominalTotal] : [year2NominalTotal, year2RealTotal]),
+                          year2InvestedThisYear,
                         ],
-                        runwayThisYear: [
+                        investedTotal: [
                           { label: "Year 2", value: "", note: "" },
-                          year2NominalTotal,
-                          year2RealTotal,
-                          {
-                            label: "Real change in Year 2 (ΔR2)",
-                            value:
-                              futureValueProjectionYear2?.realThisYear != null
-                                ? formatCurrencyNoDecimals(futureValueProjectionYear2.realThisYear, displayCurrency)
-                                : "—",
-                            note: "ΔR2 = R2 − R1",
-                          },
-                          year2RunwayThisYear,
-                        ],
-                        runwayTotal: [
-                          { label: "Year 2", value: "", note: "" },
-                          year2NominalTotal,
-                          year2RealTotal,
-                          year2RunwayTotal,
+                          ...(showNominalFv ? [year2NominalTotal] : [year2NominalTotal, year2RealTotal]),
                         ],
                       };
 
                       const rows = [
                         ...inputsRows,
-                        ...year1RowsByColumn[valueProjectionBreakdownColumn],
-                        ...year2RowsByColumn[valueProjectionBreakdownColumn],
+                        ...year1RowsByColumn[futureValueProjectionBreakdownColumn],
+                        ...year2RowsByColumn[futureValueProjectionBreakdownColumn],
                       ] as const;
 
                       const milestoneLabels = new Set(["Inputs", "Year 1", "Year 2"]);
@@ -2733,9 +2771,10 @@ const MoneyPerspectivePage: React.FC = () => {
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Runway assumption</div>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Value columns assumption</div>
                       <div>
-                        Runway days are computed as <strong>real value / dailyCoreExpense</strong> and formatted using 365d/year and 30.417d/month.
+                        “Value” columns show the <strong>non-invested</strong> cumulative cost of the expense list, expressed in <strong>today’s money</strong>.
+                        Year 1 includes upfront + recurring; subsequent years add the recurring yearly amount.
                       </div>
                     </div>
                     <div>
@@ -2747,6 +2786,422 @@ const MoneyPerspectivePage: React.FC = () => {
                   </div>
                 </details>
               </details>
+                </>
+              ) : null}
+            </div>
+
+            <div
+              style={{
+                borderTop: "1px solid var(--fc-subtle-border)",
+                paddingTop: 10,
+                marginTop: 12,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setFutureRunwayProjectionOpen((v) => !v)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "inherit",
+                  fontWeight: 900,
+                  textAlign: "left",
+                }}
+                aria-expanded={futureRunwayProjectionOpen}
+                aria-label={futureRunwayProjectionOpen ? "Collapse runway projection" : "Expand runway projection"}
+              >
+                {futureRunwayProjectionOpen
+                  ? "Future Runway Projection ▾"
+                  : "Future Runway Projection ▸"}
+              </button>
+
+              {futureRunwayProjectionOpen ? (
+                <>
+                  <div style={{ overflowX: "auto", marginTop: 8 }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: 14,
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <th
+                            style={{
+                              textAlign: "left",
+                              padding: "6px 8px",
+                              borderBottom: "1px solid var(--fc-subtle-border)",
+                            }}
+                          >
+                            Year
+                          </th>
+                          <th
+                            style={{
+                              textAlign: "right",
+                              padding: "6px 8px",
+                              borderBottom: "1px solid var(--fc-subtle-border)",
+                            }}
+                          >
+                            Runway (this year)
+                          </th>
+                          <th
+                            style={{
+                              textAlign: "right",
+                              padding: "6px 8px",
+                              borderBottom: "1px solid var(--fc-subtle-border)",
+                            }}
+                          >
+                            Runway (total)
+                          </th>
+                          <th
+                            style={{
+                              textAlign: "right",
+                              padding: "6px 8px",
+                              borderBottom: "1px solid var(--fc-subtle-border)",
+                            }}
+                          >
+                            If invested (this year)
+                          </th>
+                          <th
+                            style={{
+                              textAlign: "right",
+                              padding: "6px 8px",
+                              borderBottom: "1px solid var(--fc-subtle-border)",
+                            }}
+                          >
+                            If invested (total)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {futureRunwayProjectionRows.map((r) => (
+                          <tr key={r.years}>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                              }}
+                            >
+                              {r.years}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                padding: "6px 8px",
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                              }}
+                            >
+                              {dailyCoreExpense == null
+                                ? "—"
+                                : r.runwayThisYearDays != null
+                                  ? formatSignedRunwayDmy(r.runwayThisYearDays, 1)
+                                  : "—"}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                padding: "6px 8px",
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                              }}
+                            >
+                              {dailyCoreExpense == null
+                                ? "—"
+                                : r.runwayTotalDays != null
+                                  ? formatRunwayDmy(r.runwayTotalDays, 1)
+                                  : "—"}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                padding: "6px 8px",
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                              }}
+                            >
+                              {dailyCoreExpense == null
+                                ? "—"
+                                : r.investedRunwayThisYearDays != null
+                                  ? formatSignedRunwayDmy(r.investedRunwayThisYearDays, 1)
+                                  : "—"}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                padding: "6px 8px",
+                                borderBottom: "1px solid var(--fc-subtle-border)",
+                              }}
+                            >
+                              {dailyCoreExpense == null
+                                ? "—"
+                                : r.investedRunwayTotalDays != null
+                                  ? formatRunwayDmy(r.investedRunwayTotalDays, 1)
+                                  : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {dailyCoreExpense == null ? (
+                      <div style={{ ...subtleTextStyle, marginTop: 6 }}>
+                        Set core expenses to show runway days.
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <details style={breakdownMainDetailsStyle}>
+                    <summary style={breakdownMainSummaryStyle}>Breakdown + calculation</summary>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        marginTop: 10,
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.8 }}>
+                        Break down column:
+                      </div>
+                      <select
+                        value={futureRunwayProjectionBreakdownColumn}
+                        onChange={(e) =>
+                          setFutureRunwayProjectionBreakdownColumn(
+                            e.target.value as FutureRunwayProjectionBreakdownColumn,
+                          )
+                        }
+                        style={breakdownSelectStyle}
+                        aria-label="Select runway projection breakdown column"
+                      >
+                        <option value="runwayThisYear">Runway (this year)</option>
+                        <option value="runwayTotal">Runway (total)</option>
+                        <option value="investedRunwayThisYear">If invested (this year)</option>
+                        <option value="investedRunwayTotal">If invested (total)</option>
+                      </select>
+                    </div>
+
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <colgroup>
+                        <col style={{ width: "38%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "44%" }} />
+                      </colgroup>
+                      <tbody>
+                        {(() => {
+                          const d = dailyCoreExpense;
+                          const upfront = oneTimeExpenseTotal;
+                          const yearlyRecurring = recurringYearlyExpenseTotal;
+
+                          const year1 = futureRunwayProjectionRows.find((r) => r.years === 1) ?? null;
+                          const year2 = futureRunwayProjectionRows.find((r) => r.years === 2) ?? null;
+
+                          const inputsRows = [
+                            { label: "Inputs", value: "", note: "" },
+                            {
+                              label: "Upfront (U)",
+                              value: formatCurrencyNoDecimals(upfront, displayCurrency),
+                              note: "sum of one-time expenses",
+                            },
+                            {
+                              label: "Yearly recurring (Y0)",
+                              value: formatCurrencyNoDecimals(yearlyRecurring, displayCurrency),
+                              note: "recurring yearly total (in today’s money)",
+                            },
+                            {
+                              label: "Daily core expense (d)",
+                              value: d != null ? `${formatNumber(d, 2)} ${displayCurrency}/day` : "—",
+                              note: "derived from core expenses settings",
+                            },
+                          ] as const;
+
+                          const year1RowsByColumn: Record<FutureRunwayProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
+                            runwayThisYear: [
+                              { label: "Year 1", value: "", note: "" },
+                              {
+                                label: "Value in Year 1",
+                                value: formatCurrencyNoDecimals(upfront + yearlyRecurring, displayCurrency),
+                                note: "Year 1 value = upfront + yearly recurring (today’s money)",
+                              },
+                              {
+                                label: "Runway (this year)",
+                                value:
+                                  d != null && year1?.runwayThisYearDays != null
+                                    ? formatSignedRunwayDmy(year1.runwayThisYearDays, 1)
+                                    : "—",
+                                note: "runway(this year) = value(this year) / d",
+                              },
+                            ],
+                            runwayTotal: [
+                              { label: "Year 1", value: "", note: "" },
+                              {
+                                label: "Value total end of Year 1",
+                                value: formatCurrencyNoDecimals(upfront + 1 * yearlyRecurring, displayCurrency),
+                                note: "value(total,Y) = upfront + Y × yearly recurring (today’s money)",
+                              },
+                              {
+                                label: "Runway (total)",
+                                value:
+                                  d != null && year1?.runwayTotalDays != null
+                                    ? formatRunwayDmy(year1.runwayTotalDays, 1)
+                                    : "—",
+                                note: "runway(total) = value(total) / d",
+                              },
+                            ],
+                            investedRunwayThisYear: [
+                              { label: "Year 1", value: "", note: "" },
+                              {
+                                label: "Invested runway change in Year 1",
+                                value:
+                                  d != null && year1?.investedRunwayThisYearDays != null
+                                    ? formatSignedRunwayDmy(year1.investedRunwayThisYearDays, 1)
+                                    : "—",
+                                note: "invested runway(this year) = invested real(this year) / d",
+                              },
+                            ],
+                            investedRunwayTotal: [
+                              { label: "Year 1", value: "", note: "" },
+                              {
+                                label: "Invested runway total end of Year 1",
+                                value:
+                                  d != null && year1?.investedRunwayTotalDays != null
+                                    ? formatRunwayDmy(year1.investedRunwayTotalDays, 1)
+                                    : "—",
+                                note: "invested runway(total) = invested real(total) / d",
+                              },
+                            ],
+                          };
+
+                          const year2RowsByColumn: Record<FutureRunwayProjectionBreakdownColumn, readonly { label: string; value: string; note: string }[]> = {
+                            runwayThisYear: [
+                              { label: "Year 2", value: "", note: "" },
+                              {
+                                label: "Value in Year 2",
+                                value: formatCurrencyNoDecimals(yearlyRecurring, displayCurrency),
+                                note: "Year 2 value = yearly recurring (today’s money)",
+                              },
+                              {
+                                label: "Runway (this year)",
+                                value:
+                                  d != null && year2?.runwayThisYearDays != null
+                                    ? formatSignedRunwayDmy(year2.runwayThisYearDays, 1)
+                                    : "—",
+                                note: "runway(this year) = value(this year) / d",
+                              },
+                            ],
+                            runwayTotal: [
+                              { label: "Year 2", value: "", note: "" },
+                              {
+                                label: "Value total end of Year 2",
+                                value: formatCurrencyNoDecimals(upfront + 2 * yearlyRecurring, displayCurrency),
+                                note: "value(total,Y) = upfront + Y × yearly recurring (today’s money)",
+                              },
+                              {
+                                label: "Runway (total)",
+                                value:
+                                  d != null && year2?.runwayTotalDays != null
+                                    ? formatRunwayDmy(year2.runwayTotalDays, 1)
+                                    : "—",
+                                note: "runway(total) = value(total) / d",
+                              },
+                            ],
+                            investedRunwayThisYear: [
+                              { label: "Year 2", value: "", note: "" },
+                              {
+                                label: "Invested runway change in Year 2",
+                                value:
+                                  d != null && year2?.investedRunwayThisYearDays != null
+                                    ? formatSignedRunwayDmy(year2.investedRunwayThisYearDays, 1)
+                                    : "—",
+                                note: "invested runway(this year) = invested real(this year) / d",
+                              },
+                            ],
+                            investedRunwayTotal: [
+                              { label: "Year 2", value: "", note: "" },
+                              {
+                                label: "Invested runway total end of Year 2",
+                                value:
+                                  d != null && year2?.investedRunwayTotalDays != null
+                                    ? formatRunwayDmy(year2.investedRunwayTotalDays, 1)
+                                    : "—",
+                                note: "invested runway(total) = invested real(total) / d",
+                              },
+                            ],
+                          };
+
+                          const rows = [
+                            ...inputsRows,
+                            ...year1RowsByColumn[futureRunwayProjectionBreakdownColumn],
+                            ...year2RowsByColumn[futureRunwayProjectionBreakdownColumn],
+                          ] as const;
+
+                          const milestoneLabels = new Set(["Inputs", "Year 1", "Year 2"]);
+
+                          return rows.map(({ label, value, note }, idx) => {
+                            const isMilestone = milestoneLabels.has(label);
+                            const showTopSeparator = isMilestone && idx !== 0;
+                            const paddingTop = showTopSeparator ? 14 : 7;
+                            return (
+                              <tr key={`${label}-${idx}`}>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 0`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    fontWeight: isMilestone ? 700 : 400,
+                                  }}
+                                >
+                                  {label}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 0`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    textAlign: "right",
+                                    fontVariantNumeric: "tabular-nums",
+                                    fontWeight: isMilestone ? 700 : 400,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {value}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: `${paddingTop}px 0 7px 26px`,
+                                    borderTop: showTopSeparator ? "2px solid var(--fc-card-border)" : undefined,
+                                    borderBottom: "1px solid var(--fc-subtle-border)",
+                                    opacity: 0.75,
+                                  }}
+                                >
+                                  {note}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+
+                    <details style={assumptionsDetailsStyle}>
+                      <summary style={assumptionsSummaryStyle}>Assumptions</summary>
+                      <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13, lineHeight: 1.35, display: "grid", gap: 14 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Runway basis assumption</div>
+                          <div>
+                            Runway days are computed as <strong>real value / dailyCoreExpense</strong> and formatted using 365d/year and 30.417d/month.
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, marginBottom: 6 }}>Value vs invested assumption</div>
+                          <div>
+                            “Runway” uses the <strong>Value</strong> columns (non-invested, today’s money). “If invested” uses the invested projection’s <strong>real</strong> values.
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </details>
                 </>
               ) : null}
             </div>
