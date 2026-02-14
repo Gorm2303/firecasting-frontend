@@ -5,14 +5,15 @@ import { YearlySummary } from '../models/YearlySummary';
 import { SimulationRequest, SimulationTimelineContext } from '../models/types';
 import { toIsoDateString } from '../utils/backendDate';
 import MultiPhaseOverview from '../MultiPhaseOverview';
-import { Link } from 'react-router-dom';
 import ExportStatisticsButton from '../components/ExportStatisticsButton';
 import { exportRunBundle, exportSimulationCsv, getCompletedSummaries, getReplayStatus, importRunBundle, ReplayStatusResponse } from '../api/simulation';
 import SimulationProgress from '../components/SimulationProgress';
+import PageLayout from '../components/PageLayout';
 
 type BundleKind = 'normal' | 'advanced';
 const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
 const ADVANCED_FEATURE_FLAGS_KEY = 'firecasting:simulation:advancedFeatureFlags:v1';
+const ADVANCED_MODE_ENABLED_KEY = 'firecasting:simulation:advancedModeEnabled:v1';
 
 const DEFAULT_ADVANCED_FEATURE_FLAGS: AdvancedFeatureFlags = {
   execution: true,
@@ -51,6 +52,9 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
           startDate,
           phaseTypes: phaseTypes.filter(Boolean),
           phaseDurationsInMonths,
+          phaseInitialDeposits: Array.isArray(explicit?.phaseInitialDeposits)
+            ? explicit.phaseInitialDeposits.map((x: any) => (x === null || x === undefined ? undefined : Number(x)))
+            : undefined,
           firstPhaseInitialDeposit:
             explicit?.firstPhaseInitialDeposit !== undefined ? Number(explicit.firstPhaseInitialDeposit) : undefined,
           inflationFactorPerYear:
@@ -78,6 +82,7 @@ const tryBuildTimelineFromBundle = (bundle: any): SimulationTimelineContext | nu
       startDate: String(startDate),
       phaseTypes,
       phaseDurationsInMonths,
+      phaseInitialDeposits: phases.map((p) => (p?.initialDeposit !== undefined ? Number(p.initialDeposit) : undefined)),
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
       inflationFactorPerYear:
@@ -94,7 +99,6 @@ const SimulationPage: React.FC = () => {
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
   const [lastCompletedSimulationId, setLastCompletedSimulationId] = useState<string | null>(null);
-  const [ackSim, setAckSim] = useState(false);
 
   const [externalNormalLoad, setExternalNormalLoad] = useState<SimulationRequest | null>(null);
   const [externalNormalLoadNonce, setExternalNormalLoadNonce] = useState(0);
@@ -127,6 +131,14 @@ const SimulationPage: React.FC = () => {
     }
   });
 
+  const [advancedModeEnabled, setAdvancedModeEnabled] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(ADVANCED_MODE_ENABLED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   const [advancedFeatureFlags, setAdvancedFeatureFlags] = useState<AdvancedFeatureFlags>(() => {
     try {
       const raw = window.localStorage.getItem(ADVANCED_FEATURE_FLAGS_KEY);
@@ -146,11 +158,25 @@ const SimulationPage: React.FC = () => {
 
   const [isAdvancedPickerOpen, setIsAdvancedPickerOpen] = useState(false);
   const [pendingAdvancedFeatureFlags, setPendingAdvancedFeatureFlags] = useState<AdvancedFeatureFlags>(advancedFeatureFlags);
+  const [pendingAdvancedModeEnabled, setPendingAdvancedModeEnabled] = useState<boolean>(advancedModeEnabled);
   const advancedPickerOverlayRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch {}
   }, [mode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ADVANCED_MODE_ENABLED_KEY, String(advancedModeEnabled));
+    } catch {
+      // ignore
+    }
+  }, [advancedModeEnabled]);
+
+  // Safety: if advanced mode is disabled in settings, force normal mode.
+  useEffect(() => {
+    if (!advancedModeEnabled && mode === 'advanced') setMode('normal');
+  }, [advancedModeEnabled, mode]);
 
   useEffect(() => {
     try {
@@ -253,6 +279,12 @@ const SimulationPage: React.FC = () => {
             // Load imported inputs back into the forms (including phases list).
             const kindRaw = String(parsed?.inputs?.kind ?? parsed?.meta?.inputKind ?? parsed?.meta?.uiMode ?? '').toLowerCase();
             const kind: BundleKind = kindRaw === 'advanced' ? 'advanced' : 'normal';
+
+            // Importing an advanced bundle is an explicit user action. Ensure advanced mode
+            // is enabled so the UI (and safety effect) doesn't force us back to normal.
+            if (kind === 'advanced') {
+              setAdvancedModeEnabled(true);
+            }
 
             setMode(kind === 'advanced' ? 'advanced' : 'normal');
 
@@ -446,53 +478,58 @@ const SimulationPage: React.FC = () => {
     </button>
   );
 
-  return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
-      {!ackSim && (
-        <div role="status" style={{ marginBottom: 12, padding: '10px 12px',
-          border: '1px solid #ffc10755', background: 'rgba(255,193,7,0.08)', borderRadius: 10 }}>
-          <strong>Simulation (beta):</strong> This page is under development…
-          <div style={{ marginTop: 8 }}>
-            <button onClick={() => setAckSim(true)} style={{
-              padding: '6px 10px', borderRadius: 8, border: '1px solid #444',
-              backgroundColor: '#2e2e2e', color: 'white', cursor: 'pointer',
-            }}>
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
+  const settingsButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setPendingAdvancedModeEnabled(advancedModeEnabled);
+        setPendingAdvancedFeatureFlags(advancedFeatureFlags);
+        setIsAdvancedPickerOpen(true);
+      }}
+      style={{
+        padding: '6px 10px',
+        borderRadius: 8,
+        border: '1px solid #444',
+        cursor: 'pointer',
+        fontSize: 14,
+        background: 'transparent',
+        color: 'inherit',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+      }}
+      title="Settings"
+      aria-label="Settings"
+    >
+      <span aria-hidden="true">⚙️</span>
+      Settings
+    </button>
+  );
 
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
-        <h1 style={{ display: 'flex', justifyContent: 'center' }}>Firecasting</h1>
+  return (
+    <PageLayout variant="wide">
+    <div style={{ maxWidth: 1500, margin: '0 auto' }}>
+      <PageLayout variant="constrained" maxWidthPx={980} paddingPx={0}>
+        <h1 style={{ display: 'flex', justifyContent: 'center' }}>FIRE Simulator</h1>
 
         <div role="group" aria-label="Simulation tools" className="fc-sim-tools" style={{
           display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center',
           flexWrap: 'wrap',
           marginBottom: 12, border: '1px solid #444', borderRadius: 12, padding: 6,
         }}>
-          <Link to="/simulation/tutorial" style={{
-            padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
-            textDecoration:'none', color:'inherit',
-          }}>
-            Tutorial
-          </Link>
-          <Link to="/simulation/diff" style={{
-            padding:'0.2rem 0.8rem', border:'1px solid #444', borderRadius:8,
-            textDecoration:'none', color:'inherit',
-          }}>
-            Diff scenarios
-          </Link>
           <div role="group" aria-label="Mode" className="fc-sim-mode" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {modeButton('Normal', 'normal', () => {
               setMode('normal');
               setIsAdvancedPickerOpen(false);
             })}
-            {modeButton('Advanced', 'advanced', () => {
-              setPendingAdvancedFeatureFlags(advancedFeatureFlags);
-              setIsAdvancedPickerOpen(true);
-            })}
+            {advancedModeEnabled
+              ? modeButton('Advanced', 'advanced', () => {
+                  setMode('advanced');
+                  setIsAdvancedPickerOpen(false);
+                })
+              : null}
           </div>
+          {settingsButton}
           {ioButton}
           {savedScenariosButton}
         </div>
@@ -529,7 +566,7 @@ const SimulationPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
-                <div style={{ fontWeight: 800 }}>Advanced options</div>
+                <div style={{ fontWeight: 800 }}>Settings</div>
                 <button
                   type="button"
                   onClick={() => setIsAdvancedPickerOpen(false)}
@@ -547,63 +584,96 @@ const SimulationPage: React.FC = () => {
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-                Choose which advanced sections are visible, keep in mind everything invisible is still included in the request.
+                Advanced mode is hidden by default. Enable it here if you want the extra controls.
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              <div style={{ marginTop: 12 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input
                     type="checkbox"
-                    checked={pendingAdvancedFeatureFlags.execution}
-                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, execution: e.target.checked }))}
+                    checked={pendingAdvancedModeEnabled}
+                    onChange={(e) => setPendingAdvancedModeEnabled(e.target.checked)}
                   />
-                  <span>Engine settings (paths & batch size)</span>
+                  <span style={{ fontWeight: 700 }}>Enable advanced mode</span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={pendingAdvancedFeatureFlags.inflation}
-                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, inflation: e.target.checked }))}
-                  />
-                  <span>Inflation</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={pendingAdvancedFeatureFlags.fee}
-                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, fee: e.target.checked }))}
-                  />
-                  <span>Fee</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={pendingAdvancedFeatureFlags.exemptions}
-                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, exemptions: e.target.checked }))}
-                  />
-                  <span>Exemptions</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={pendingAdvancedFeatureFlags.returnModel}
-                    onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, returnModel: e.target.checked }))}
-                  />
-                  <span>Return model</span>
-                </label>
+
+                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
+                  When enabled, the Advanced button appears next to Normal.
+                </div>
               </div>
+
+              <fieldset
+                disabled={!pendingAdvancedModeEnabled}
+                style={{
+                  border: '1px solid var(--fc-subtle-border)',
+                  borderRadius: 10,
+                  padding: 10,
+                  marginTop: 12,
+                  opacity: pendingAdvancedModeEnabled ? 1 : 0.55,
+                }}
+              >
+                <legend style={{ padding: '0 6px', fontWeight: 750 }}>Advanced sections</legend>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingAdvancedFeatureFlags.execution}
+                      onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, execution: e.target.checked }))}
+                    />
+                    <span>Engine settings (paths & batch size)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingAdvancedFeatureFlags.inflation}
+                      onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, inflation: e.target.checked }))}
+                    />
+                    <span>Inflation</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingAdvancedFeatureFlags.fee}
+                      onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, fee: e.target.checked }))}
+                    />
+                    <span>Fee</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingAdvancedFeatureFlags.exemptions}
+                      onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, exemptions: e.target.checked }))}
+                    />
+                    <span>Exemptions</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingAdvancedFeatureFlags.returnModel}
+                      onChange={(e) => setPendingAdvancedFeatureFlags((p) => ({ ...p, returnModel: e.target.checked }))}
+                    />
+                    <span>Return model</span>
+                  </label>
+                </div>
+
+                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>
+                  Tip: hiding a section only hides the UI — the backend still uses defaults for missing fields.
+                </div>
+              </fieldset>
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button
                   type="button"
                   onClick={() => setPendingAdvancedFeatureFlags(DEFAULT_ADVANCED_FEATURE_FLAGS)}
+                  disabled={!pendingAdvancedModeEnabled}
                   style={{
                     padding: '6px 10px',
                     borderRadius: 8,
                     border: '1px solid #444',
                     background: 'transparent',
                     color: 'inherit',
-                    cursor: 'pointer',
+                    cursor: pendingAdvancedModeEnabled ? 'pointer' : 'not-allowed',
+                    opacity: pendingAdvancedModeEnabled ? 1 : 0.6,
                   }}
                 >
                   Enable all
@@ -612,6 +682,7 @@ const SimulationPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsAdvancedPickerOpen(false);
+                    setPendingAdvancedModeEnabled(advancedModeEnabled);
                     setPendingAdvancedFeatureFlags(advancedFeatureFlags);
                   }}
                   style={{
@@ -628,8 +699,9 @@ const SimulationPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    setAdvancedModeEnabled(pendingAdvancedModeEnabled);
                     setAdvancedFeatureFlags(pendingAdvancedFeatureFlags);
-                    setMode('advanced');
+                    if (!pendingAdvancedModeEnabled) setMode('normal');
                     setIsAdvancedPickerOpen(false);
                   }}
                   style={{
@@ -677,7 +749,7 @@ const SimulationPage: React.FC = () => {
             </>
           }
         />
-      </div>
+      </PageLayout>
 
       {isIoModalOpen && (
         <div
@@ -814,6 +886,7 @@ const SimulationPage: React.FC = () => {
         </div>
       )}
     </div>
+    </PageLayout>
   );
 };
 

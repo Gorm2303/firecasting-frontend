@@ -4,6 +4,7 @@ import MultiPhaseOverview from '../MultiPhaseOverview';
 import { diffRuns, findRunForInput, getCompletedSummaries, getRunInput, getRunSummaries, getStandardResultsV3, listRuns, startAdvancedSimulation, type MetricSummary, type MetricSummaryScope, type RunDiffResponse, type RunListItem, type StartRunResponse } from '../api/simulation';
 import CompareMetricExplorer from '../components/CompareMetricExplorer';
 import SimulationProgress from '../components/SimulationProgress';
+import PageLayout from '../components/PageLayout';
 import { isRandomSeedRequested, listSavedScenarios, materializeRandomSeedIfNeeded, saveScenario, updateScenarioRunMeta, type SavedScenario } from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
@@ -19,7 +20,6 @@ const fmt = (v: any): string => {
 
 const pickLastEntry = (data: YearlySummary[], preferredPhase?: string): YearlySummary | null => {
   if (!Array.isArray(data) || data.length === 0) return null;
-
   const normPreferred = preferredPhase ? String(preferredPhase).toUpperCase() : null;
   const candidates = normPreferred
     ? data.filter((d) => String(d.phaseName ?? '').toUpperCase() === normPreferred)
@@ -475,6 +475,7 @@ const buildTimelineFromAdvancedRequest = (req: any): SimulationTimelineContext |
       startDate,
       phaseTypes,
       phaseDurationsInMonths,
+      phaseInitialDeposits: phases.map((p) => (p?.initialDeposit !== undefined ? Number(p.initialDeposit) : undefined)),
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
       inflationFactorPerYear:
@@ -798,9 +799,10 @@ const RunDiffPage: React.FC = () => {
   }, [refreshSavedScenarios]);
 
   return (
+    <PageLayout variant="wide">
     <div
       className={singleModeSide === 'A' ? 'single-mode-a' : singleModeSide === 'B' ? 'single-mode-b' : ''}
-      style={{ minHeight: '100vh', padding: 16, maxWidth: 1200, margin: '0 auto' }}
+      style={{ maxWidth: 1500, margin: '0 auto' }}
     >
       <style>{`
         /* Match the /info collapsible-card look */
@@ -973,7 +975,7 @@ const RunDiffPage: React.FC = () => {
       `}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-        <h2 style={{ margin: 0 }}>Simulation diff</h2>
+        <h2 style={{ margin: 0 }}>Comparator</h2>
         <Link to="/simulation" style={{ textDecoration: 'none' }}>← Back</Link>
       </div>
 
@@ -2643,6 +2645,7 @@ const RunDiffPage: React.FC = () => {
         </div>
       )}
     </div>
+    </PageLayout>
   );
 };
 

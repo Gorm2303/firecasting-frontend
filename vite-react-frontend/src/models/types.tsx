@@ -28,6 +28,8 @@ export interface SimulationTimelineContext {
   phaseTypes: PhaseRequest['phaseType'][];
   /** Phase durations in months, in the order entered */
   phaseDurationsInMonths: number[];
+  /** Initial deposits per phase (only meaningful for DEPOSIT phases). UI-only helper. */
+  phaseInitialDeposits?: Array<number | undefined>;
   /** Used as the start anchor for Phase #1 interpolation when no previous year exists. */
   firstPhaseInitialDeposit?: number;
   /** UI-only: yearly inflation factor used for this run (e.g. 1.02). */

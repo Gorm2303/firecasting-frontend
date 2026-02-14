@@ -1,5 +1,5 @@
 // src/features/simulation/SimulationForm.tsx
-import React, { useState, useEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useImperativeHandle } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { YearlySummary } from '../../models/YearlySummary';
 import { PhaseRequest, SimulationRequest, SimulationTimelineContext } from '../../models/types';
@@ -23,6 +23,7 @@ import {
 import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeScenario';
+import { draftToIntOrZero, draftToNumberOrZero, isValidDecimalDraft, isValidIntegerDraft, parseLocaleNumber } from '../../utils/numberInput';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
 
@@ -80,7 +81,7 @@ const mapOverallTaxRuleForAdvanced = (rule: OverallTaxRule): string => (rule ===
 
 const toNumOrUndef = (v: unknown): number | undefined => {
   if (v === null || v === undefined || v === '') return undefined;
-  const n = Number(v);
+  const n = typeof v === 'number' ? v : parseLocaleNumber(String(v));
   return Number.isFinite(n) ? n : undefined;
 };
 
@@ -104,7 +105,36 @@ export type TutorialStep = {
   selector?: string;
   placement?: 'top' | 'right' | 'bottom' | 'left';
   waitFor?: number;
+  requires?: TutorialRequirement[];
+  // If true, auto-advance to the next step once all requirements are met.
+  // Defaults to true for steps with requirements.
+  autoAdvance?: boolean;
 };
+
+export type TutorialRequirement =
+  | {
+      kind: 'exists';
+      selector: string;
+      message: string;
+    }
+  | {
+      kind: 'valueEquals';
+      selector: string;
+      value: string | number;
+      message: string;
+    }
+  | {
+      kind: 'numberEquals';
+      selector: string;
+      value: number;
+      message: string;
+      tolerance?: number;
+    }
+  | {
+      kind: 'checkboxChecked';
+      selector: string;
+      message: string;
+    };
 
 export type NormalInputFormMode = 'normal' | 'advanced';
 
@@ -115,6 +145,9 @@ export type AdvancedFeatureFlags = {
   exemptions: boolean;
   returnModel: boolean;
 };
+
+const TUTORIAL_TEMPLATE_ID = 'tutorial' as const;
+type TemplatePickerId = SimulationTemplateId | typeof TUTORIAL_TEMPLATE_ID;
 
 export type NormalInputFormHandle = {
   openSavedScenarios: () => void;
@@ -155,62 +188,441 @@ const Coachmark: React.FC<{
   onExit: () => void;
   isFirst: boolean;
   isLast: boolean;
-}> = ({ step, onNext, onBack, onExit, isFirst, isLast }) => {
+  enteredViaBack?: boolean;
+}> = ({ step, onNext, onBack, onExit, isFirst, isLast, enteredViaBack }) => {
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipSize, setTooltipSize] = useState<{ width: number; height: number } | null>(null);
+  const [isPositioning, setIsPositioning] = useState<boolean>(false);
+  const positioningTokenRef = useRef(0);
+
+  const [requirementsOk, setRequirementsOk] = useState(false);
+  const [requirementsHint, setRequirementsHint] = useState<string | null>(null);
+  const lastAutoAdvanceStepRef = useRef<string | null>(null);
+  const autoAdvancePendingForStepRef = useRef<string | null>(null);
+  const hasInteractedSinceStepStartRef = useRef<boolean>(false);
+
+  const computeUnmetRequirements = useCallback(() => {
+    const reqs = step.requires ?? [];
+    if (reqs.length === 0) return [] as string[];
+
+    const resolveValueElement = (node: any): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null => {
+      if (!node) return null;
+      if (typeof (node as any).value !== 'undefined') return node as any;
+      const nested = node.querySelector?.('input, select, textarea') as any;
+      return nested ?? null;
+    };
+
+    const resolveCheckboxElement = (node: any): HTMLInputElement | null => {
+      if (!node) return null;
+      if (typeof (node as any).checked !== 'undefined') return node as any;
+      const nested = node.querySelector?.('input[type="checkbox"]') as any;
+      return nested ?? null;
+    };
+
+    const unmet: string[] = [];
+    for (const r of reqs) {
+      const el = document.querySelector(r.selector) as any;
+      if (r.kind === 'exists') {
+        if (!el) unmet.push(r.message);
+        continue;
+      }
+
+      if (!el) {
+        unmet.push(r.message);
+        continue;
+      }
+
+      if (r.kind === 'checkboxChecked') {
+        const checkboxEl = resolveCheckboxElement(el);
+        const ok = Boolean(checkboxEl?.checked);
+        if (!ok) unmet.push(r.message);
+        continue;
+      }
+
+      const valueEl = resolveValueElement(el);
+      const rawValue = String((valueEl as any)?.value ?? '');
+      if (r.kind === 'valueEquals') {
+        const ok = rawValue === String(r.value);
+        if (!ok) unmet.push(r.message);
+        continue;
+      }
+
+      if (r.kind === 'numberEquals') {
+        const n = draftToNumberOrZero(rawValue);
+        const tol = Number.isFinite(r.tolerance) ? Number(r.tolerance) : 1e-9;
+        const ok = Number.isFinite(n) && Math.abs(n - r.value) <= tol;
+        if (!ok) unmet.push(r.message);
+        continue;
+      }
+    }
+
+    return unmet;
+  }, [step.requires]);
+
+  const evaluateRequirements = useCallback(() => {
+    const reqs = step.requires ?? [];
+    if (reqs.length === 0) {
+      setRequirementsOk(true);
+      setRequirementsHint(null);
+      return;
+    }
+
+    const unmet = computeUnmetRequirements();
+    setRequirementsOk(unmet.length === 0);
+    setRequirementsHint(unmet.length === 0 ? null : unmet.join(' '));
+  }, [computeUnmetRequirements, step.requires]);
+
+  useLayoutEffect(() => {
+    // Reset per-step tracking so auto-advance works even when a field starts already-correct
+    // (e.g., a select default matches the requirement).
+    // If the user navigated here via Back, suppress the initial auto-advance even if values are already correct.
+    lastAutoAdvanceStepRef.current = null;
+    autoAdvancePendingForStepRef.current = null;
+    hasInteractedSinceStepStartRef.current = false;
+    setRequirementsOk(false);
+    setRequirementsHint(null);
+  }, [enteredViaBack, step.id]);
+
+  // Evaluate requirements immediately when a step mounts/changes, so we don't miss fast user input.
+  useLayoutEffect(() => {
+    evaluateRequirements();
+  }, [evaluateRequirements, step.id]);
+
+  // Auto-advance once action requirements are satisfied.
+  useEffect(() => {
+    const reqs = step.requires ?? [];
+    if (reqs.length === 0) return;
+    if (isLast) return;
+
+    const shouldAutoAdvance = step.autoAdvance ?? true;
+    if (!shouldAutoAdvance) return;
+    // Back navigation should never auto-progress.
+    if (enteredViaBack) return;
+
+    // Advance as soon as requirements are satisfied (after user interaction).
+    if (requirementsOk !== true) return;
+
+    // Prevent stacking multiple timers while requirements remain satisfied,
+    // but do NOT permanently lock the step if the re-check below fails.
+    if (autoAdvancePendingForStepRef.current === step.id) return;
+    autoAdvancePendingForStepRef.current = step.id;
+
+    let cancelled = false;
+
+    const t = window.setTimeout(() => {
+      if (cancelled) return;
+
+      // Timer fired; allow future scheduling if we still can't advance.
+      if (autoAdvancePendingForStepRef.current === step.id) {
+        autoAdvancePendingForStepRef.current = null;
+      }
+
+      const unmet = computeUnmetRequirements();
+      setRequirementsOk(unmet.length === 0);
+      setRequirementsHint(unmet.length === 0 ? null : unmet.join(' '));
+      if (unmet.length !== 0) return;
+
+      // Lock to avoid double-advancing within the same step.
+      if (lastAutoAdvanceStepRef.current === step.id) return;
+      lastAutoAdvanceStepRef.current = step.id;
+
+      onNext();
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+      if (autoAdvancePendingForStepRef.current === step.id) {
+        autoAdvancePendingForStepRef.current = null;
+      }
+    };
+  }, [computeUnmetRequirements, enteredViaBack, isLast, onNext, requirementsOk, step.autoAdvance, step.id, step.requires]);
 
   const measure = useCallback(() => {
-    if (!step.selector) { setRect(null); return; }
+    if (!step.selector) {
+      setRect(null);
+      return;
+    }
     const el = document.querySelector(step.selector) as HTMLElement | null;
-    if (!el) { setRect(null); return; }
+    if (!el) {
+      setRect(null);
+      return;
+    }
     setRect(el.getBoundingClientRect());
-  }, [step]);
+  }, [step.selector]);
+
+  const scrollToTargetIfNeeded = useCallback((): { didScroll: boolean; element: HTMLElement | null } => {
+    if (!step.selector) return { didScroll: false, element: null };
+    const el = document.querySelector(step.selector) as HTMLElement | null;
+    if (!el) return { didScroll: false, element: null };
+
+    const r = el.getBoundingClientRect();
+    const margin = 80;
+    const inView = r.top >= margin && r.bottom <= window.innerHeight - margin;
+    if (inView) return { didScroll: false, element: el };
+
+    try {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    } catch {
+      // ignore
+    }
+    return { didScroll: true, element: el };
+  }, [step.selector]);
+
+  // Avoid showing the previous step's tooltip position while we re-measure the next step.
+  useEffect(() => {
+    positioningTokenRef.current += 1;
+    setRect(null);
+    setIsPositioning(Boolean(step.selector));
+  }, [step.id, step.selector]);
+
+  // Gate tutorial progression on user actions.
+  useEffect(() => {
+    let cancelled = false;
+
+    const triggerEvaluate = (markInteracted: boolean) => {
+      if (cancelled) return;
+      if (markInteracted) hasInteractedSinceStepStartRef.current = true;
+      evaluateRequirements();
+    };
+    const onAnyInput = () => triggerEvaluate(true);
+    window.addEventListener('input', onAnyInput, true);
+    window.addEventListener('change', onAnyInput, true);
+    window.addEventListener('click', onAnyInput, true);
+
+    // Poll requirements for auto-advance steps to be resilient to cases where input events
+    // aren't reliably captured (e.g. browser date widgets, number spinners, focus quirks).
+    const reqs = step.requires ?? [];
+    const shouldAutoAdvance = (step.autoAdvance ?? true) && reqs.length > 0 && !isLast && !enteredViaBack;
+    const poll = shouldAutoAdvance ? window.setInterval(() => triggerEvaluate(false), 200) : null;
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('input', onAnyInput, true);
+      window.removeEventListener('change', onAnyInput, true);
+      window.removeEventListener('click', onAnyInput, true);
+      if (poll) window.clearInterval(poll);
+    };
+  }, [enteredViaBack, evaluateRequirements, isLast, step.autoAdvance, step.id, step.requires]);
 
   useEffect(() => {
-    let t: number | undefined;
-    const doMeasure = () => measure();
-    if (step.waitFor && step.waitFor > 0) t = window.setTimeout(doMeasure, step.waitFor);
-    else doMeasure();
+    let cancelled = false;
+    let startDelay: number | undefined;
+    let pollTimer: number | undefined;
+    let raf: number | null = null;
+    let observer: MutationObserver | null = null;
+
+    const token = positioningTokenRef.current;
+
+    const doMeasure = () => {
+      if (cancelled) return;
+      measure();
+    };
+
+    const scheduleMeasure = () => {
+      if (cancelled) return;
+      if (raf !== null) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = null;
+        doMeasure();
+        evaluateRequirements();
+      });
+    };
+
+    const tryFindAndScroll = () => {
+      if (cancelled) return;
+      if (!step.selector) {
+        setRect(null);
+        setIsPositioning(false);
+        return;
+      }
+      const el = document.querySelector(step.selector) as HTMLElement | null;
+      if (!el) {
+        setRect(null);
+        return;
+      }
+
+      const { didScroll } = scrollToTargetIfNeeded() ?? { didScroll: false };
+      if (!didScroll) {
+        doMeasure();
+        if (!cancelled && token === positioningTokenRef.current) setIsPositioning(false);
+        return;
+      }
+
+      // If we scrolled, keep the tooltip hidden until the target is in view or a short timeout.
+      const startedAt = Date.now();
+      const margin = 80;
+      const tickScroll = () => {
+        if (cancelled) return;
+        if (token !== positioningTokenRef.current) return;
+        doMeasure();
+        const r = el.getBoundingClientRect();
+        const inView = r.top >= margin && r.bottom <= window.innerHeight - margin;
+        if (inView || Date.now() - startedAt > 900) {
+          setIsPositioning(false);
+          return;
+        }
+        pollTimer = window.setTimeout(tickScroll, 50);
+      };
+      pollTimer = window.setTimeout(tickScroll, 80);
+    };
+
+    // Optional delay for dynamic UI. Prefer polling over large delays to avoid visible "jump".
+    const delay = step.waitFor && step.waitFor > 0 ? step.waitFor : 0;
+    startDelay = window.setTimeout(() => {
+      if (cancelled) return;
+
+      // Poll briefly so steps that depend on newly-rendered elements don't jump to center.
+      const startedAt = Date.now();
+      const tick = () => {
+        if (cancelled) return;
+        const el = step.selector ? (document.querySelector(step.selector) as HTMLElement | null) : null;
+        if (el) {
+          tryFindAndScroll();
+          return;
+        }
+        if (Date.now() - startedAt > 6000) {
+          doMeasure();
+          if (!cancelled && token === positioningTokenRef.current) setIsPositioning(false);
+          return;
+        }
+        pollTimer = window.setTimeout(tick, 120);
+      };
+      tick();
+    }, delay);
+
     window.addEventListener('resize', doMeasure);
     window.addEventListener('scroll', doMeasure, true);
+
+    // Keep the coachmark aligned when the UI updates (results render, accordions expand, etc.).
+    // Throttle to animation frames to avoid excessive layouts.
+    try {
+      if (typeof MutationObserver !== 'undefined') {
+        observer = new MutationObserver(() => scheduleMeasure());
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+      }
+    } catch {
+      // ignore
+    }
+
     return () => {
-      if (t) window.clearTimeout(t);
+      cancelled = true;
+      if (startDelay) window.clearTimeout(startDelay);
+      if (pollTimer) window.clearTimeout(pollTimer);
+      if (raf !== null) window.cancelAnimationFrame(raf);
+      if (observer) observer.disconnect();
       window.removeEventListener('resize', doMeasure);
       window.removeEventListener('scroll', doMeasure, true);
     };
-  }, [step, measure]);
+  }, [evaluateRequirements, measure, scrollToTargetIfNeeded, step.selector, step.waitFor]);
+
+  // Measure tooltip size so we can clamp it inside the viewport.
+  useEffect(() => {
+    const measureTooltip = () => {
+      const el = tooltipRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const next = { width: Math.round(r.width), height: Math.round(r.height) };
+      setTooltipSize((prev) => {
+        if (prev && prev.width === next.width && prev.height === next.height) return prev;
+        return next;
+      });
+    };
+
+    // Next tick ensures DOM has painted with current content.
+    const t = window.setTimeout(measureTooltip, 0);
+    window.addEventListener('resize', measureTooltip);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', measureTooltip);
+    };
+  }, [step.id, step.title, step.body]);
 
   const tooltipBase: React.CSSProperties = {
     position: 'fixed', zIndex: 999999, maxWidth: 320,
     background: '#111', color: '#fff', border: '1px solid #333',
     borderRadius: 12, padding: '12px 14px', boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+    transition: 'top 120ms ease, left 120ms ease, opacity 120ms ease',
   };
 
   const tooltipStyle: React.CSSProperties = (() => {
-    if (!rect) return { ...tooltipBase, top: '20%', left: '50%', transform: 'translateX(-50%)' };
-    const gap = 10;
-    switch (step.placement) {
-      case 'bottom': return { ...tooltipBase, top: rect.bottom + gap, left: rect.left };
-      case 'left':   return { ...tooltipBase, top: rect.top, left: rect.left - 340 };
-      case 'right':  return { ...tooltipBase, top: rect.top, left: rect.right + gap };
-      case 'top':
-      default:       return { ...tooltipBase, top: rect.top - 140, left: rect.left };
+    if (!rect) {
+      return {
+        ...tooltipBase,
+        top: '20%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        // If we don't have a target yet (e.g., conditional fields that appear after a selection),
+        // keep the tutorial visible rather than disappearing while we poll for the element.
+        opacity: 1,
+        pointerEvents: 'auto',
+      };
     }
+    const gap = 10;
+    const size = tooltipSize ?? { width: 340, height: 190 };
+    const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+    const pad = 12;
+
+    let top = rect.top;
+    let left = rect.left;
+    switch (step.placement) {
+      case 'bottom':
+        top = rect.bottom + gap;
+        left = rect.left;
+        break;
+      case 'left':
+        top = rect.top;
+        left = rect.left - size.width - gap;
+        break;
+      case 'right':
+        top = rect.top;
+        left = rect.right + gap;
+        break;
+      case 'top':
+      default:
+        top = rect.top - size.height - gap;
+        left = rect.left;
+        break;
+    }
+
+    const maxLeft = Math.max(pad, window.innerWidth - size.width - pad);
+    const maxTop = Math.max(pad, window.innerHeight - size.height - pad);
+    return { ...tooltipBase, top: clamp(top, pad, maxTop), left: clamp(left, pad, maxLeft), opacity: isPositioning ? 0 : 1, pointerEvents: isPositioning ? 'none' : 'auto' };
   })();
 
   const spotlightStyle: React.CSSProperties = rect
     ? { position: 'fixed', top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 8, border: '2px solid #6ea8fe', boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 999998 }
     : { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 999998, pointerEvents: 'none' };
 
+  const shouldAutoAdvance = !enteredViaBack && (step.autoAdvance ?? true) && (step.requires?.length ?? 0) > 0 && !isLast;
+  const showNextButton = !shouldAutoAdvance;
+
   return (
     <>
       <div style={spotlightStyle} />
-      <div style={tooltipStyle} role="dialog" aria-live="polite">
+      <div ref={tooltipRef} style={tooltipStyle} role="dialog" aria-live="polite">
         <div style={{ fontWeight: 700, marginBottom: 6 }}>{step.title}</div>
         <div style={{ fontSize: 14, opacity: 0.95, lineHeight: 1.35 }}>{step.body}</div>
+        {requirementsHint && (
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>To continue:</div>
+            <div>{requirementsHint}</div>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
           <button type="button" onClick={onExit} style={btn('ghost')}>Exit</button>
           <button type="button" onClick={onBack} disabled={isFirst} style={btn(isFirst ? 'disabled' : 'ghost')}>Back</button>
-          <button type="button" onClick={onNext} style={btn('primary')}>{isLast ? 'Finish' : 'Next'}</button>
+          {showNextButton && (
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!isLast && !requirementsOk}
+              style={btn((!isLast && !requirementsOk) ? 'disabled' : 'primary')}
+            >
+              {isLast ? 'Finish' : 'Next'}
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -250,11 +662,12 @@ ref
 ) {
   const navigate = useNavigate();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
+  const isTutorial = Boolean(tutorialSteps && tutorialSteps.length > 0);
 
   const [startDate, setStartDate] = useState(initialDefaults.startDate.date);
   const [overallTaxRule, setOverallTaxRule] = useState<OverallTaxRule>(initialDefaults.overallTaxRule);
-  const [taxPercentage, setTaxPercentage] = useState(initialDefaults.taxPercentage);
-  const [phases, setPhases] = useState<PhaseRequest[]>(initialDefaults.phases);
+  const [taxPercentage, setTaxPercentage] = useState<string>(() => String(initialDefaults.taxPercentage ?? 0));
+  const [phases, setPhases] = useState<PhaseRequest[]>(() => (isTutorial ? [] : initialDefaults.phases));
 
   // Hard-coded advanced defaults (independent of localStorage).
   // Templates reset advanced values back to these defaults (unless the template overrides).
@@ -264,8 +677,8 @@ ref
       // Execution params (defaults align with backend defaults; backend will clamp/validate anyway).
       paths: '10000',
       batchSize: '10000',
-      inflationAveragePct: 2,
-      yearlyFeePercentage: 0.5,
+      inflationAveragePct: '2',
+      yearlyFeePercentage: '0.5',
 
       // Returner
       returnType: 'dataDrivenReturn' as ReturnType,
@@ -314,8 +727,8 @@ ref
     enabled: boolean;
     paths: string;
     batchSize: string;
-    inflationAveragePct: number;
-    yearlyFeePercentage: number;
+    inflationAveragePct: string;
+    yearlyFeePercentage: string;
     returnType: ReturnType;
     seedMode: MasterSeedMode;
     seed: string;
@@ -358,8 +771,8 @@ ref
       const enabled = Boolean(parsed?.enabled);
       const paths = parsed?.paths ?? fallbackDefaults.paths;
       const batchSize = parsed?.batchSize ?? fallbackDefaults.batchSize;
-      const inflationAveragePct = Number.isFinite(Number(parsed?.inflationAveragePct)) ? Number(parsed.inflationAveragePct) : 2;
-      const yearlyFeePercentage = Number.isFinite(Number(parsed?.yearlyFeePercentage)) ? Number(parsed.yearlyFeePercentage) : 0.5;
+      const inflationAveragePct = String(parsed?.inflationAveragePct ?? fallbackDefaults.inflationAveragePct);
+      const yearlyFeePercentage = String(parsed?.yearlyFeePercentage ?? fallbackDefaults.yearlyFeePercentage);
       const returnType = parseReturnType(parsed?.returnType);
       const distributionType = parseDistributionType(parsed?.distributionType);
       const seedRaw = parsed?.seed ?? fallbackDefaults.seed;
@@ -441,8 +854,8 @@ ref
   const [advancedEnabled, setAdvancedEnabled] = useState<boolean>(initialAdvancedState.enabled);
   const [paths, setPaths] = useState<string>(String(initialAdvancedState.paths));
   const [batchSize, setBatchSize] = useState<string>(String(initialAdvancedState.batchSize));
-  const [inflationAveragePct, setInflationAveragePct] = useState<number>(initialAdvancedState.inflationAveragePct);
-  const [yearlyFeePercentage, setYearlyFeePercentage] = useState<number>(initialAdvancedState.yearlyFeePercentage);
+  const [inflationAveragePct, setInflationAveragePct] = useState<string>(String(initialAdvancedState.inflationAveragePct));
+  const [yearlyFeePercentage, setYearlyFeePercentage] = useState<string>(String(initialAdvancedState.yearlyFeePercentage));
 
   const [exemptionCardLimit, setExemptionCardLimit] = useState<string>(String(initialAdvancedState.exemptionCardLimit));
   const [exemptionCardYearlyIncrease, setExemptionCardYearlyIncrease] = useState<string>(String(initialAdvancedState.exemptionCardYearlyIncrease));
@@ -480,7 +893,7 @@ ref
     }>
   >(initialAdvancedState.regimes);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<SimulationTemplateId>('starter');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<TemplatePickerId>(() => (isTutorial ? TUTORIAL_TEMPLATE_ID : 'starter'));
 
   type TemplateDiff = {
     templateId: SimulationTemplateId;
@@ -489,8 +902,8 @@ ref
     advanced: Array<{ field: string; touched: boolean; changed: boolean; from: string; to: string }>;
   };
 
-  const [templatePickerId, setTemplatePickerId] = useState<SimulationTemplateId>(selectedTemplateId);
-  const [pendingTemplateId, setPendingTemplateId] = useState<SimulationTemplateId | null>(null);
+  const [templatePickerId, setTemplatePickerId] = useState<TemplatePickerId>(selectedTemplateId);
+  const [pendingTemplateId, setPendingTemplateId] = useState<TemplatePickerId | null>(null);
 
   const [isTemplateDiffOpen, setIsTemplateDiffOpen] = useState(false);
   const [templateDiffTitle, setTemplateDiffTitle] = useState<'Template preview' | 'What changed?'>('What changed?');
@@ -500,8 +913,8 @@ ref
   type AdvancedUiSnapshot = {
     paths: string;
     batchSize: string;
-    inflationAveragePct: number;
-    yearlyFeePercentage: number;
+    inflationAveragePct: string;
+    yearlyFeePercentage: string;
     returnType: ReturnType;
     seedMode: MasterSeedMode;
     seed: string;
@@ -672,6 +1085,7 @@ ref
   const didRestoreDraftRef = useRef(false);
   useEffect(() => {
     if (didRestoreDraftRef.current) return;
+    if (isTutorial) return;
     if (scenarioParamOnLoad) return;
 
     try {
@@ -685,7 +1099,8 @@ ref
 
       if (typeof parsed.startDate === 'string') setStartDate(parsed.startDate);
       if (parsed.overallTaxRule === 'CAPITAL' || parsed.overallTaxRule === 'NOTIONAL') setOverallTaxRule(parsed.overallTaxRule);
-      if (typeof parsed.taxPercentage === 'number') setTaxPercentage(parsed.taxPercentage);
+      if (typeof parsed.taxPercentage === 'number') setTaxPercentage(String(parsed.taxPercentage));
+      if (typeof parsed.taxPercentage === 'string') setTaxPercentage(parsed.taxPercentage);
       if (Array.isArray(parsed.phases)) {
         setPhases(parsed.phases.map((p: any) => ({ ...p, taxRules: p?.taxRules ?? [] })));
       }
@@ -713,6 +1128,7 @@ ref
   }, [scenarioParamOnLoad]);
 
   useEffect(() => {
+    if (isTutorial) return;
     if (scenarioParamOnLoad) return;
     try {
       window.localStorage.setItem(
@@ -742,9 +1158,72 @@ ref
     taxPercentage,
   ]);
 
+  // Tutorial should always start with a predictable blank phase list.
+  const didTutorialInitRef = useRef(false);
+  useEffect(() => {
+    if (!isTutorial) return;
+    if (didTutorialInitRef.current) return;
+    didTutorialInitRef.current = true;
+
+    // Always start from the tutorial template (and keep the <select> value valid).
+    setSelectedTemplateId(TUTORIAL_TEMPLATE_ID);
+    setTemplatePickerId(TUTORIAL_TEMPLATE_ID);
+
+    hasUserEditedRef.current = false;
+
+    // Tutorial start state:
+    // - Normal tutorial: keep normal-mode fields "wrong" so the user must fill them.
+    // - Advanced tutorial: keep normal-mode fields pre-made like the Aktiedepot template,
+    //   so the tutorial can focus only on advanced-only controls.
+    if (advancedMode) {
+      const aktiedepot = resolveTemplateToRequest(getTemplateById('aktiedepot'));
+      setStartDate(aktiedepot.startDate.date);
+      setOverallTaxRule(aktiedepot.overallTaxRule);
+      setTaxPercentage(String(aktiedepot.taxPercentage ?? 0));
+      setPhases(aktiedepot.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+    } else {
+      // Start from a clean slate: numeric fields to 0.
+      // For selects, intentionally pick a *wrong* but valid option so the user must take action.
+      setStartDate('');
+      setOverallTaxRule('NOTIONAL');
+      setTaxPercentage('');
+      setPhases([]);
+    }
+
+    // Advanced-only fields: reset to wrong values so the tutorial can teach them explicitly.
+    // Exception: paths + batch should remain at their normal default (10000) in the advanced tutorial.
+    setPaths(advancedMode ? '10000' : '0');
+    setBatchSize(advancedMode ? '10000' : '0');
+    setInflationAveragePct('0');
+    setYearlyFeePercentage('0');
+
+    setExemptionCardLimit('0');
+    setExemptionCardYearlyIncrease('0');
+    setStockExemptionTaxRate('0');
+    setStockExemptionLimit('0');
+    setStockExemptionYearlyIncrease('0');
+
+    // Advanced-only selects: set to a "wrong" option so advanced tutorial steps require action.
+    setSeedMode('default');
+    setSeed('1');
+    setReturnType('simpleReturn');
+    setSimpleAveragePercentage('0');
+    setDistributionType('normal');
+    setNormalMean('');
+    setNormalStdDev('');
+    setBrownianDrift('');
+    setBrownianVolatility('');
+    setStudentMu('');
+    setStudentSigma('');
+    setStudentNu('');
+    setRegimeTickMonths('');
+  }, [advancedMode, isTutorial]);
+
+  const [userEditTick, setUserEditTick] = useState(0);
   const hasUserEditedRef = useRef(false);
   const markUserEdited = useCallback(() => {
     hasUserEditedRef.current = true;
+    setUserEditTick((t) => t + 1);
   }, []);
 
   const handleAddPhase = (phase: PhaseRequest) => {
@@ -779,26 +1258,47 @@ ref
   const totalMonths = phases.reduce((s, p) => s + (Number(p.durationInMonths) || 0), 0);
   const overLimit = totalMonths > MAX_MONTHS;
 
+  const materializePhasesForRequest = useCallback((rawPhases: PhaseRequest[]): PhaseRequest[] => {
+    const asDraft = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
+    return rawPhases.map((p) => {
+      return {
+        ...p,
+        taxRules: p.taxRules ?? [],
+        durationInMonths: Math.trunc(Number(p.durationInMonths) || 0),
+
+        initialDeposit: draftToIntOrZero(asDraft((p as any).initialDeposit)),
+        monthlyDeposit: draftToIntOrZero(asDraft((p as any).monthlyDeposit)),
+        withdrawAmount: draftToIntOrZero(asDraft((p as any).withdrawAmount)),
+
+        yearlyIncreaseInPercentage: draftToNumberOrZero(asDraft((p as any).yearlyIncreaseInPercentage)),
+        withdrawRate: draftToNumberOrZero(asDraft((p as any).withdrawRate)),
+        lowerVariationPercentage: draftToNumberOrZero(asDraft((p as any).lowerVariationPercentage)),
+        upperVariationPercentage: draftToNumberOrZero(asDraft((p as any).upperVariationPercentage)),
+      };
+    });
+  }, []);
+
   const currentRequest = useMemo<SimulationRequest>(() => {
     const seedNum = seedForMode(seedMode, toNumOrUndef(seed));
     return {
       startDate: { date: startDate },
       overallTaxRule,
-      taxPercentage,
-      phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      taxPercentage: draftToNumberOrZero(taxPercentage),
+      phases: materializePhasesForRequest(phases),
       seed: seedNum,
     };
-  }, [startDate, overallTaxRule, taxPercentage, phases, seed, seedMode]);
+  }, [materializePhasesForRequest, startDate, overallTaxRule, taxPercentage, phases, seed, seedMode]);
 
   const currentAdvancedRequest = useMemo<AdvancedSimulationRequest>(() => {
     const seedNum = seedForMode(seedMode, toNumOrUndef(seed));
+    const isAdvancedRun = advancedEnabled;
 
     // Base request (always present)
     const base: AdvancedSimulationRequest = {
       startDate: { date: startDate },
-      phases: phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+      phases: materializePhasesForRequest(phases),
       overallTaxRule: mapOverallTaxRuleForAdvanced(overallTaxRule),
-      taxPercentage,
+      taxPercentage: draftToNumberOrZero(taxPercentage),
       seed: seedNum,
     };
 
@@ -810,81 +1310,75 @@ ref
 
     // Execution params should affect runs even when the UI section is hidden.
     // Backend will clamp/validate and also defaults when missing.
-    const pathsToSend = clampExec(toNumOrUndef(paths));
-    const batchSizeToSend = clampExec(toNumOrUndef(batchSize));
-    const inflationFactorToSend = inflationFeatureOn ? 1 + (Number(inflationAveragePct) || 0) / 100 : undefined;
-    const yearlyFeePercentageToSend = feeFeatureOn ? (Number(yearlyFeePercentage) || 0) : undefined;
-
-    const exCardLimit = toNumOrUndef(exemptionCardLimit);
-    const exCardInc = toNumOrUndef(exemptionCardYearlyIncrease);
-    const stockTaxRate = toNumOrUndef(stockExemptionTaxRate);
-    const stockLimit = toNumOrUndef(stockExemptionLimit);
-    const stockInc = toNumOrUndef(stockExemptionYearlyIncrease);
+    const pathsToSend = isAdvancedRun && executionFeatureOn ? clampExec(draftToIntOrZero(paths)) : undefined;
+    const batchSizeToSend = isAdvancedRun && executionFeatureOn ? clampExec(draftToIntOrZero(batchSize)) : undefined;
+    const inflationFactorToSend = isAdvancedRun && inflationFeatureOn ? 1 + draftToNumberOrZero(inflationAveragePct) / 100 : undefined;
+    const yearlyFeePercentageToSend = isAdvancedRun && feeFeatureOn ? draftToNumberOrZero(yearlyFeePercentage) : undefined;
 
     const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
-      exemptionsFeatureOn && (exCardLimit !== undefined || exCardInc !== undefined || stockTaxRate !== undefined || stockLimit !== undefined || stockInc !== undefined)
+      isAdvancedRun && exemptionsFeatureOn
         ? {
             exemptionCard: {
-              limit: exCardLimit,
-              yearlyIncrease: exCardInc,
+              limit: draftToIntOrZero(exemptionCardLimit),
+              yearlyIncrease: draftToIntOrZero(exemptionCardYearlyIncrease),
             },
             stockExemption: {
-              taxRate: stockTaxRate,
-              limit: stockLimit,
-              yearlyIncrease: stockInc,
+              taxRate: draftToNumberOrZero(stockExemptionTaxRate),
+              limit: draftToIntOrZero(stockExemptionLimit),
+              yearlyIncrease: draftToIntOrZero(stockExemptionYearlyIncrease),
             },
           }
         : undefined;
 
-    const returnTypeToSend: ReturnType = returnModelFeatureOn ? returnType : 'dataDrivenReturn';
+    // In normal mode, ignore any persisted advanced return-model settings.
+    const returnTypeToSend: ReturnType = isAdvancedRun && returnModelFeatureOn ? returnType : 'dataDrivenReturn';
 
     const rc: AdvancedSimulationRequest['returnerConfig'] = { seed: seedNum };
-    if (returnModelFeatureOn && returnType === 'simpleReturn') {
-      const avg = toNumOrUndef(simpleAveragePercentage);
-      if (avg !== undefined) rc.simpleAveragePercentage = avg;
+    if (isAdvancedRun && returnModelFeatureOn && returnType === 'simpleReturn') {
+      rc.simpleAveragePercentage = draftToNumberOrZero(simpleAveragePercentage);
     }
 
-    if (returnModelFeatureOn && returnType === 'distributionReturn') {
+    if (isAdvancedRun && returnModelFeatureOn && returnType === 'distributionReturn') {
       rc.distribution = { type: distributionType };
       if (distributionType === 'normal') {
         rc.distribution.normal = {
-          mean: toNumOrUndef(normalMean),
-          standardDeviation: toNumOrUndef(normalStdDev),
+          mean: draftToNumberOrZero(normalMean),
+          standardDeviation: draftToNumberOrZero(normalStdDev),
         };
       } else if (distributionType === 'brownianMotion') {
         rc.distribution.brownianMotion = {
-          drift: toNumOrUndef(brownianDrift),
-          volatility: toNumOrUndef(brownianVolatility),
+          drift: draftToNumberOrZero(brownianDrift),
+          volatility: draftToNumberOrZero(brownianVolatility),
         };
       } else if (distributionType === 'studentT') {
         rc.distribution.studentT = {
-          mu: toNumOrUndef(studentMu),
-          sigma: toNumOrUndef(studentSigma),
-          nu: toNumOrUndef(studentNu),
+          mu: draftToNumberOrZero(studentMu),
+          sigma: draftToNumberOrZero(studentSigma),
+          nu: draftToNumberOrZero(studentNu),
         };
       } else if (distributionType === 'regimeBased') {
         rc.distribution.regimeBased = {
-          tickMonths: toNumOrUndef(regimeTickMonths),
+          tickMonths: draftToIntOrZero(regimeTickMonths),
           regimes: regimes.map((r) => ({
             distributionType: r.distributionType,
-            expectedDurationMonths: toNumOrUndef(r.expectedDurationMonths),
+            expectedDurationMonths: draftToIntOrZero(r.expectedDurationMonths),
             switchWeights: {
-              toRegime0: toNumOrUndef(r.toRegime0),
-              toRegime1: toNumOrUndef(r.toRegime1),
-              toRegime2: toNumOrUndef(r.toRegime2),
+              toRegime0: draftToNumberOrZero(r.toRegime0),
+              toRegime1: draftToNumberOrZero(r.toRegime1),
+              toRegime2: draftToNumberOrZero(r.toRegime2),
             },
             ...(r.distributionType === 'studentT'
               ? {
                   studentT: {
-                    mu: toNumOrUndef(r.studentMu),
-                    sigma: toNumOrUndef(r.studentSigma),
-                    nu: toNumOrUndef(r.studentNu),
+                    mu: draftToNumberOrZero(r.studentMu),
+                    sigma: draftToNumberOrZero(r.studentSigma),
+                    nu: draftToNumberOrZero(r.studentNu),
                   },
                 }
               : {
                   normal: {
-                    mean: toNumOrUndef(r.normalMean),
-                    standardDeviation: toNumOrUndef(r.normalStdDev),
+                    mean: draftToNumberOrZero(r.normalMean),
+                    standardDeviation: draftToNumberOrZero(r.normalStdDev),
                   },
                 }),
           })),
@@ -893,7 +1387,7 @@ ref
     }
 
     const hasReturnerConfig =
-      returnModelFeatureOn &&
+      isAdvancedRun && returnModelFeatureOn &&
       (rc.simpleAveragePercentage !== undefined || rc.distribution?.type !== undefined || rc.seed !== undefined);
 
     return {
@@ -907,6 +1401,7 @@ ref
       ...(hasReturnerConfig ? { returnerConfig: rc } : {}),
     };
   }, [
+    advancedEnabled,
     batchSize,
     brownianDrift,
     brownianVolatility,
@@ -950,7 +1445,7 @@ ref
     hasUserEditedRef.current = false;
     setStartDate(req.startDate.date);
     setOverallTaxRule(req.overallTaxRule);
-    setTaxPercentage(req.taxPercentage);
+    setTaxPercentage(String(req.taxPercentage ?? 0));
     setPhases(req.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
     let nextSeedMode: MasterSeedMode = 'default';
     let nextSeed = '1';
@@ -1010,12 +1505,12 @@ ref
 
     if (externalLoadAdvanced.inflationAveragePct !== undefined) {
       const pct = Number(externalLoadAdvanced.inflationAveragePct);
-      if (Number.isFinite(pct)) setInflationAveragePct(pct);
+      if (Number.isFinite(pct)) setInflationAveragePct(String(pct));
     }
 
     if (externalLoadAdvanced.yearlyFeePercentage !== undefined) {
       const pct = Number(externalLoadAdvanced.yearlyFeePercentage);
-      if (Number.isFinite(pct)) setYearlyFeePercentage(pct);
+      if (Number.isFinite(pct)) setYearlyFeePercentage(String(pct));
     }
 
     const taxCfg = externalLoadAdvanced.taxExemptionConfig;
@@ -1125,15 +1620,23 @@ ref
   ]);
 
   useEffect(() => {
+    if (isTutorial) return;
     try {
+      const toFiniteNumberOrEmptyString = (v: string): number | '' => {
+        const s = String(v ?? '').trim();
+        if (s === '') return '';
+        const n = Number(s);
+        return Number.isFinite(n) ? n : '';
+      };
+
       window.localStorage.setItem(
         ADVANCED_OPTIONS_KEY,
         JSON.stringify({
           enabled: advancedEnabled,
           paths,
           batchSize,
-          inflationAveragePct,
-          yearlyFeePercentage,
+          inflationAveragePct: toFiniteNumberOrEmptyString(inflationAveragePct),
+          yearlyFeePercentage: toFiniteNumberOrEmptyString(yearlyFeePercentage),
           returnType,
           seedMode,
           seed,
@@ -1246,7 +1749,7 @@ ref
     const applyDefaultsIfBlank = (data: any) => {
       const infl = Number(data?.inflation?.averagePercentage);
       if (Number.isFinite(infl) && !Number.isFinite(Number(inflationAveragePct))) {
-        setInflationAveragePct(infl);
+        setInflationAveragePct(String(infl));
       }
 
       if (data?.tax?.exemptionCard) {
@@ -1559,7 +2062,16 @@ ref
     setSelectedScenarioId('');
   }, [refreshSavedScenarios, selectedScenarioId]);
 
-  const selectedTemplate = useMemo(() => getTemplateById(templatePickerId), [templatePickerId]);
+  const selectedTemplate = useMemo(() => {
+    if (templatePickerId === TUTORIAL_TEMPLATE_ID) {
+      return {
+        id: TUTORIAL_TEMPLATE_ID,
+        label: 'Tutorial (guided)',
+        description: 'Tutorial-only preset that intentionally starts with “wrong” values so you must change inputs step-by-step.',
+      } as any;
+    }
+    return getTemplateById(templatePickerId as SimulationTemplateId);
+  }, [templatePickerId]);
 
   useEffect(() => {
     if (pendingTemplateId != null) return;
@@ -1570,7 +2082,7 @@ ref
     if (selectedTemplateId !== 'custom' && isDirty && hasUserEditedRef.current) {
       setSelectedTemplateId('custom');
     }
-  }, [isDirty, selectedTemplateId]);
+  }, [isDirty, selectedTemplateId, userEditTick]);
 
   const closeTemplateDiff = useCallback(() => {
     // If we're previewing a template, closing acts like cancel.
@@ -1588,8 +2100,8 @@ ref
 
     if (adv.paths !== undefined) patch.paths = String(adv.paths);
     if (adv.batchSize !== undefined) patch.batchSize = String(adv.batchSize);
-    if (adv.inflationAveragePct !== undefined) patch.inflationAveragePct = Number(adv.inflationAveragePct);
-    if (adv.yearlyFeePercentage !== undefined) patch.yearlyFeePercentage = Number(adv.yearlyFeePercentage);
+    if (adv.inflationAveragePct !== undefined) patch.inflationAveragePct = String(adv.inflationAveragePct);
+    if (adv.yearlyFeePercentage !== undefined) patch.yearlyFeePercentage = String(adv.yearlyFeePercentage);
 
     if (adv.returnType !== undefined) patch.returnType = adv.returnType as ReturnType;
     if (adv.seedMode !== undefined) patch.seedMode = adv.seedMode;
@@ -1801,14 +2313,92 @@ ref
     };
   }, [coerceTemplateAdvancedPatch, defaultAdvancedUi, overallTaxRule, phases, startDate, taxPercentage]);
 
-  const applyTemplateConfirmed = useCallback((templateId: SimulationTemplateId) => {
+  const applyTutorialTemplate = useCallback(() => {
+    hasUserEditedRef.current = false;
+
+    if (advancedMode) {
+      const aktiedepot = resolveTemplateToRequest(getTemplateById('aktiedepot'));
+      setStartDate(aktiedepot.startDate.date);
+      setOverallTaxRule(aktiedepot.overallTaxRule);
+      setTaxPercentage(String(aktiedepot.taxPercentage ?? 0));
+      setPhases(aktiedepot.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
+    } else {
+      setStartDate('');
+      setOverallTaxRule('NOTIONAL');
+      setTaxPercentage('');
+      setPhases([]);
+    }
+
+    // Keep advanced fields at 0, and choose a "wrong" return type.
+    // Exception: paths + batch should remain at their normal default (10000) in the advanced tutorial.
+    setPaths(advancedMode ? '10000' : '0');
+    setBatchSize(advancedMode ? '10000' : '0');
+    setInflationAveragePct('0');
+    setYearlyFeePercentage('0');
+
+    setExemptionCardLimit('0');
+    setExemptionCardYearlyIncrease('0');
+    setStockExemptionTaxRate('0');
+    setStockExemptionLimit('0');
+    setStockExemptionYearlyIncrease('0');
+
+    setSeedMode('default');
+    setSeed('1');
+    setReturnType('simpleReturn');
+    setSimpleAveragePercentage('0');
+    setDistributionType('normal');
+    setNormalMean('');
+    setNormalStdDev('');
+    setBrownianDrift('');
+    setBrownianVolatility('');
+    setStudentMu('');
+    setStudentSigma('');
+    setStudentNu('');
+    setRegimeTickMonths('');
+  }, [
+    advancedMode,
+    setBatchSize,
+    setDistributionType,
+    setExemptionCardLimit,
+    setExemptionCardYearlyIncrease,
+    setInflationAveragePct,
+    setOverallTaxRule,
+    setPaths,
+    setPhases,
+    setBrownianDrift,
+    setBrownianVolatility,
+    setNormalMean,
+    setNormalStdDev,
+    setRegimeTickMonths,
+    setReturnType,
+    setSeed,
+    setSeedMode,
+    setSimpleAveragePercentage,
+    setStartDate,
+    setStudentMu,
+    setStudentNu,
+    setStudentSigma,
+    setStockExemptionLimit,
+    setStockExemptionTaxRate,
+    setStockExemptionYearlyIncrease,
+    setTaxPercentage,
+    setYearlyFeePercentage,
+  ]);
+
+  const applyTemplateConfirmed = useCallback((templateId: TemplatePickerId) => {
+    if (templateId === TUTORIAL_TEMPLATE_ID) {
+      setSelectedTemplateId(TUTORIAL_TEMPLATE_ID);
+      setLastTemplateDiff(null);
+      applyTutorialTemplate();
+      return;
+    }
     if (templateId === 'custom') {
       setSelectedTemplateId('custom');
       setLastTemplateDiff(null);
       return;
     }
 
-    const d = buildTemplateDiff(templateId);
+    const d = buildTemplateDiff(templateId as SimulationTemplateId);
 
     hasUserEditedRef.current = false;
     setSelectedTemplateId(templateId);
@@ -1816,15 +2406,15 @@ ref
     // Apply normal fields
     setStartDate(d.resolved.startDate.date);
     setOverallTaxRule(d.resolved.overallTaxRule);
-    setTaxPercentage(d.resolved.taxPercentage);
+    setTaxPercentage(String(d.resolved.taxPercentage ?? 0));
     setPhases(d.resolved.phases.map((p) => ({ ...p, taxRules: p.taxRules ?? [] })));
 
     // Apply advanced template defaults (do not change UI mode)
     const adv = d.targetAdvancedUi;
     setPaths(String(adv.paths));
     setBatchSize(String(adv.batchSize));
-    setInflationAveragePct(Number(adv.inflationAveragePct));
-    setYearlyFeePercentage(Number(adv.yearlyFeePercentage));
+    setInflationAveragePct(String(adv.inflationAveragePct));
+    setYearlyFeePercentage(String(adv.yearlyFeePercentage));
 
     setReturnType(adv.returnType);
     setSeedMode(adv.seedMode);
@@ -1868,9 +2458,21 @@ ref
       normal: d.normal,
       advanced: d.advanced,
     });
-  }, [buildTemplateDiff]);
+  }, [applyTutorialTemplate, buildTemplateDiff]);
 
-  const openTemplatePreview = useCallback((templateId: SimulationTemplateId) => {
+  const openTemplatePreview = useCallback((templateId: TemplatePickerId) => {
+    // In tutorials, only allow Tutorial + Custom (prevents skipping tutorial steps via other presets).
+    if (isTutorial) {
+      if (templateId !== TUTORIAL_TEMPLATE_ID && templateId !== 'custom') return;
+
+      setPendingTemplateId(null);
+      setTemplatePickerId(templateId);
+      setTemplateModalDiff(null);
+      applyTemplateConfirmed(templateId);
+      setIsTemplateDiffOpen(false);
+      return;
+    }
+
     // Selecting "Custom" applies immediately.
     if (templateId === 'custom') {
       setPendingTemplateId(null);
@@ -1885,7 +2487,7 @@ ref
     setPendingTemplateId(templateId);
     setTemplatePickerId(templateId);
 
-    const d = buildTemplateDiff(templateId);
+    const d = buildTemplateDiff(templateId as SimulationTemplateId);
     const diffForUi: TemplateDiff = {
       templateId: d.templateId,
       templateLabel: d.templateLabel,
@@ -1897,7 +2499,7 @@ ref
     setTemplateDiffTitle('Template preview');
     setTemplateModalDiff(diffForUi);
     setIsTemplateDiffOpen(true);
-  }, [applyTemplateConfirmed, buildTemplateDiff]);
+  }, [applyTemplateConfirmed, buildTemplateDiff, isTutorial]);
 
   const confirmTemplatePreview = useCallback(() => {
     if (!pendingTemplateId) return;
@@ -1935,6 +2537,7 @@ ref
     if (hasAppliedInitialTemplateRef.current) return;
     hasAppliedInitialTemplateRef.current = true;
 
+    if (isTutorial) return;
     if (scenarioParamOnLoad) return;
     if (didRestoreDraftRef.current) return;
 
@@ -1994,6 +2597,22 @@ ref
   }, [applyRequestToForm, clearScenarioFromUrl, isDirty, runSimulationWithRequest, scenarioAutoLoadOnLoad, scenarioParamOnLoad]);
 
   const handleAddDefaultPhase = () => {
+    if (isTutorial) {
+      // Tutorial should start with blank inputs.
+      handleAddPhase({
+        ...createDefaultPhase('PASSIVE'),
+        durationInMonths: 0,
+        initialDeposit: 0,
+        monthlyDeposit: 0,
+        yearlyIncreaseInPercentage: 0,
+        withdrawAmount: 0,
+        withdrawRate: 0,
+        lowerVariationPercentage: 0,
+        upperVariationPercentage: 0,
+        taxRules: [],
+      });
+      return;
+    }
     handleAddPhase(createDefaultPhase('DEPOSIT'));
   };
 
@@ -2004,16 +2623,23 @@ ref
 
   // --- tutorial stepper (only if steps provided) ---
   const [idx, setIdx] = useState(0);
+  const [enteredViaBack, setEnteredViaBack] = useState(false);
   const steps = tutorialSteps ?? [];
   const current = steps[idx];
   const isFirst = idx === 0;
   const isLast = idx === steps.length - 1;
-  const next = () => setIdx(i => {
-    if (!steps.length) return i;
-    if (i + 1 >= steps.length) { onExitTutorial?.(); return i; } // Finish -> back to /simulation
-    return i + 1;
-  });  
-  const back = () => setIdx(i => Math.max(i - 1, 0));
+  const next = () => {
+    setEnteredViaBack(false);
+    setIdx(i => {
+      if (!steps.length) return i;
+      if (i + 1 >= steps.length) { onExitTutorial?.(); return i; } // Finish -> back to /simulation
+      return i + 1;
+    });
+  };
+  const back = () => {
+    setEnteredViaBack(true);
+    setIdx(i => Math.max(i - 1, 0));
+  };
   const exit = () => onExitTutorial?.(); // Exit -> back to /simulation
 
   const cardStyle: React.CSSProperties = {
@@ -2046,10 +2672,10 @@ ref
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {advancedEnabled && (
           <div style={cardStyle}>
-            <div style={cardTitleStyle}>Engine Settings</div>
+            <div data-tour="engine-settings" style={cardTitleStyle}>Engine Settings</div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <label style={{ display: 'flex', flexDirection: 'column' }}>
+              <label data-tour="master-seed" style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="fc-field-label">Master seed</span>
                 <div style={rowStyle}>
                   <select
@@ -2082,13 +2708,14 @@ ref
                 {seedMode === 'custom' && (
                   <div style={{ ...rowStyle, marginTop: 6 }}>
                     <input
-                      type="number"
-                      min={1}
-                      step={1}
+                      type="text"
+                      inputMode="numeric"
                       value={seed}
                       onChange={(e) => {
+                        const next = e.target.value;
+                        if (!isValidIntegerDraft(next)) return;
                         markUserEdited();
-                        setSeed(e.target.value);
+                        setSeed(next);
                       }}
                       disabled={simulateInProgress}
                       style={inputStyle}
@@ -2099,16 +2726,19 @@ ref
 
               {executionFeatureOn && (
                 <>
-                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label data-tour="paths" style={{ display: 'flex', flexDirection: 'column' }}>
                     <span className="fc-field-label">Paths (runs)</span>
                     <div style={rowStyle}>
                       <input
-                        type="number"
-                        min={1000}
-                        max={100000}
-                        step={1000}
+                        type="text"
+                        inputMode="numeric"
                         value={paths}
-                        onChange={(e) => { markUserEdited(); setPaths(e.target.value); }}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setPaths(next);
+                        }}
                         disabled={simulateInProgress}
                         style={inputStyle}
                       />
@@ -2119,16 +2749,19 @@ ref
                     </div>
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label data-tour="batch-size" style={{ display: 'flex', flexDirection: 'column' }}>
                     <span className="fc-field-label">Batch size</span>
                     <div style={rowStyle}>
                       <input
-                        type="number"
-                        min={1000}
-                        max={100000}
-                        step={1000}
+                        type="text"
+                        inputMode="numeric"
                         value={batchSize}
-                        onChange={(e) => { markUserEdited(); setBatchSize(e.target.value); }}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setBatchSize(next);
+                        }}
                         disabled={simulateInProgress}
                         style={inputStyle}
                       />
@@ -2147,20 +2780,27 @@ ref
         <div style={cardStyle}>
           <div style={cardTitleStyle}>General Options</div>
 
-          <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <label data-tour="template" style={{ display: 'flex', flexDirection: 'column' }}>
             <span className="fc-field-label">Template</span>
             <div style={rowStyle}>
               <select
                 value={templatePickerId}
-                onChange={(e) => openTemplatePreview(e.target.value as SimulationTemplateId)}
+                onChange={(e) => openTemplatePreview(e.target.value as TemplatePickerId)}
                 disabled={simulateInProgress}
                 style={inputStyle}
               >
-                {SIMULATION_TEMPLATES.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
+                {isTutorial ? (
+                  <>
+                    <option value={TUTORIAL_TEMPLATE_ID}>Tutorial (guided)</option>
+                    <option value="custom">Custom</option>
+                  </>
+                ) : (
+                  SIMULATION_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))
+                )}
               </select>
               <InfoTooltip label="Info: Template">
                 Selecting a template previews changes. Click Apply to confirm.
@@ -2200,14 +2840,14 @@ ref
           </label>
 
           {advancedEnabled && inflationFeatureOn && (
-            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+            <label data-tour="inflation" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
               <span className="fc-field-label">Inflation (avg % / year)</span>
               <div style={rowStyle}>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={inflationAveragePct}
-                  onChange={(e) => { markUserEdited(); setInflationAveragePct(Number(e.target.value)); }}
+                  onChange={(e) => { markUserEdited(); setInflationAveragePct(e.target.value); }}
                   disabled={simulateInProgress}
                   style={inputStyle}
                 />
@@ -2220,14 +2860,14 @@ ref
           )}
 
           {advancedEnabled && feeFeatureOn && (
-            <label style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+            <label data-tour="fee" style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
               <span className="fc-field-label">Fee (avg % / year)</span>
               <div style={rowStyle}>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={yearlyFeePercentage}
-                  onChange={(e) => { markUserEdited(); setYearlyFeePercentage(Number(e.target.value)); }}
+                  onChange={(e) => { markUserEdited(); setYearlyFeePercentage(e.target.value); }}
                   disabled={simulateInProgress}
                   style={inputStyle}
                 />
@@ -2263,10 +2903,15 @@ ref
             <span className="fc-field-label">Tax %</span>
             <div style={rowStyle}>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={taxPercentage}
-                onChange={e => { markUserEdited(); setTaxPercentage(+e.target.value); }}
+                onChange={e => {
+                  const next = e.target.value;
+                  if (!isValidDecimalDraft(next)) return;
+                  markUserEdited();
+                  setTaxPercentage(next);
+                }}
                 style={inputStyle}
               />
               <InfoTooltip label="Info: Tax percentage">
@@ -2276,7 +2921,7 @@ ref
           </label>
 
           {advancedEnabled && exemptionsFeatureOn && (
-          <div style={{ marginTop: 12, borderTop: '1px solid var(--fc-subtle-border)', paddingTop: 12 }}>
+          <div data-tour="exemptions-config" style={{ marginTop: 12, borderTop: '1px solid var(--fc-subtle-border)', paddingTop: 12 }}>
             <div style={{ fontWeight: 750, marginBottom: 6 }}>Exemptions</div>
             <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
               <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
@@ -2290,7 +2935,19 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Limit</span>
                     <div className="fc-field-control">
-                      <input type="number" value={exemptionCardLimit} onChange={(e) => { markUserEdited(); setExemptionCardLimit(e.target.value); }} style={inputStyle} />
+                      <input
+                        data-tour="exemption-card-limit"
+                        type="text"
+                        inputMode="numeric"
+                        value={exemptionCardLimit}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setExemptionCardLimit(next);
+                        }}
+                        style={inputStyle}
+                      />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -2303,7 +2960,19 @@ ref
                   <label className="fc-field-row">
                     <span className="fc-field-label">Yearly increase</span>
                     <div className="fc-field-control">
-                      <input type="number" value={exemptionCardYearlyIncrease} onChange={(e) => { markUserEdited(); setExemptionCardYearlyIncrease(e.target.value); }} style={inputStyle} />
+                      <input
+                        data-tour="exemption-card-yearly-increase"
+                        type="text"
+                        inputMode="numeric"
+                        value={exemptionCardYearlyIncrease}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setExemptionCardYearlyIncrease(next);
+                        }}
+                        style={inputStyle}
+                      />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -2320,7 +2989,19 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Tax rate %</span>
                     <div className="fc-field-control">
-                      <input type="number" step="0.01" value={stockExemptionTaxRate} onChange={(e) => { markUserEdited(); setStockExemptionTaxRate(e.target.value); }} style={inputStyle} />
+                      <input
+                        data-tour="stock-exemption-tax-rate"
+                        type="text"
+                        inputMode="decimal"
+                        value={stockExemptionTaxRate}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidDecimalDraft(next)) return;
+                          markUserEdited();
+                          setStockExemptionTaxRate(next);
+                        }}
+                        style={inputStyle}
+                      />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -2333,7 +3014,19 @@ ref
                   <label className="fc-field-row" style={{ marginBottom: 8 }}>
                     <span className="fc-field-label">Limit</span>
                     <div className="fc-field-control">
-                      <input type="number" value={stockExemptionLimit} onChange={(e) => { markUserEdited(); setStockExemptionLimit(e.target.value); }} style={inputStyle} />
+                      <input
+                        data-tour="stock-exemption-limit"
+                        type="text"
+                        inputMode="numeric"
+                        value={stockExemptionLimit}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setStockExemptionLimit(next);
+                        }}
+                        style={inputStyle}
+                      />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -2346,7 +3039,19 @@ ref
                   <label className="fc-field-row">
                     <span className="fc-field-label">Yearly increase</span>
                     <div className="fc-field-control">
-                      <input type="number" value={stockExemptionYearlyIncrease} onChange={(e) => { markUserEdited(); setStockExemptionYearlyIncrease(e.target.value); }} style={inputStyle} />
+                      <input
+                        data-tour="stock-exemption-yearly-increase"
+                        type="text"
+                        inputMode="numeric"
+                        value={stockExemptionYearlyIncrease}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!isValidIntegerDraft(next)) return;
+                          markUserEdited();
+                          setStockExemptionYearlyIncrease(next);
+                        }}
+                        style={inputStyle}
+                      />
                     </div>
                     <div className="fc-field-info">
                       <InfoTooltip label="(i)">
@@ -2364,12 +3069,12 @@ ref
 
         {advancedEnabled && returnModelFeatureOn && (
         <div style={cardStyle}>
-          <div style={cardTitleStyle}>Return model</div>
+          <div data-tour="return-model" style={cardTitleStyle}>Return model</div>
           <fieldset disabled={simulateInProgress} style={advancedFieldsetStyle(true)}>
             <label className="fc-field-row" style={{ marginBottom: 10 }}>
               <span className="fc-field-label">Return type</span>
               <div className="fc-field-control">
-                <select value={returnType} onChange={(e) => { markUserEdited(); setReturnType(parseReturnType(e.target.value)); }} style={inputStyle}>
+                <select data-tour="return-type" value={returnType} onChange={(e) => { markUserEdited(); setReturnType(parseReturnType(e.target.value)); }} style={inputStyle}>
                   <option value="dataDrivenReturn">Data-driven (historical)</option>
                   <option value="distributionReturn">Distribution-based</option>
                   <option value="simpleReturn">Simple average</option>
@@ -2387,7 +3092,19 @@ ref
               <label className="fc-field-row" style={{ marginBottom: 10 }}>
                 <span className="fc-field-label">Return % / year</span>
                 <div className="fc-field-control">
-                  <input type="number" step="0.01" value={simpleAveragePercentage} onChange={(e) => { markUserEdited(); setSimpleAveragePercentage(e.target.value); }} style={inputStyle} />
+                  <input
+                    data-tour="return-simple-average"
+                    type="text"
+                    inputMode="decimal"
+                    value={simpleAveragePercentage}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (!isValidDecimalDraft(next)) return;
+                      markUserEdited();
+                      setSimpleAveragePercentage(next);
+                    }}
+                    style={inputStyle}
+                  />
                 </div>
                 <div className="fc-field-info">
                   <InfoTooltip label="(i)">
@@ -2403,7 +3120,7 @@ ref
                 <label className="fc-field-row" style={{ marginBottom: 10 }}>
                   <span className="fc-field-label">Distribution</span>
                   <div className="fc-field-control">
-                    <select value={distributionType} onChange={(e) => { markUserEdited(); setDistributionType(parseDistributionType(e.target.value)); }} style={inputStyle}>
+                    <select data-tour="return-distribution" value={distributionType} onChange={(e) => { markUserEdited(); setDistributionType(parseDistributionType(e.target.value)); }} style={inputStyle}>
                       <option value="normal">Normal</option>
                       <option value="brownianMotion">Brownian motion</option>
                       <option value="studentT">Student t</option>
@@ -2423,7 +3140,19 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Mean</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={normalMean} onChange={(e) => { markUserEdited(); setNormalMean(e.target.value); }} style={inputStyle} />
+                        <input
+                          data-tour="return-normal-mean"
+                          type="text"
+                          inputMode="decimal"
+                          value={normalMean}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setNormalMean(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2435,7 +3164,19 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Std dev</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={normalStdDev} onChange={(e) => setNormalStdDev(e.target.value)} style={inputStyle} />
+                        <input
+                          data-tour="return-normal-stddev"
+                          type="text"
+                          inputMode="decimal"
+                          value={normalStdDev}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setNormalStdDev(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2452,7 +3193,18 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Drift</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={brownianDrift} onChange={(e) => setBrownianDrift(e.target.value)} style={inputStyle} />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={brownianDrift}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setBrownianDrift(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2464,7 +3216,18 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Volatility</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={brownianVolatility} onChange={(e) => setBrownianVolatility(e.target.value)} style={inputStyle} />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={brownianVolatility}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setBrownianVolatility(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2481,7 +3244,18 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Mu</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={studentMu} onChange={(e) => setStudentMu(e.target.value)} style={inputStyle} />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={studentMu}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setStudentMu(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2493,7 +3267,18 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Sigma</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={studentSigma} onChange={(e) => setStudentSigma(e.target.value)} style={inputStyle} />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={studentSigma}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setStudentSigma(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2505,7 +3290,18 @@ ref
                     <label className="fc-field-row">
                       <span className="fc-field-label">Nu</span>
                       <div className="fc-field-control">
-                        <input type="number" step="0.0001" value={studentNu} onChange={(e) => setStudentNu(e.target.value)} style={inputStyle} />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={studentNu}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidDecimalDraft(next)) return;
+                            markUserEdited();
+                            setStudentNu(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2518,11 +3314,23 @@ ref
                 )}
 
                 {distributionType === 'regimeBased' && (
-                  <div style={{ marginTop: 10 }}>
+                  <div data-tour="return-regime-settings" style={{ marginTop: 10 }}>
                     <label className="fc-field-row" style={{ marginBottom: 10 }}>
                       <span className="fc-field-label">Tick months</span>
                       <div className="fc-field-control">
-                        <input type="number" step="1" value={regimeTickMonths} onChange={(e) => setRegimeTickMonths(e.target.value)} style={inputStyle} />
+                        <input
+                          data-tour="return-regime-tick-months"
+                          type="text"
+                          inputMode="numeric"
+                          value={regimeTickMonths}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!isValidIntegerDraft(next)) return;
+                            markUserEdited();
+                            setRegimeTickMonths(next);
+                          }}
+                          style={inputStyle}
+                        />
                       </div>
                       <div className="fc-field-info">
                         <InfoTooltip label="(i)">
@@ -2544,6 +3352,7 @@ ref
                             <span className="fc-field-label">Distribution</span>
                             <div className="fc-field-control">
                               <select
+                                data-tour={`return-regime-${i}-distribution`}
                                 value={r.distributionType}
                                 onChange={(e) => updateRegime(i, { distributionType: e.target.value === 'studentT' ? 'studentT' : 'normal' })}
                                 style={inputStyle}
@@ -2563,7 +3372,19 @@ ref
                           <label className="fc-field-row">
                             <span className="fc-field-label">Expected duration (months)</span>
                             <div className="fc-field-control">
-                              <input type="number" step="1" value={r.expectedDurationMonths} onChange={(e) => updateRegime(i, { expectedDurationMonths: e.target.value })} style={inputStyle} />
+                              <input
+                                data-tour={`return-regime-${i}-duration-months`}
+                                type="text"
+                                inputMode="numeric"
+                                value={r.expectedDurationMonths}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (!isValidIntegerDraft(next)) return;
+                                  markUserEdited();
+                                  updateRegime(i, { expectedDurationMonths: next });
+                                }}
+                                style={inputStyle}
+                              />
                             </div>
                             <div className="fc-field-info">
                               <InfoTooltip label="(i)">
@@ -2576,7 +3397,19 @@ ref
                           <label className="fc-field-row">
                             <span className="fc-field-label">Switch to 0</span>
                             <div className="fc-field-control">
-                              <input type="number" step="0.01" value={r.toRegime0} onChange={(e) => updateRegime(i, { toRegime0: e.target.value })} style={inputStyle} />
+                              <input
+                                data-tour={`return-regime-${i}-to-0`}
+                                type="text"
+                                inputMode="decimal"
+                                value={r.toRegime0}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (!isValidDecimalDraft(next)) return;
+                                  markUserEdited();
+                                  updateRegime(i, { toRegime0: next });
+                                }}
+                                style={inputStyle}
+                              />
                             </div>
                             <div className="fc-field-info">
                               <InfoTooltip label="(i)">
@@ -2589,7 +3422,19 @@ ref
                           <label className="fc-field-row">
                             <span className="fc-field-label">Switch to 1</span>
                             <div className="fc-field-control">
-                              <input type="number" step="0.01" value={r.toRegime1} onChange={(e) => updateRegime(i, { toRegime1: e.target.value })} style={inputStyle} />
+                              <input
+                                data-tour={`return-regime-${i}-to-1`}
+                                type="text"
+                                inputMode="decimal"
+                                value={r.toRegime1}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (!isValidDecimalDraft(next)) return;
+                                  markUserEdited();
+                                  updateRegime(i, { toRegime1: next });
+                                }}
+                                style={inputStyle}
+                              />
                             </div>
                             <div className="fc-field-info">
                               <InfoTooltip label="(i)">
@@ -2602,7 +3447,19 @@ ref
                           <label className="fc-field-row">
                             <span className="fc-field-label">Switch to 2</span>
                             <div className="fc-field-control">
-                              <input type="number" step="0.01" value={r.toRegime2} onChange={(e) => updateRegime(i, { toRegime2: e.target.value })} style={inputStyle} />
+                              <input
+                                data-tour={`return-regime-${i}-to-2`}
+                                type="text"
+                                inputMode="decimal"
+                                value={r.toRegime2}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (!isValidDecimalDraft(next)) return;
+                                  markUserEdited();
+                                  updateRegime(i, { toRegime2: next });
+                                }}
+                                style={inputStyle}
+                              />
                             </div>
                             <div className="fc-field-info">
                               <InfoTooltip label="(i)">
@@ -2618,7 +3475,18 @@ ref
                             <label className="fc-field-row">
                               <span className="fc-field-label">Mean</span>
                               <div className="fc-field-control">
-                                <input type="number" step="0.0001" value={r.normalMean} onChange={(e) => updateRegime(i, { normalMean: e.target.value })} style={inputStyle} />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={r.normalMean}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidDecimalDraft(next)) return;
+                                    markUserEdited();
+                                    updateRegime(i, { normalMean: next });
+                                  }}
+                                  style={inputStyle}
+                                />
                               </div>
                               <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
@@ -2631,7 +3499,18 @@ ref
                             <label className="fc-field-row">
                               <span className="fc-field-label">Std dev</span>
                               <div className="fc-field-control">
-                                <input type="number" step="0.0001" value={r.normalStdDev} onChange={(e) => updateRegime(i, { normalStdDev: e.target.value })} style={inputStyle} />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={r.normalStdDev}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidDecimalDraft(next)) return;
+                                    markUserEdited();
+                                    updateRegime(i, { normalStdDev: next });
+                                  }}
+                                  style={inputStyle}
+                                />
                               </div>
                               <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
@@ -2646,7 +3525,18 @@ ref
                             <label className="fc-field-row">
                               <span className="fc-field-label">Mu</span>
                               <div className="fc-field-control">
-                                <input type="number" step="0.0001" value={r.studentMu} onChange={(e) => updateRegime(i, { studentMu: e.target.value })} style={inputStyle} />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={r.studentMu}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidDecimalDraft(next)) return;
+                                    markUserEdited();
+                                    updateRegime(i, { studentMu: next });
+                                  }}
+                                  style={inputStyle}
+                                />
                               </div>
                               <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
@@ -2659,7 +3549,18 @@ ref
                             <label className="fc-field-row">
                               <span className="fc-field-label">Sigma</span>
                               <div className="fc-field-control">
-                                <input type="number" step="0.0001" value={r.studentSigma} onChange={(e) => updateRegime(i, { studentSigma: e.target.value })} style={inputStyle} />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={r.studentSigma}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidDecimalDraft(next)) return;
+                                    markUserEdited();
+                                    updateRegime(i, { studentSigma: next });
+                                  }}
+                                  style={inputStyle}
+                                />
                               </div>
                               <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
@@ -2672,7 +3573,18 @@ ref
                             <label className="fc-field-row">
                               <span className="fc-field-label">Nu</span>
                               <div className="fc-field-control">
-                                <input type="number" step="0.0001" value={r.studentNu} onChange={(e) => updateRegime(i, { studentNu: e.target.value })} style={inputStyle} />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={r.studentNu}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidDecimalDraft(next)) return;
+                                    markUserEdited();
+                                    updateRegime(i, { studentNu: next });
+                                  }}
+                                  style={inputStyle}
+                                />
                               </div>
                               <div className="fc-field-info">
                                 <InfoTooltip label="(i)">
@@ -2752,6 +3664,7 @@ ref
               startDate,
               phaseTypes: phases.map((p) => p.phaseType),
               phaseDurationsInMonths: phases.map((p) => Number(p.durationInMonths) || 0),
+              phaseInitialDeposits: phases.map((p) => (p?.initialDeposit !== undefined ? Number(p.initialDeposit) : undefined)),
               firstPhaseInitialDeposit: phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
               inflationFactorPerYear,
             };
@@ -2763,12 +3676,14 @@ ref
       {/* Coachmarks only when steps are provided */}
       {current && (
         <Coachmark
+          key={current.id}
           step={current}
           onNext={next}
           onBack={back}
           onExit={exit}
           isFirst={isFirst}
           isLast={isLast}
+          enteredViaBack={enteredViaBack}
         />
       )}
 

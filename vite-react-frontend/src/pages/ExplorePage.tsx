@@ -1,6 +1,7 @@
 // src/pages/ExplorePage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageLayout from '../components/PageLayout';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
@@ -27,7 +28,6 @@ type TagTone = 'capital' | 'deposit' | 'return' | 'withdraw' | 'tax' | 'fee' | '
 
 const hexToRgba = (hex: string, alpha: number): string => {
   const h = String(hex || '').replace('#', '').trim();
-  if (h.length !== 6) return `rgba(255,255,255,${alpha})`;
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
@@ -188,6 +188,7 @@ const buildTimelineFromAdvancedRequest = (req: any): SimulationTimelineContext |
       startDate: String(startDate),
       phaseTypes,
       phaseDurationsInMonths,
+      phaseInitialDeposits: phases.map((p) => (p?.initialDeposit !== undefined ? Number(p.initialDeposit) : undefined)),
       firstPhaseInitialDeposit:
         phases[0]?.initialDeposit !== undefined ? Number(phases[0]?.initialDeposit) : undefined,
       inflationFactorPerYear:
@@ -838,6 +839,8 @@ const OutputsHero: React.FC<{ summaries: YearlySummary[]; metricSummaries?: Metr
 const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
 
+  const PAGE_SIZE = 20;
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showLegend, setShowLegend] = useState(false);
 
@@ -851,6 +854,8 @@ const ExplorePage: React.FC = () => {
   const [taxRule, setTaxRule] = useState<'ANY' | 'CAPITAL' | 'NOTIONAL'>('ANY');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [minYears, setMinYears] = useState<number | ''>('');
+
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<'simple' | 'inDepth'>('simple');
@@ -929,13 +934,10 @@ const ExplorePage: React.FC = () => {
     [inputByRunId, metricSummariesByRunId, summariesByRunId]
   );
 
-  // Prefetch a few cards so the gallery has immediate “hero outputs”.
+  // Reset paging when the query/sort/filter changes.
   useEffect(() => {
-    const first = runs.slice(0, 12).map((r) => r.id);
-    first.forEach((id) => {
-      void ensureRunLoaded(id);
-    });
-  }, [ensureRunLoaded, runs]);
+    setVisibleCount(PAGE_SIZE);
+  }, [PAGE_SIZE, failedOnly, minYears, query, sortMode, taxRule]);
 
   // When filters require run details, load them in the background.
   useEffect(() => {
@@ -1028,6 +1030,19 @@ const ExplorePage: React.FC = () => {
     return sorted;
   }, [computedByRunId, failedOnly, minYears, query, runs, sortMode, taxRule]);
 
+  const visibleRuns = useMemo(
+    () => filteredAndSorted.slice(0, Math.max(PAGE_SIZE, visibleCount)),
+    [PAGE_SIZE, filteredAndSorted, visibleCount]
+  );
+
+  // Prefetch details for the visible batch so the gallery shows simple details
+  // without needing a click for every card.
+  useEffect(() => {
+    visibleRuns.forEach((r) => {
+      void ensureRunLoaded(r.id);
+    });
+  }, [ensureRunLoaded, visibleRuns]);
+
   const selectedRun = useMemo(() => {
     if (!selectedRunId) return null;
     return runs.find((r) => r.id === selectedRunId) ?? null;
@@ -1119,10 +1134,11 @@ const ExplorePage: React.FC = () => {
   }, [failedOnly, minYears, query, taxRule]);
 
   return (
-    <div style={{ minHeight: '100vh', padding: 16, maxWidth: 1500, margin: '0 auto' }}>
+    <PageLayout variant="wide">
+    <div style={{ maxWidth: 1500, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: '8px 0 6px' }}>Explore</h2>
+          <h2 style={{ margin: '8px 0 6px' }}>Explorer</h2>
           <div style={{ fontSize: 13, opacity: 0.75 }}>
             Scenario gallery + run inspector
           </div>
@@ -1237,7 +1253,7 @@ const ExplorePage: React.FC = () => {
 
       <div style={{ marginTop: 12, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span>
-          Showing <strong>{filteredAndSorted.length}</strong> runs
+          Showing <strong>{visibleRuns.length}</strong> / <strong>{filteredAndSorted.length}</strong> runs
         </span>
         <div style={{ display: 'inline-flex', alignItems: 'center' }}>
           <button
@@ -1292,7 +1308,7 @@ const ExplorePage: React.FC = () => {
             gap: 12,
           }}
         >
-          {filteredAndSorted.map((r) => {
+          {visibleRuns.map((r) => {
             const st = rowStateByRunId[r.id] ?? 'idle';
             const computed = computedByRunId[r.id];
             const metricSummaries = metricSummariesByRunId[r.id] ?? null;
@@ -1315,7 +1331,7 @@ const ExplorePage: React.FC = () => {
         </div>
       ) : (
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-          {filteredAndSorted.map((r) => {
+          {visibleRuns.map((r) => {
             const st = rowStateByRunId[r.id] ?? 'idle';
             const computed = computedByRunId[r.id];
             const metricSummaries = metricSummariesByRunId[r.id] ?? null;
@@ -1337,6 +1353,26 @@ const ExplorePage: React.FC = () => {
           ) : null}
         </div>
       )}
+
+      {visibleRuns.length < filteredAndSorted.length ? (
+        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: 12,
+              border: '1px solid #444',
+              background: '#2e2e2e',
+              color: '#ddd',
+              cursor: 'pointer',
+              fontWeight: 750,
+            }}
+          >
+            Load more (+{PAGE_SIZE})
+          </button>
+        </div>
+      ) : null}
 
       {/* Advanced filters drawer */}
       {showAdvanced ? (
@@ -1609,6 +1645,7 @@ const ExplorePage: React.FC = () => {
         </div>
       ) : null}
     </div>
+    </PageLayout>
   );
 };
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { PhaseRequest } from '../../models/types';
 import { createDefaultPhase } from '../../config/simulationDefaults';
 import InfoTooltip from '../InfoTooltip';
+import { isValidDecimalDraft, isValidIntegerDraft } from '../../utils/numberInput';
 
 type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
 
@@ -53,18 +54,50 @@ const PhaseList: React.FC<PhaseListProps> = ({
   onPhaseRemove,
   onToggleTaxRule,
 }) => {
+  const decimalFields = new Set<keyof PhaseRequest>([
+    'yearlyIncreaseInPercentage',
+    'withdrawRate',
+    'lowerVariationPercentage',
+    'upperVariationPercentage',
+  ]);
+
+  const integerFields = new Set<keyof PhaseRequest>([
+    'initialDeposit',
+    'monthlyDeposit',
+    'withdrawAmount',
+  ]);
+
   const handleChange =
     (idx: number, field: keyof PhaseRequest) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
-      const val = e.target.type === 'number' ? Number(raw) : raw;
-      onPhaseChange(idx, field, val);
+
+      if (raw === '') {
+        onPhaseChange(idx, field, '');
+        return;
+      }
+
+      if (decimalFields.has(field)) {
+        if (!isValidDecimalDraft(raw)) return;
+        onPhaseChange(idx, field, raw);
+        return;
+      }
+
+      if (integerFields.has(field)) {
+        if (!isValidIntegerDraft(raw)) return;
+        onPhaseChange(idx, field, raw);
+        return;
+      }
+
+      // Fallback: store raw
+      onPhaseChange(idx, field, raw);
     };
 
   const handleDurationYearsChange =
     (idx: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
-      const val = Number(raw);
+      if (!isValidIntegerDraft(raw)) return;
+      const val = raw === '' ? 0 : Number(raw);
       const { months } = splitMonths(phases[idx]?.durationInMonths);
       const { totalMonths } = normaliseDuration(
         Number.isNaN(val) ? 0 : val,
@@ -76,7 +109,8 @@ const PhaseList: React.FC<PhaseListProps> = ({
   const handleDurationMonthsChange =
     (idx: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
-      const val = Number(raw);
+      if (!isValidIntegerDraft(raw)) return;
+      const val = raw === '' ? 0 : Number(raw);
       const { years } = splitMonths(phases[idx]?.durationInMonths);
       const { totalMonths } = normaliseDuration(
         years,
@@ -205,6 +239,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   <span style={{ fontSize: '0.95rem' }}>Type</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <select
+                      data-tour={`phase-${idx}-type`}
                       value={p.phaseType}
                       onChange={handlePhaseTypeChange(idx)}
                       style={{
@@ -254,10 +289,10 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       >
                         <div style={{ flex: 1 }}>
                         <input
-                          type="number"
-                          min={0}
-                          max={MAX_YEARS}
-                          value={years}
+                          type="text"
+                          inputMode="numeric"
+                          data-tour={`phase-${idx}-duration-years`}
+                          value={years === 0 ? '' : String(years)}
                           onChange={handleDurationYearsChange(idx)}
                           style={{
                             width: '100%',
@@ -277,10 +312,10 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       </div>
                       <div style={{ flex: 1 }}>
                         <input
-                          type="number"
-                          min={0}
-                          max={12}
-                          value={months}
+                          type="text"
+                          inputMode="numeric"
+                          data-tour={`phase-${idx}-duration-months`}
+                          value={months === 0 ? '' : String(months)}
                           onChange={handleDurationMonthsChange(idx)}
                           style={{
                             width: '100%',
@@ -310,7 +345,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Initial Deposit</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
+                          data-tour={`phase-${idx}-initial-deposit`}
                           value={p.initialDeposit ?? ''}
                           onChange={handleChange(idx, 'initialDeposit')}
                           style={{
@@ -329,7 +366,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Monthly Deposit</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
+                          data-tour={`phase-${idx}-monthly-deposit`}
                           value={p.monthlyDeposit ?? ''}
                           onChange={handleChange(idx, 'monthlyDeposit')}
                           style={{
@@ -348,8 +387,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Yearly Increase %</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
+                          data-tour={`phase-${idx}-yearly-increase`}
                           value={p.yearlyIncreaseInPercentage ?? ''}
                           onChange={handleChange(idx, 'yearlyIncreaseInPercentage')}
                           style={{
@@ -372,6 +412,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Withdraw Type</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <select
+                          data-tour={`phase-${idx}-withdraw-mode`}
                           value={withdrawMode}
                           onChange={handleWithdrawModeChange(idx)}
                           style={{
@@ -395,8 +436,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           <span style={{ fontSize: '0.95rem' }}>Withdraw Rate %</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <input
-                              type="number"
-                              step="0.01"
+                              type="text"
+                              inputMode="decimal"
+                              data-tour={`phase-${idx}-withdraw-rate`}
                               value={p.withdrawRate ?? ''}
                               onChange={handleChange(idx, 'withdrawRate')}
                               style={{
@@ -417,7 +459,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           <span style={{ fontSize: '0.95rem' }}>Withdraw Amount</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
+                              data-tour={`phase-${idx}-withdraw-amount`}
                               value={p.withdrawAmount ?? ''}
                               onChange={handleChange(idx, 'withdrawAmount')}
                               style={{
@@ -438,8 +482,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Lower Variation %</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
+                          data-tour={`phase-${idx}-lower-variation`}
                           value={p.lowerVariationPercentage ?? ''}
                           onChange={handleChange(idx, 'lowerVariationPercentage')}
                           style={{
@@ -458,8 +503,9 @@ const PhaseList: React.FC<PhaseListProps> = ({
                       <span style={{ fontSize: '0.95rem' }}>Upper Variation %</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
+                          data-tour={`phase-${idx}-upper-variation`}
                           value={p.upperVariationPercentage ?? ''}
                           onChange={handleChange(idx, 'upperVariationPercentage')}
                           style={{
@@ -479,6 +525,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                 </div>
 
                 <fieldset
+                  data-tour={`phase-${idx}-tax-exemptions`}
                   style={{
                     border: '1px solid var(--fc-phase-border)',
                     padding: '0.2rem',
@@ -500,6 +547,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   >
                     <input
                       type="checkbox"
+                      data-tour={`phase-${idx}-tax-exemptioncard`}
                       checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
                       onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
                       style={{ marginRight: '0.3rem' }}
@@ -509,6 +557,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                   <label style={{ display: 'block', fontSize: '0.95rem' }}>
                     <input
                       type="checkbox"
+                      data-tour={`phase-${idx}-tax-stockexemption`}
                       checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
                       onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
                       style={{ marginRight: '0.3rem' }}
