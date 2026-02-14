@@ -1463,8 +1463,8 @@ const MoneyPerspectivePage: React.FC = () => {
   }, []);
 
   return (
-    <PageLayout variant="constrained" maxWidthPx={600}>
-      <h1 style={{ textAlign: "center", fontSize: 34 }}>
+    <PageLayout variant="constrained" maxWidthPx={650}>
+      <h1 style={{ textAlign: "center" }}>
         Money Perspectivator
       </h1>
 
@@ -1846,7 +1846,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       if (v == null) return "—";
                       const multiple = v / valueThisYearExpenseTotal;
                       return Number.isFinite(multiple)
-                        ? `${formatNumber(multiple, 1)}× Value (this year)`
+                        ? `${formatNumber(multiple, 1)}× Value (1 year)`
                         : "—";
                     })()}
                   </div>
@@ -1943,7 +1943,7 @@ const MoneyPerspectivePage: React.FC = () => {
                       <div>
                         {workTotalSummary20?.workEquivalentPct == null
                           ? "—"
-                          : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}% of Work (20y)`}
+                          : `${formatNumber(workTotalSummary20.workEquivalentPct, 1)}% of Work (20 years)`}
                       </div>
                     </div>
 
@@ -2027,7 +2027,7 @@ const MoneyPerspectivePage: React.FC = () => {
                         const runwayYears = runwayDays / 365;
                         const multiple = runwayYears / 20;
                         return Number.isFinite(multiple)
-                          ? `${formatNumber(multiple, 2)}× 20y`
+                          ? `${formatNumber(multiple, 2)}× 20 years`
                           : "—";
                       })()}
                     </div>

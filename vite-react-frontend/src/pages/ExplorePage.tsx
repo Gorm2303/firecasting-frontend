@@ -1137,12 +1137,7 @@ const ExplorePage: React.FC = () => {
     <PageLayout variant="wide">
     <div style={{ maxWidth: 1500, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h2 style={{ margin: '8px 0 6px' }}>Explorer</h2>
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Scenario gallery + run inspector
-          </div>
-        </div>
+        <h1>Explorer</h1>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             type="button"

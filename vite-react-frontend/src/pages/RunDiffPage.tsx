@@ -975,13 +975,9 @@ const RunDiffPage: React.FC = () => {
       `}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-        <h2 style={{ margin: 0 }}>Comparator</h2>
+        <h1>Comparator</h1>
         <Link to="/simulation" style={{ textDecoration: 'none' }}>← Back</Link>
       </div>
-
-      <p style={{ opacity: 0.85, marginTop: 10 }}>
-        Pick two saved scenarios to diff, or pick one to preview its latest results here.
-      </p>
 
       <div style={{
         border: '1px solid #444', borderRadius: 12, padding: 12,

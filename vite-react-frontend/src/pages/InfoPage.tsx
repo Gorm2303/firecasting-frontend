@@ -207,7 +207,7 @@ const InfoPage: React.FC = () => {
 
       <PageLayout variant="constrained">
       <div id="info-root">
-        <h1 style={{ margin: '0 0 12px 0' }}>Explainer</h1>
+        <h1 style={{ textAlign: "center" }}>Explainer</h1>
       {/* Burger button */}
       {hasMenu && (
         <button
