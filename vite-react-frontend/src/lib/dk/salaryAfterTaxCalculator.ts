@@ -45,27 +45,51 @@ export const calculateSalaryAfterTax = (inputs: SalaryAfterTaxInputs): SalaryAft
 
   const personalIncomeAfterAmAnnualDkk = clampNonNegative(amBaseAnnualDkk - amBidragAnnualDkk);
 
-  const personfradragAnnualDkk = cfg.personfradragAnnualDkk;
-  const beskaeftigelsesfradragAnnualDkk = computeBeskaeftigelsesfradragAnnualDkk(
+  const personfradragNominalAnnualDkk = clampNonNegative(cfg.personfradragAnnualDkk);
+  const beskaeftigelsesfradragNominalAnnualDkk = computeBeskaeftigelsesfradragAnnualDkk(
     personalIncomeAfterAmAnnualDkk,
     cfg.beskaeftigelsesfradragRate,
     cfg.beskaeftigelsesfradragMaxAnnualDkk,
   );
-  const jobfradragAnnualDkk = computeJobfradragAnnualDkk(
+  const jobfradragNominalAnnualDkk = computeJobfradragAnnualDkk(
     personalIncomeAfterAmAnnualDkk,
     cfg.jobfradragRate,
     cfg.jobfradragIncomeThresholdAnnualDkk,
     cfg.jobfradragMaxAnnualDkk,
   );
-  const otherDeductionsAnnualDkk = clampNonNegative(inputs.otherDeductionsAnnualDkk);
+  const otherDeductionsNominalAnnualDkk = clampNonNegative(inputs.otherDeductionsAnnualDkk);
 
-  const taxableIncomeAnnualDkk = clampNonNegative(
-    personalIncomeAfterAmAnnualDkk -
-      personfradragAnnualDkk -
-      beskaeftigelsesfradragAnnualDkk -
-      jobfradragAnnualDkk -
-      otherDeductionsAnnualDkk,
+  // Deductions cannot exceed the available income base.
+  // We apply them in the assumed ordering so the line-items remain meaningful in the breakdown.
+  let remainingIncomeForDeductionsAnnualDkk = personalIncomeAfterAmAnnualDkk;
+
+  const personfradragAnnualDkkRaw = Math.min(personfradragNominalAnnualDkk, remainingIncomeForDeductionsAnnualDkk);
+  remainingIncomeForDeductionsAnnualDkk = clampNonNegative(
+    remainingIncomeForDeductionsAnnualDkk - personfradragAnnualDkkRaw,
   );
+
+  const beskaeftigelsesfradragAnnualDkkRaw = Math.min(
+    beskaeftigelsesfradragNominalAnnualDkk,
+    remainingIncomeForDeductionsAnnualDkk,
+  );
+  remainingIncomeForDeductionsAnnualDkk = clampNonNegative(
+    remainingIncomeForDeductionsAnnualDkk - beskaeftigelsesfradragAnnualDkkRaw,
+  );
+
+  const jobfradragAnnualDkkRaw = Math.min(jobfradragNominalAnnualDkk, remainingIncomeForDeductionsAnnualDkk);
+  remainingIncomeForDeductionsAnnualDkk = clampNonNegative(
+    remainingIncomeForDeductionsAnnualDkk - jobfradragAnnualDkkRaw,
+  );
+
+  const otherDeductionsAnnualDkkRaw = Math.min(
+    otherDeductionsNominalAnnualDkk,
+    remainingIncomeForDeductionsAnnualDkk,
+  );
+  remainingIncomeForDeductionsAnnualDkk = clampNonNegative(
+    remainingIncomeForDeductionsAnnualDkk - otherDeductionsAnnualDkkRaw,
+  );
+
+  const taxableIncomeAnnualDkk = remainingIncomeForDeductionsAnnualDkk;
 
   const municipalTaxAnnualDkk = clampNonNegative(taxableIncomeAnnualDkk * clampNonNegative(inputs.municipalTaxRate));
   const churchTaxAnnualDkk = inputs.churchMember
@@ -98,8 +122,10 @@ export const calculateSalaryAfterTax = (inputs: SalaryAfterTaxInputs): SalaryAft
     amBaseAnnualDkk: roundDkk(amBaseAnnualDkk),
     amBidragAnnualDkk: roundDkk(amBidragAnnualDkk),
     personalIncomeAfterAmAnnualDkk: roundDkk(personalIncomeAfterAmAnnualDkk),
-    beskaeftigelsesfradragAnnualDkk: roundDkk(beskaeftigelsesfradragAnnualDkk),
-    jobfradragAnnualDkk: roundDkk(jobfradragAnnualDkk),
+    personfradragAnnualDkk: roundDkk(personfradragAnnualDkkRaw),
+    beskaeftigelsesfradragAnnualDkk: roundDkk(beskaeftigelsesfradragAnnualDkkRaw),
+    jobfradragAnnualDkk: roundDkk(jobfradragAnnualDkkRaw),
+    otherDeductionsAnnualDkk: roundDkk(otherDeductionsAnnualDkkRaw),
     taxableIncomeAnnualDkk: roundDkk(taxableIncomeAnnualDkk),
     municipalTaxAnnualDkk: roundDkk(municipalTaxAnnualDkk),
     churchTaxAnnualDkk: roundDkk(churchTaxAnnualDkk),
@@ -150,10 +176,10 @@ export const calculateSalaryAfterTax = (inputs: SalaryAfterTaxInputs): SalaryAft
 
     personalIncomeAfterAmAnnualDkk: rounded.personalIncomeAfterAmAnnualDkk,
 
-    personfradragAnnualDkk,
+    personfradragAnnualDkk: rounded.personfradragAnnualDkk,
     beskaeftigelsesfradragAnnualDkk: rounded.beskaeftigelsesfradragAnnualDkk,
     jobfradragAnnualDkk: rounded.jobfradragAnnualDkk,
-    otherDeductionsAnnualDkk: roundDkk(otherDeductionsAnnualDkk),
+    otherDeductionsAnnualDkk: rounded.otherDeductionsAnnualDkk,
 
     taxableIncomeAnnualDkk: rounded.taxableIncomeAnnualDkk,
 

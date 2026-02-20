@@ -17,8 +17,19 @@ describe('calculateSalaryAfterTax (DK 2026)', () => {
   it('handles zero income deterministically', () => {
     const r = calculateSalaryAfterTax({ ...baseInputs, grossAmount: 0 });
     expect(r.grossAnnualDkk).toBe(0);
+    expect(r.personfradragAnnualDkk).toBe(0);
     expect(r.totalTaxAnnualDkk).toBe(0);
     expect(r.netAnnualDkk).toBe(0);
+  });
+
+  it('caps personfradrag at personal income after AM', () => {
+    const rLow = calculateSalaryAfterTax({ ...baseInputs, grossAmount: 10_000 });
+    // personalIncomeAfterAM = gross*(1-0.08) = gross*0.92 (no pension/ATP)
+    expect(rLow.personalIncomeAfterAmAnnualDkk).toBe(9_200);
+    expect(rLow.personfradragAnnualDkk).toBe(9_200);
+
+    const rHigh = calculateSalaryAfterTax({ ...baseInputs, grossAmount: 200_000 });
+    expect(rHigh.personfradragAnnualDkk).toBe(54_100);
   });
 
   it('applies AM-bidrag after pension/ATP deductions', () => {
