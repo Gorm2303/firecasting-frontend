@@ -12,6 +12,125 @@ type NavGroup = {
   items: NavItem[];
 };
 
+export type { NavGroup, NavItem };
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Firecasting',
+    items: [
+      { label: 'Home', to: '/', isActive: (p) => p === '/' },
+      { label: 'Explainer', to: '/info', isActive: (p) => p === '/info' },
+      { label: 'Feedback', to: '/feedback', isActive: (p) => p === '/feedback' },
+      { label: 'Assumptions Hub', to: '/assumptions', isActive: (p) => p === '/assumptions' },
+    ],
+  },
+  {
+    title: 'Security & Privacy Center',
+    items: [{ label: 'Security & Privacy Center', to: '/security-privacy', isActive: (p) => p === '/security-privacy' }],
+  },
+  {
+    title: 'Lifestyle',
+    items: [
+      { label: 'Salary Taxator', to: '/salary-after-tax', isActive: (p) => p === '/salary-after-tax' },
+      { label: 'Money Perspectivator', to: '/money-perspective', isActive: (p) => p === '/money-perspective' },
+      { label: 'Time Accounting Dashboard', to: '/time-accounting', isActive: (p) => p === '/time-accounting' },
+      {
+        label: 'Fixed vs Flexible Spending Analyzer',
+        to: '/fixed-vs-flexible-spending',
+        isActive: (p) => p === '/fixed-vs-flexible-spending',
+      },
+      { label: 'Life Events Simulator', to: '/life-events-simulator', isActive: (p) => p === '/life-events-simulator' },
+      { label: 'Side Hustle Lab', to: '/side-hustle-lab', isActive: (p) => p === '/side-hustle-lab' },
+      { label: 'Housing Decision Studio', to: '/housing-decision-studio', isActive: (p) => p === '/housing-decision-studio' },
+      { label: 'Household Negotiation Board', to: '/household-negotiation-board', isActive: (p) => p === '/household-negotiation-board' },
+      { label: 'Family Mode Planner', to: '/family-mode-planner', isActive: (p) => p === '/family-mode-planner' },
+      { label: 'Debt Freedom Optimizer', to: '/debt-freedom-optimizer', isActive: (p) => p === '/debt-freedom-optimizer' },
+      { label: 'Emergency Buffer Optimizer', to: '/emergency-buffer-optimizer', isActive: (p) => p === '/emergency-buffer-optimizer' },
+      { label: 'Insurance Risk Shield', to: '/insurance-risk-shield', isActive: (p) => p === '/insurance-risk-shield' },
+    ],
+  },
+  {
+    title: 'Plan',
+    items: [
+      { label: 'Scenario Library', to: '/scenario-library', isActive: (p) => p === '/scenario-library' },
+      { label: 'FIRE Milestones', to: '/fire-milestones', isActive: (p) => p === '/fire-milestones' },
+      { label: 'Confidence Funnel', to: '/confidence-funnel', isActive: (p) => p === '/confidence-funnel' },
+      { label: 'Goal Planner', to: '/goal-planner', isActive: (p) => p === '/goal-planner' },
+      { label: 'Uncertainty Tracks', to: '/uncertainty-tracks', isActive: (p) => p === '/uncertainty-tracks' },
+      { label: 'Plan Report', to: '/plan-report', isActive: (p) => p === '/plan-report' },
+    ],
+  },
+  {
+    title: 'Model / Build',
+    items: [
+      { label: 'Policy Builder', to: '/policy-builder', isActive: (p) => p === '/policy-builder' },
+      { label: 'Deposit Strategy', to: '/deposit-strategy', isActive: (p) => p === '/deposit-strategy' },
+      { label: 'Withdrawal Strategy', to: '/withdrawal-strategy', isActive: (p) => p === '/withdrawal-strategy' },
+    ],
+  },
+  {
+    title: 'Simulation',
+    items: [
+      {
+        label: 'Tutor',
+        to: '/tutorial',
+        isActive: (p) => p.startsWith('/tutorial') || p.startsWith('/simulation/tutorial'),
+      },
+      { label: 'FIRE Simulator', to: '/simulation', isActive: (p) => p === '/simulation' },
+      {
+        label: 'Comparator',
+        to: '/diff-scenarios',
+        isActive: (p) => p === '/diff-scenarios' || p.startsWith('/simulation/diff'),
+      },
+      { label: 'Stress Test Lab', to: '/stress-test-lab', isActive: (p) => p === '/stress-test-lab' },
+      { label: 'Model Validation Suite', to: '/model-validation-suite', isActive: (p) => p === '/model-validation-suite' },
+      { label: 'Explorer', to: '/explore', isActive: (p) => p === '/explore' },
+    ],
+  },
+  {
+    title: 'Execute / Progress',
+    items: [
+      { label: 'Cashflow Command Center', to: '/cashflow-command-center', isActive: (p) => p === '/cashflow-command-center' },
+      { label: 'Progress Tracker', to: '/progress-tracker', isActive: (p) => p === '/progress-tracker' },
+    ],
+  },
+  {
+    title: 'Portfolio',
+    items: [
+      { label: 'Portfolio', to: '/portfolio', isActive: (p) => p === '/portfolio' },
+      { label: 'Sequence Risk Radar', to: '/sequence-risk-radar', isActive: (p) => p === '/sequence-risk-radar' },
+    ],
+  },
+  {
+    title: 'Reflect',
+    items: [
+      { label: 'Decision Journal', to: '/decision-journal', isActive: (p) => p === '/decision-journal' },
+      { label: 'Decision Replay / Postmortem', to: '/decision-replay', isActive: (p) => p === '/decision-replay' },
+      { label: 'Happiness Tracker', to: '/happiness-tracker', isActive: (p) => p === '/happiness-tracker' },
+      { label: 'Community Benchmarks', to: '/community-benchmarks', isActive: (p) => p === '/community-benchmarks' },
+      { label: 'Advisor / Share Portal', to: '/advisor-share-portal', isActive: (p) => p === '/advisor-share-portal' },
+    ],
+  },
+  {
+    title: 'Challenges',
+    items: [{ label: 'No-Spend Challenge Arena', to: '/no-spend-challenge-arena', isActive: (p) => p === '/no-spend-challenge-arena' }],
+  },
+];
+
+const LIVE_PATHS = new Set<string>([
+  '/info',
+  '/tutorial',
+  '/diff-scenarios',
+  '/salary-after-tax',
+  '/money-perspective',
+  '/simulation',
+  '/explore',
+  '/decision-journal',
+  '/no-spend-challenge-arena',
+]);
+
+const isSkeletonRoute = (to: string): boolean => !LIVE_PATHS.has(to);
+
 const getFocusable = (root: HTMLElement): HTMLElement[] => {
   const nodes = root.querySelectorAll<HTMLElement>(
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -34,115 +153,7 @@ const AppNavDrawer: React.FC = () => {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
-  const groups = useMemo<NavGroup[]>(
-    () => [
-      {
-        title: 'Firecasting',
-        items: [
-          { label: 'Home', to: '/', isActive: (p) => p === '/' },
-          { label: 'Explainer', to: '/info', isActive: (p) => p === '/info' },
-          { label: 'Feedback', to: '/feedback', isActive: (p) => p === '/feedback' },
-          { label: 'Assumptions Hub', to: '/assumptions', isActive: (p) => p === '/assumptions' },
-        ],
-      },
-      {
-        title: 'Security & Privacy Center',
-        items: [
-          { label: 'Security & Privacy Center', to: '/security-privacy', isActive: (p) => p === '/security-privacy' },
-        ],
-      },
-      {
-        title: 'Lifestyle',
-        items: [
-          { label: 'Salary Taxator', to: '/salary-after-tax', isActive: (p) => p === '/salary-after-tax' },
-          { label: 'Money Perspectivator', to: '/money-perspective', isActive: (p) => p === '/money-perspective' },
-          { label: 'Time Accounting Dashboard', to: '/time-accounting', isActive: (p) => p === '/time-accounting' },
-          {
-            label: 'Fixed vs Flexible Spending Analyzer',
-            to: '/fixed-vs-flexible-spending',
-            isActive: (p) => p === '/fixed-vs-flexible-spending',
-          },
-          { label: 'Life Events Simulator', to: '/life-events-simulator', isActive: (p) => p === '/life-events-simulator' },
-          { label: 'Side Hustle Lab', to: '/side-hustle-lab', isActive: (p) => p === '/side-hustle-lab' },
-          { label: 'Housing Decision Studio', to: '/housing-decision-studio', isActive: (p) => p === '/housing-decision-studio' },
-          { label: 'Household Negotiation Board', to: '/household-negotiation-board', isActive: (p) => p === '/household-negotiation-board' },
-          { label: 'Family Mode Planner', to: '/family-mode-planner', isActive: (p) => p === '/family-mode-planner' },
-          { label: 'Debt Freedom Optimizer', to: '/debt-freedom-optimizer', isActive: (p) => p === '/debt-freedom-optimizer' },
-          { label: 'Emergency Buffer Optimizer', to: '/emergency-buffer-optimizer', isActive: (p) => p === '/emergency-buffer-optimizer' },
-          { label: 'Insurance Risk Shield', to: '/insurance-risk-shield', isActive: (p) => p === '/insurance-risk-shield' },
-        ],
-      },
-      {
-        title: 'Plan',
-        items: [
-          { label: 'Scenario Library', to: '/scenario-library', isActive: (p) => p === '/scenario-library' },
-          { label: 'FIRE Milestones', to: '/fire-milestones', isActive: (p) => p === '/fire-milestones' },
-          { label: 'Confidence Funnel', to: '/confidence-funnel', isActive: (p) => p === '/confidence-funnel' },
-          { label: 'Goal Planner', to: '/goal-planner', isActive: (p) => p === '/goal-planner' },
-          { label: 'Uncertainty Tracks', to: '/uncertainty-tracks', isActive: (p) => p === '/uncertainty-tracks' },
-          { label: 'Plan Report', to: '/plan-report', isActive: (p) => p === '/plan-report' },
-        ],
-      },
-      {
-        title: 'Model / Build',
-        items: [
-          { label: 'Policy Builder', to: '/policy-builder', isActive: (p) => p === '/policy-builder' },
-          { label: 'Deposit Strategy', to: '/deposit-strategy', isActive: (p) => p === '/deposit-strategy' },
-          { label: 'Withdrawal Strategy', to: '/withdrawal-strategy', isActive: (p) => p === '/withdrawal-strategy' },
-        ],
-      },
-      {
-        title: 'Simulation',
-        items: [
-          {
-            label: 'Tutor',
-            to: '/tutorial',
-            isActive: (p) => p.startsWith('/tutorial') || p.startsWith('/simulation/tutorial'),
-          },
-          { label: 'FIRE Simulator', to: '/simulation', isActive: (p) => p === '/simulation' },
-          {
-            label: 'Comparator',
-            to: '/diff-scenarios',
-            isActive: (p) => p === '/diff-scenarios' || p.startsWith('/simulation/diff'),
-          },
-          { label: 'Stress Test Lab', to: '/stress-test-lab', isActive: (p) => p === '/stress-test-lab' },
-          { label: 'Model Validation Suite', to: '/model-validation-suite', isActive: (p) => p === '/model-validation-suite' },
-          { label: 'Explorer', to: '/explore', isActive: (p) => p === '/explore' },
-        ],
-      },
-      {
-        title: 'Execute / Progress',
-        items: [
-          { label: 'Cashflow Command Center', to: '/cashflow-command-center', isActive: (p) => p === '/cashflow-command-center' },
-          { label: 'Progress Tracker', to: '/progress-tracker', isActive: (p) => p === '/progress-tracker' },
-        ],
-      },
-      {
-        title: 'Portfolio',
-        items: [
-          { label: 'Portfolio', to: '/portfolio', isActive: (p) => p === '/portfolio' },
-          { label: 'Sequence Risk Radar', to: '/sequence-risk-radar', isActive: (p) => p === '/sequence-risk-radar' },
-        ],
-      },
-      {
-        title: 'Reflect',
-        items: [
-          { label: 'Decision Journal', to: '/decision-journal', isActive: (p) => p === '/decision-journal' },
-          { label: 'Decision Replay / Postmortem', to: '/decision-replay', isActive: (p) => p === '/decision-replay' },
-          { label: 'Hapiness Tracker', to: '/happiness-tracker', isActive: (p) => p === '/happiness-tracker' },
-          { label: 'Community Benchmarks', to: '/community-benchmarks', isActive: (p) => p === '/community-benchmarks' },
-          { label: 'Advisor / Share Portal', to: '/advisor-share-portal', isActive: (p) => p === '/advisor-share-portal' },
-        ],
-      },
-      {
-        title: 'Challenges',
-        items: [
-          { label: 'No-Spend Challenge Arena', to: '/no-spend-challenge-arena', isActive: (p) => p === '/no-spend-challenge-arena' },
-        ],
-      },
-    ],
-    []
-  );
+  const groups = useMemo<NavGroup[]>(() => NAV_GROUPS, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -253,6 +264,7 @@ const AppNavDrawer: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {g.items.map((it) => {
               const active = it.isActive(pathname);
+              const skeleton = isSkeletonRoute(it.to);
               return (
                 <button
                   key={it.to}
@@ -278,7 +290,7 @@ const AppNavDrawer: React.FC = () => {
                   }}
                   aria-current={active ? 'page' : undefined}
                 >
-                  {it.label}
+                  <span style={{ opacity: skeleton ? 0.5 : 1 }}>{it.label}</span>
                 </button>
               );
             })}

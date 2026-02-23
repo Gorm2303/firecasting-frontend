@@ -2,9 +2,11 @@ import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import ExplorePage from './pages/ExplorePage';
+import DecisionJournalPage from './pages/DecisionJournalPage';
 import InfoPage from './pages/InfoPage';
 import LandingPage from './pages/LandingPage';
 import MoneyPerspectivePage from './pages/MoneyPerspectivePage';
+import NoSpendChallengeArenaPage from './pages/NoSpendChallengeArenaPage';
 import ProgressTrackerPage from './pages/ProgressTrackerPage';
 import RunDiffPage from './pages/RunDiffPage';
 import SalaryAfterTaxPage from './pages/SalaryAfterTaxPage';
@@ -1160,47 +1162,6 @@ const skeletonRoutes: SkeletonRoute[] = [
 
   // Reflect
   {
-    path: '/decision-journal',
-    title: 'Decision Journal',
-    sections: [
-      { title: 'Entries', bullets: ['Decision thesis (placeholder)', 'Confidence score (placeholder)', 'Future check-in date (placeholder)'] },
-      { title: 'Review', bullets: ['Hindsight review (placeholder)'] },
-      {
-        title: 'New entry (placeholder)',
-        fields: [
-          { label: 'Decision', placeholder: 'what did you do?' },
-          { label: 'Thesis', placeholder: 'why did you do it?', multiline: true },
-          { label: 'Confidence', placeholder: '0–100' },
-          { label: 'Check-in date', placeholder: 'YYYY-MM-DD' },
-          { label: 'Expected outcome', placeholder: 'what should happen?', multiline: true },
-          { label: 'Key risk', placeholder: 'what could go wrong?', multiline: true },
-        ],
-        actions: ['Save entry (placeholder)'],
-      },
-      {
-        title: 'Entries (placeholder)',
-        widgets: [
-          { kind: 'table', title: 'Log', columns: ['Date', 'Decision', 'Confidence', 'Status'], rows: 5 },
-        ],
-      },
-      {
-        title: 'Bias & process checklist (placeholder)',
-        bullets: ['A lightweight checklist to reduce common decision errors.'],
-        widgets: [
-          {
-            kind: 'cards',
-            title: 'Checklists',
-            cards: [
-              { title: 'Pre-mortem', body: 'Assume it failed. Why? Capture mitigations.' },
-              { title: 'Base rates', body: 'What does history say for similar decisions?' },
-              { title: 'Counterfactuals', body: 'What would convince you you’re wrong?' },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
     path: '/decision-replay',
     title: 'Decision Replay / Postmortem',
     sections: [
@@ -1372,44 +1333,6 @@ const skeletonRoutes: SkeletonRoute[] = [
   },
 
   // Challenges
-  {
-    path: '/no-spend-challenge-arena',
-    title: 'No-Spend Challenge Arena',
-    sections: [
-      { title: 'Sprints', bullets: ['7-day challenges (placeholder)', 'Connect to FI-date movement (placeholder)'] },
-      {
-        title: 'Challenge setup (placeholder)',
-        fields: [
-          { label: 'Duration', placeholder: '7 / 14 / 30 days' },
-          { label: 'Rules', placeholder: 'allowed categories (placeholder)' },
-          { label: 'Reward framing', placeholder: '“buys back X days” (placeholder)' },
-        ],
-        actions: ['Start challenge (placeholder)'],
-      },
-      {
-        title: 'Arena dashboard (placeholder)',
-        widgets: [
-          { kind: 'chart', title: 'Streak & savings', subtitle: 'Chart placeholder.' },
-          { kind: 'table', title: 'Daily log', columns: ['Day', 'Spend?', 'Category', 'Notes', 'Score'], rows: 7 },
-        ],
-        actions: ['Log today (placeholder)', 'End challenge (placeholder)'],
-      },
-      {
-        title: 'Rules & exceptions (placeholder)',
-        bullets: ['Define exceptions to prevent “all-or-nothing” failure.'],
-        widgets: [
-          { kind: 'table', title: 'Exceptions', columns: ['Exception', 'Allowed?', 'Limit', 'Reason'], rows: 5 },
-        ],
-      },
-      {
-        title: 'Leaderboard (privacy-safe) (placeholder)',
-        bullets: ['Opt-in only. Display coarse, anonymous ranks (no raw spending).'],
-        widgets: [
-          { kind: 'table', title: 'Leaderboard', columns: ['Rank', 'Alias', 'Streak', 'Score', 'Country (coarse)'], rows: 6 },
-        ],
-      },
-    ],
-  },
 ];
 
 const AppRoutes: React.FC = () => {
@@ -1434,6 +1357,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/simulation/tutorial/:mode" element={<TutorialPage />} />
       <Route path="/simulation/diff" element={<RunDiffPage />} />
       <Route path="/explore" element={<ExplorePage />} />
+      <Route path="/decision-journal" element={<DecisionJournalPage />} />
+      <Route path="/no-spend-challenge-arena" element={<NoSpendChallengeArenaPage />} />
 
       {/* Skeleton routes */}
       {skeletonRoutes.map((r) => (
