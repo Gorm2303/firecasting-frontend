@@ -892,16 +892,68 @@ const skeletonRoutes: SkeletonRoute[] = [
     path: '/stress-test-lab',
     title: 'Stress Test Lab',
     sections: [
-      { title: 'Shock Templates', bullets: ['Bad first 5 years', 'High inflation decade', 'Job loss year', 'Flat market period', 'Big unexpected expense'] },
-      { title: 'Outputs', bullets: ['Sequence-of-returns fragility (placeholder)', 'Suggested interventions (placeholder)'] },
+      {
+        title: 'Shock templates',
+        bullets: ['Bad first 5 years', 'High inflation decade', 'Job loss year', 'Flat market period', 'Big unexpected expense'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Preset shocks (placeholder)',
+            cards: [
+              { title: 'Bad first 5 years', body: 'Early drawdown shock. Focus: runway + flexibility.' },
+              { title: 'Inflation decade', body: 'Spending pressure. Focus: real spending guardrails.' },
+              { title: 'Job loss year', body: 'Income gap. Focus: buffer policy + recovery plan.' },
+            ],
+          },
+        ],
+      },
       {
         title: 'Shock builder (placeholder)',
         fields: [
           { label: 'Template', placeholder: 'select premade shock' },
           { label: 'Severity', placeholder: 'mild / medium / severe' },
           { label: 'Duration', placeholder: 'years' },
+          { label: 'Start year', placeholder: 'e.g. year 1 / year 10 (placeholder)' },
+          { label: 'Apply to', placeholder: 'returns / inflation / income / expenses (placeholder)' },
         ],
-        actions: ['Run stress test (placeholder)'],
+        actions: ['Run stress test (placeholder)', 'Save shock preset (placeholder)'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Knobs (placeholder)',
+            sliders: [
+              { label: 'Worst-year return', min: -60, max: 20, value: -30, unit: '%' },
+              { label: 'Inflation spike', min: 0, max: 20, value: 8, unit: '%' },
+              { label: 'Income drop', min: 0, max: 100, value: 40, unit: '%' },
+              { label: 'Expense spike', min: 0, max: 100, value: 15, unit: '%' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Outputs (placeholder)',
+        bullets: ['Sequence-of-returns fragility (placeholder)', 'Suggested interventions (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Failure probability under shock', subtitle: 'Chart placeholder.' },
+          { kind: 'chart', title: 'FI delay distribution', subtitle: 'Chart placeholder.' },
+          { kind: 'table', title: 'Top fragility windows', columns: ['Window', 'Why fragile', 'Mitigation'], rows: 5 },
+        ],
+      },
+      {
+        title: 'Runbook (placeholder)',
+        bullets: ['Make the output actionable: “If this shock happens, do this.”'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Suggested interventions',
+            cards: [
+              { title: 'Cut discretionary', body: 'Pre-commit a cut plan and thresholds.' },
+              { title: 'Temporary income', body: 'Side income target + timeline.' },
+              { title: 'Buffer policy', body: 'Refill triggers and pause rules.' },
+            ],
+          },
+        ],
+        actions: ['Export runbook (placeholder)', 'Add to policies (placeholder)'],
       },
     ],
   },
@@ -913,10 +965,36 @@ const skeletonRoutes: SkeletonRoute[] = [
         title: 'Validation',
         bullets: ['Backtests across known historical periods (placeholder)', 'Synthetic edge cases (placeholder)'],
         actions: ['Run backtests (placeholder)', 'Run edge cases (placeholder)'],
+        widgets: [
+          { kind: 'table', title: 'Test matrix (placeholder)', columns: ['Test', 'Category', 'Status', 'Last run', 'Notes'], rows: 7 },
+        ],
       },
       {
         title: 'Sanity checks (placeholder)',
         bullets: ['Does increasing savings always help?', 'Do fees always delay FI?', 'Are taxes applied consistently?'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Invariant checks (placeholder)',
+            cards: [
+              { title: 'Monotonicity', body: 'If savings rate increases, FI should not get worse (within numerical tolerance).' },
+              { title: 'Conservation', body: 'Contributions and withdrawals reconcile across ledgers.' },
+              { title: 'Tax consistency', body: 'Tax rules apply identically across pages and reports.' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Edge case generator (placeholder)',
+        fields: [
+          { label: 'Edge case family', placeholder: 'negative returns / inflation spike / zero income / weird taxes' },
+          { label: 'Seed', placeholder: 'number' },
+          { label: 'Runs', placeholder: 'e.g. 50' },
+        ],
+        actions: ['Generate cases (placeholder)', 'Run all (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Regression trend', subtitle: 'Chart placeholder: pass/fail over time.' },
+        ],
       },
     ],
   },
@@ -937,8 +1015,12 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Recurring expenses', placeholder: 'list (placeholder)' },
           { label: 'Planned deposits', placeholder: 'schedule (placeholder)' },
           { label: 'Annual spikes', placeholder: 'month + amount + label' },
+          { label: 'Starting cash buffer', placeholder: 'amount (placeholder)' },
         ],
         actions: ['Build calendar (placeholder)', 'Suggest buffer (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Surplus/deficit forecast', subtitle: 'Chart placeholder: monthly net cashflow.' },
+        ],
       },
       {
         title: 'Calendar view (placeholder)',
@@ -963,6 +1045,27 @@ const skeletonRoutes: SkeletonRoute[] = [
           },
         ],
       },
+      {
+        title: 'Upcoming spikes (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Spikes', columns: ['Month', 'Label', 'Amount', 'Funded?', 'Note'], rows: 6 },
+        ],
+      },
+      {
+        title: 'Next best krone ranking (placeholder)',
+        bullets: ['A ranked list of where the next surplus krone should go.'],
+        widgets: [
+          { kind: 'table', title: 'Ranked options', columns: ['Rank', 'Option', 'Why', 'Expected impact', 'Constraint'], rows: 6 },
+        ],
+        actions: ['Apply routing (placeholder)', 'Pin as policy (placeholder)'],
+      },
+      {
+        title: 'Tax map (placeholder)',
+        widgets: [
+          { kind: 'chart', title: 'Tax thresholds over time', subtitle: 'Chart placeholder.' },
+          { kind: 'table', title: 'Threshold table', columns: ['Threshold', 'Applies to', 'Amount', 'Notes'], rows: 5 },
+        ],
+      },
     ],
   },
 
@@ -980,14 +1083,33 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Holdings', placeholder: 'funds + weights + fees' },
           { label: 'Account types', placeholder: 'taxable / wrappers / pension' },
           { label: 'Base currency', placeholder: 'e.g. DKK' },
+          { label: 'Rebalance frequency', placeholder: 'monthly / quarterly / yearly (placeholder)' },
         ],
         actions: ['Compute health score (placeholder)', 'Run x-ray (placeholder)'],
+        widgets: [
+          { kind: 'table', title: 'Holdings (placeholder)', columns: ['Holding', 'Weight', 'Fee', 'Account', 'Notes'], rows: 6 },
+        ],
       },
       {
         title: 'Portfolio X-Ray (placeholder)',
         widgets: [
           { kind: 'table', title: 'Exposure breakdown', columns: ['Category', 'Weight', 'Notes'], rows: 6 },
           { kind: 'chart', title: 'Fee drag vs freedom', subtitle: 'Chart placeholder: FI-delay per fee component.' },
+        ],
+      },
+      {
+        title: 'Rebalancing plan (placeholder)',
+        widgets: [
+          { kind: 'timeline', title: 'Rebalance timeline', rows: [{ label: 'Quarterly rebalance', range: '2026–ongoing', note: 'bands + triggers (placeholder)' }] },
+          { kind: 'table', title: 'Trades (placeholder)', columns: ['From', 'To', 'Amount', 'Reason', 'Tax note'], rows: 5 },
+        ],
+        actions: ['Generate trades (placeholder)', 'Export plan (placeholder)'],
+      },
+      {
+        title: 'Currency & concentration risk (placeholder)',
+        widgets: [
+          { kind: 'chart', title: 'Currency exposure', subtitle: 'Chart placeholder.' },
+          { kind: 'table', title: 'Top concentrations', columns: ['Exposure', 'Weight', 'Risk', 'Mitigation'], rows: 5 },
         ],
       },
     ],
@@ -1006,6 +1128,32 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Spending mode', placeholder: 'Normal / Lean / Emergency' },
         ],
         actions: ['Compute survival plan (placeholder)'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Sequence knobs (placeholder)',
+            sliders: [
+              { label: 'Worst year return', min: -70, max: 30, value: -25, unit: '%' },
+              { label: 'Inflation spike', min: 0, max: 25, value: 7, unit: '%' },
+              { label: 'Spending cut', min: 0, max: 30, value: 10, unit: '%' },
+              { label: 'Extra income', min: 0, max: 20000, value: 2000, unit: '' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Danger zones (placeholder)',
+        widgets: [
+          { kind: 'chart', title: 'Fragility radar', subtitle: 'Chart placeholder: years around retirement start.' },
+          { kind: 'table', title: 'Danger windows', columns: ['Window', 'Why risky', 'Suggested action'], rows: 6 },
+        ],
+      },
+      {
+        title: 'Survival plan (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Plan', columns: ['Lever', 'Change', 'When to trigger', 'Expected impact'], rows: 6 },
+        ],
+        actions: ['Export plan (placeholder)'],
       },
     ],
   },
@@ -1024,6 +1172,8 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Thesis', placeholder: 'why did you do it?', multiline: true },
           { label: 'Confidence', placeholder: '0–100' },
           { label: 'Check-in date', placeholder: 'YYYY-MM-DD' },
+          { label: 'Expected outcome', placeholder: 'what should happen?', multiline: true },
+          { label: 'Key risk', placeholder: 'what could go wrong?', multiline: true },
         ],
         actions: ['Save entry (placeholder)'],
       },
@@ -1033,35 +1183,163 @@ const skeletonRoutes: SkeletonRoute[] = [
           { kind: 'table', title: 'Log', columns: ['Date', 'Decision', 'Confidence', 'Status'], rows: 5 },
         ],
       },
+      {
+        title: 'Bias & process checklist (placeholder)',
+        bullets: ['A lightweight checklist to reduce common decision errors.'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Checklists',
+            cards: [
+              { title: 'Pre-mortem', body: 'Assume it failed. Why? Capture mitigations.' },
+              { title: 'Base rates', body: 'What does history say for similar decisions?' },
+              { title: 'Counterfactuals', body: 'What would convince you you’re wrong?' },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
     path: '/decision-replay',
     title: 'Decision Replay / Postmortem',
     sections: [
-      { title: 'Replay', bullets: ['Evaluate decisions vs original assumptions (placeholder)'] },
+      {
+        title: 'Select decision (placeholder)',
+        fields: [
+          { label: 'Decision entry', placeholder: 'select from journal (placeholder)' },
+          { label: 'Replay date', placeholder: 'YYYY-MM-DD' },
+        ],
+        actions: ['Load replay (placeholder)'],
+        widgets: [
+          { kind: 'table', title: 'Candidate decisions', columns: ['Date', 'Decision', 'Confidence', 'Status', 'Replay'], rows: 5 },
+        ],
+      },
+      {
+        title: 'Original vs actual (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Comparison', columns: ['Item', 'Expected', 'Actual', 'Delta', 'Why'], rows: 6 },
+          { kind: 'chart', title: 'Outcome timeline', subtitle: 'Chart placeholder.' },
+        ],
+      },
+      {
+        title: 'Root cause (placeholder)',
+        fields: [
+          { label: 'What went right', placeholder: 'notes', multiline: true },
+          { label: 'What went wrong', placeholder: 'notes', multiline: true },
+          { label: 'What was luck', placeholder: 'notes', multiline: true },
+          { label: 'What was skill', placeholder: 'notes', multiline: true },
+        ],
+      },
+      {
+        title: 'Playbook updates (placeholder)',
+        bullets: ['Convert lessons into a policy, checklist, or trigger.'],
+        widgets: [
+          { kind: 'cards', title: 'Updates', cards: [
+            { title: 'New rule', body: 'If X happens again → do Y. (placeholder)' },
+            { title: 'New metric', body: 'Track Z monthly to detect issues early. (placeholder)' },
+            { title: 'New guardrail', body: 'Set a max downside threshold before acting. (placeholder)' },
+          ] },
+        ],
+        actions: ['Save to policies (placeholder)', 'Export postmortem (placeholder)'],
+      },
     ],
   },
   {
     path: '/happiness-tracker',
     title: 'Happiness Tracker',
     sections: [
-      { title: 'Tracking', bullets: ['Simple mood + notes timeline (placeholder)'] },
+      {
+        title: 'Daily tracking (placeholder)',
+        fields: [
+          { label: 'Mood (0–10)', placeholder: 'number' },
+          { label: 'Energy (0–10)', placeholder: 'number' },
+          { label: 'Stress (0–10)', placeholder: 'number' },
+          { label: 'Notes', placeholder: 'short note', multiline: true },
+        ],
+        actions: ['Save entry (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Mood timeline', subtitle: 'Chart placeholder.' },
+        ],
+      },
+      {
+        title: 'Entries (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Log', columns: ['Date', 'Mood', 'Energy', 'Stress', 'Note'], rows: 7 },
+          { kind: 'calendar', title: 'Month view', months: [
+            { label: 'Jan', note: 'trend (placeholder)' },
+            { label: 'Feb', note: 'trend (placeholder)' },
+            { label: 'Mar', note: 'trend (placeholder)' },
+            { label: 'Apr', note: 'trend (placeholder)' },
+            { label: 'May', note: 'trend (placeholder)' },
+            { label: 'Jun', note: 'trend (placeholder)' },
+            { label: 'Jul', note: 'trend (placeholder)' },
+            { label: 'Aug', note: 'trend (placeholder)' },
+            { label: 'Sep', note: 'trend (placeholder)' },
+            { label: 'Oct', note: 'trend (placeholder)' },
+            { label: 'Nov', note: 'trend (placeholder)' },
+            { label: 'Dec', note: 'trend (placeholder)' },
+          ] },
+        ],
+      },
+      {
+        title: 'Experiments (placeholder)',
+        bullets: ['Treat happiness like a feedback loop: run small experiments.'],
+        widgets: [
+          { kind: 'cards', title: 'Experiment cards', cards: [
+            { title: 'Sleep upgrade', body: 'Earlier bedtime for 14 days. Track energy + mood.' },
+            { title: 'No doomscroll', body: 'Limit social apps after 20:00. Track stress.' },
+            { title: 'Joy budget', body: 'Add a small, planned “joy spend” and see net happiness.' },
+          ] },
+        ],
+      },
     ],
   },
   {
     path: '/community-benchmarks',
     title: 'Community Benchmarks (privacy-safe)',
     sections: [
-      { title: 'Cohort Compare', bullets: ['Country, age band, savings rate band, goal type (placeholder)'] },
-      { title: 'Privacy', bullets: ['Anonymized aggregates only (placeholder)'] },
+      {
+        title: 'Cohort compare (privacy-safe) (placeholder)',
+        bullets: ['Country, age band, savings rate band, goal type (placeholder)'],
+        fields: [
+          { label: 'Country', placeholder: 'select (placeholder)' },
+          { label: 'Age band', placeholder: 'e.g. 25–34 (placeholder)' },
+          { label: 'Savings rate band', placeholder: 'e.g. 10–20% (placeholder)' },
+          { label: 'Goal type', placeholder: 'FI / house / buffer / lifestyle (placeholder)' },
+        ],
+        actions: ['View aggregate (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Distribution (aggregate)', subtitle: 'Chart placeholder: anonymized histogram.' },
+          { kind: 'table', title: 'Aggregate stats', columns: ['Metric', 'P25', 'P50', 'P75', 'Notes'], rows: 6 },
+        ],
+      },
+      {
+        title: 'Privacy model (placeholder)',
+        bullets: ['Anonymized aggregates only.', 'Minimum cohort size (k-anonymity) before any stats are shown.', 'No raw scenario data is shared.'],
+        widgets: [
+          { kind: 'cards', title: 'Privacy guarantees', cards: [
+            { title: 'Aggregates only', body: 'Only cohort-level percentiles and counts are displayed.' },
+            { title: 'k-anonymity threshold', body: 'If the cohort is too small, we show nothing.' },
+            { title: 'Opt-in', body: 'Sharing is opt-in and can be revoked.' },
+          ] },
+        ],
+      },
+      {
+        title: 'Your sharing status (placeholder)',
+        fields: [
+          { label: 'Opt-in sharing', placeholder: 'off / on (placeholder)' },
+          { label: 'Shared fields', placeholder: 'coarse aggregates only (placeholder)' },
+        ],
+        actions: ['Enable sharing (placeholder)', 'Revoke sharing (placeholder)'],
+      },
     ],
   },
   {
     path: '/advisor-share-portal',
     title: 'Advisor / Share Portal',
     sections: [
-      { title: 'Share Mode', bullets: ['Partner/advisor read access (placeholder)', 'Permissions + comments (placeholder)'] },
+      { title: 'Share mode', bullets: ['Partner/advisor read access (placeholder)', 'Permissions + comments (placeholder)'] },
       {
         title: 'Share controls (placeholder)',
         fields: [
@@ -1070,6 +1348,25 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Scope', placeholder: 'which scenarios/pages are shared' },
         ],
         actions: ['Create share link (placeholder)', 'Revoke access (placeholder)'],
+      },
+      {
+        title: 'Shared items (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Links & invites', columns: ['Recipient', 'Permission', 'Scope', 'Created', 'Status', 'Action'], rows: 5 },
+          { kind: 'table', title: 'Comments', columns: ['Page', 'Comment', 'Author', 'Time'], rows: 5 },
+        ],
+      },
+      {
+        title: 'Permissions matrix (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Matrix', columns: ['Capability', 'Read', 'Comment', 'Edit', 'Notes'], rows: 6 },
+        ],
+      },
+      {
+        title: 'Audit log (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Events', columns: ['Time', 'Event', 'Actor', 'Result'], rows: 6 },
+        ],
       },
     ],
   },
@@ -1088,6 +1385,28 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Reward framing', placeholder: '“buys back X days” (placeholder)' },
         ],
         actions: ['Start challenge (placeholder)'],
+      },
+      {
+        title: 'Arena dashboard (placeholder)',
+        widgets: [
+          { kind: 'chart', title: 'Streak & savings', subtitle: 'Chart placeholder.' },
+          { kind: 'table', title: 'Daily log', columns: ['Day', 'Spend?', 'Category', 'Notes', 'Score'], rows: 7 },
+        ],
+        actions: ['Log today (placeholder)', 'End challenge (placeholder)'],
+      },
+      {
+        title: 'Rules & exceptions (placeholder)',
+        bullets: ['Define exceptions to prevent “all-or-nothing” failure.'],
+        widgets: [
+          { kind: 'table', title: 'Exceptions', columns: ['Exception', 'Allowed?', 'Limit', 'Reason'], rows: 5 },
+        ],
+      },
+      {
+        title: 'Leaderboard (privacy-safe) (placeholder)',
+        bullets: ['Opt-in only. Display coarse, anonymous ranks (no raw spending).'],
+        widgets: [
+          { kind: 'table', title: 'Leaderboard', columns: ['Rank', 'Alias', 'Streak', 'Score', 'Country (coarse)'], rows: 6 },
+        ],
       },
     ],
   },
