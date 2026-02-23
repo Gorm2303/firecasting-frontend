@@ -39,8 +39,22 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Commute (minutes/day)', placeholder: 'e.g. 60' },
           { label: 'Stress recovery (hours/week)', placeholder: 'e.g. 5' },
           { label: 'Side income (monthly)', placeholder: 'e.g. 2,000 DKK' },
+          { label: 'Vacations (weeks/year)', placeholder: 'e.g. 6' },
+          { label: 'Overtime (hours/week)', placeholder: 'e.g. 2' },
         ],
         actions: ['Calculate (placeholder)', 'Save as scenario (placeholder)'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Quick tweak knobs',
+            sliders: [
+              { label: 'Commute minutes/day', min: 0, max: 180, value: 60, unit: '' },
+              { label: 'Work hours/week', min: 0, max: 70, value: 37, unit: '' },
+              { label: 'Recovery hours/week', min: 0, max: 20, value: 5, unit: '' },
+              { label: 'Income “raise”', min: 0, max: 30, value: 0, unit: '%' },
+            ],
+          },
+        ],
       },
       {
         title: 'Outputs',
@@ -49,6 +63,11 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Commute cost (life-hours / month)', placeholder: 'computed' },
           { label: 'Recovery cost (life-hours / month)', placeholder: 'computed' },
           { label: 'Net free life-hours / week', placeholder: 'computed' },
+          { label: 'Effective hourly rate (incl commute)', placeholder: 'computed' },
+        ],
+        widgets: [
+          { kind: 'chart', title: 'Life-hours ledger', subtitle: 'Chart placeholder: work + commute + recovery vs free time.' },
+          { kind: 'table', title: 'Monthly ledger (placeholder)', columns: ['Category', 'Hours', 'Cost (DKK)', 'Note'], rows: 6 },
         ],
       },
       {
@@ -58,6 +77,14 @@ const skeletonRoutes: SkeletonRoute[] = [
           'If commute increases by 30 min/day: impact (placeholder)',
           'If salary increases by X: impact (placeholder)',
         ],
+      },
+      {
+        title: 'Scenario comparison (placeholder)',
+        bullets: ['Compare “Remote”, “Hybrid”, “Promotion”, “Part-time”, etc.'],
+        widgets: [
+          { kind: 'table', title: 'Scenarios', columns: ['Scenario', 'Net free hours/week', 'Effective hourly', 'Stress score', 'Notes'], rows: 4 },
+        ],
+        actions: ['Add scenario (placeholder)', 'Set baseline (placeholder)'],
       },
     ],
   },
@@ -100,13 +127,15 @@ const skeletonRoutes: SkeletonRoute[] = [
     title: 'Life Events Simulator',
     sections: [
       {
-        title: 'Timeline',
+        title: 'Scenario setup',
         bullets: ['Model life events as timeline blocks with uncertainty ranges.'],
         fields: [
           { label: 'Simulation start age', placeholder: 'e.g. 30' },
           { label: 'Horizon (years)', placeholder: 'e.g. 60' },
+          { label: 'Currency', placeholder: 'e.g. DKK' },
+          { label: 'Baseline scenario', placeholder: 'select (placeholder)' },
         ],
-        actions: ['Add event (placeholder)', 'Duplicate scenario (placeholder)'],
+        actions: ['Add event (placeholder)', 'Duplicate scenario (placeholder)', 'Compare scenarios (placeholder)'],
       },
       {
         title: 'Event types',
@@ -114,6 +143,30 @@ const skeletonRoutes: SkeletonRoute[] = [
           'Children, career breaks, parental leave, relocations',
           'Home purchase, divorce, inheritance, health costs',
         ],
+      },
+      {
+        title: 'Timeline (placeholder)',
+        bullets: ['Later: drag events on a timeline and see cashflow/portfolio impacts immediately.'],
+        widgets: [
+          {
+            kind: 'timeline',
+            title: 'Life timeline',
+            rows: [
+              { label: 'Career', range: '2026–2060', note: 'baseline income path (placeholder)' },
+              { label: 'Parental leave', range: '2031', note: 'income dip + time bonus (placeholder)' },
+              { label: 'Relocation', range: '2036', note: 'cost shock + salary change (placeholder)' },
+              { label: 'Health costs', range: '2044–2046', note: 'expense wave (placeholder)' },
+            ],
+          },
+          { kind: 'chart', title: 'Cashflow impact', subtitle: 'Chart placeholder.' },
+        ],
+      },
+      {
+        title: 'Event library (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Events', columns: ['Event', 'Start', 'Duration', 'Income Δ', 'Cost Δ', 'Uncertainty'], rows: 6 },
+        ],
+        actions: ['Create template event (placeholder)', 'Import template pack (placeholder)'],
       },
       {
         title: 'Event editor (placeholder)',
@@ -124,12 +177,17 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Monthly cost delta', placeholder: 'e.g. +3,000 DKK' },
           { label: 'Income delta', placeholder: 'e.g. -12,000 DKK' },
           { label: 'Uncertainty range', placeholder: 'min / most likely / max' },
+          { label: 'Notes', placeholder: 'why this matters / what triggers it', multiline: true },
         ],
         actions: ['Add to timeline (placeholder)', 'Remove (placeholder)'],
       },
       {
         title: 'Uncertainty',
         bullets: ['Ranges + distributions (placeholder)', 'Compare multiple scenarios (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'FI date range under events', subtitle: 'Chart placeholder.' },
+          { kind: 'chart', title: 'Plan health over time', subtitle: 'Chart placeholder.' },
+        ],
       },
     ],
   },
@@ -205,12 +263,42 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Decision under discussion', placeholder: 'e.g. car upgrade' },
           { label: 'Cost / month', placeholder: 'e.g. 1,200 DKK' },
           { label: 'Duration', placeholder: 'e.g. 36 months' },
+          { label: 'Non-negotiables', placeholder: 'list (placeholder)', multiline: true },
         ],
         actions: ['Show what this delays (placeholder)', 'Add counter-offer (placeholder)'],
       },
       {
         title: 'Board view (placeholder)',
         bullets: ['Columns: “We choose this” vs “We give up this”.', 'List impacts: FI date, buffer months, vacations, stress score.'],
+        widgets: [
+          {
+            kind: 'table',
+            title: 'Option comparison',
+            columns: ['Option', 'Monthly cost', 'FI delay', 'Buffer impact', 'Stress impact', 'Notes'],
+            rows: 4,
+          },
+          {
+            kind: 'cards',
+            title: 'Counter-offer cards',
+            cards: [
+              { title: 'Option A: Upgrade now', body: 'Higher monthly cost, keeps convenience now. Trade-off: delays goal X.' },
+              { title: 'Option B: Delay 12 months', body: 'Cuts FI delay, keeps optionality. Trade-off: tolerate current situation.' },
+              { title: 'Option C: Buy used / smaller', body: 'Lower cost. Trade-off: features/comfort.' },
+            ],
+          },
+        ],
+        actions: ['Draft agreement (placeholder)', 'Export summary (placeholder)'],
+      },
+      {
+        title: 'Agreement draft (placeholder)',
+        bullets: ['Turn the chosen option into a concrete agreement and a review date.'],
+        fields: [
+          { label: 'Decision', placeholder: 'chosen option (placeholder)' },
+          { label: 'Why we chose it', placeholder: 'shared rationale (placeholder)', multiline: true },
+          { label: 'Review date', placeholder: 'YYYY-MM-DD' },
+          { label: 'If things go wrong, we will…', placeholder: 'fallback plan (placeholder)', multiline: true },
+        ],
+        actions: ['Save (placeholder)'],
       },
     ],
   },
@@ -271,8 +359,22 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Expense volatility', placeholder: 'low / medium / high' },
           { label: 'Dependents', placeholder: 'count' },
           { label: 'Job market confidence', placeholder: 'low / medium / high' },
+          { label: 'Access to credit', placeholder: 'none / some / strong (placeholder)' },
+          { label: 'Insurance coverage quality', placeholder: 'low / medium / high (placeholder)' },
         ],
         actions: ['Recommend buffer (placeholder)'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Risk knobs (placeholder)',
+            sliders: [
+              { label: 'Income stability', min: 0, max: 10, value: 6, unit: '' },
+              { label: 'Expense volatility', min: 0, max: 10, value: 4, unit: '' },
+              { label: 'Job market confidence', min: 0, max: 10, value: 5, unit: '' },
+              { label: 'Dependents factor', min: 0, max: 5, value: 1, unit: '' },
+            ],
+          },
+        ],
       },
       {
         title: 'Recommendation (placeholder)',
@@ -281,10 +383,30 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Target buffer (amount)', placeholder: 'computed' },
           { label: 'Refill policy', placeholder: 'computed' },
         ],
+        widgets: [
+          { kind: 'chart', title: 'Coverage curve', subtitle: 'Chart placeholder: probability of covering job loss durations.' },
+          { kind: 'table', title: 'Coverage table (placeholder)', columns: ['Shock', 'Duration', 'Covered?', 'Gap', 'Note'], rows: 5 },
+        ],
       },
       {
         title: 'Reasoning breakdown',
         bullets: ['Explain which factors pushed the target up/down (placeholder).'],
+      },
+      {
+        title: 'Refill rules (placeholder)',
+        bullets: ['Turn the buffer into a policy, not a number.'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Policies',
+            cards: [
+              { title: 'Refill trigger', body: 'If buffer < 70% target → prioritize refill deposits.' },
+              { title: 'Pause trigger', body: 'If buffer < 40% target → pause discretionary + pause investments (placeholder).' },
+              { title: 'Release trigger', body: 'If buffer > 120% target → route excess to goals (placeholder).' },
+            ],
+          },
+        ],
+        actions: ['Save policy (placeholder)'],
       },
     ],
   },
@@ -343,7 +465,35 @@ const skeletonRoutes: SkeletonRoute[] = [
     title: 'FIRE Milestones',
     sections: [
       { title: 'Timeline', bullets: ['Deposits, yearly reports, withdrawals', 'Emergency buffer / Coast / Barista / Lean / FIRE / Fat unlocks'] },
-      { title: 'Probabilities', bullets: ['Chance of FI by age X (placeholder)', 'Estimated date ranges (placeholder)'] },
+      {
+        title: 'Milestones overview (placeholder)',
+        bullets: ['A single screen for “where we are now” and what’s next.'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Milestone cards',
+            cards: [
+              { title: 'Emergency buffer', body: 'Target: 3–12 months. Status: placeholder.' },
+              { title: 'Coast FIRE', body: 'When contributions can stop and still reach FI. Status: placeholder.' },
+              { title: 'Lean FIRE', body: 'Core needs covered. Status: placeholder.' },
+              { title: 'FIRE', body: 'Full lifestyle covered. Status: placeholder.' },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Milestone table',
+            columns: ['Milestone', 'Target age', 'Range', 'Probability', 'Key driver'],
+            rows: 6,
+          },
+        ],
+      },
+      {
+        title: 'Probabilities',
+        bullets: ['Chance of FI by age X (placeholder)', 'Estimated date ranges (placeholder)'],
+        widgets: [
+          { kind: 'chart', title: 'Probability curves', subtitle: 'Chart placeholder: P(FI by age).' },
+        ],
+      },
       { title: 'Editors', bullets: ['What-If slider wall (placeholder)', 'Timeline editor (placeholder)'] },
       {
         title: 'What unlocks next',
@@ -394,13 +544,30 @@ const skeletonRoutes: SkeletonRoute[] = [
     title: 'Confidence Funnel',
     sections: [
       { title: 'Uncertainty Funnel', bullets: ['Baseline vs interventions (placeholder)', 'Show narrowing/widening over time'] },
-      { title: 'Interventions', bullets: ['Increase contributions', 'Reduce fees', 'Tax optimization'] },
+      {
+        title: 'Interventions (placeholder)',
+        bullets: ['Increase contributions', 'Reduce fees', 'Tax optimization', 'Spending flexibility', 'Sequence risk hedges'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Intervention knobs',
+            sliders: [
+              { label: 'Contribution increase', min: 0, max: 50, value: 10, unit: '%' },
+              { label: 'Fee reduction', min: 0, max: 1.5, value: 0.2, unit: '%' },
+              { label: 'Tax improvement', min: 0, max: 15, value: 3, unit: '%' },
+              { label: 'Flexibility buffer', min: 0, max: 30, value: 10, unit: '%' },
+            ],
+          },
+        ],
+        actions: ['Apply intervention set (placeholder)', 'Save as preset (placeholder)'],
+      },
       {
         title: 'Compare funnels (placeholder)',
         fields: [
           { label: 'Baseline width', placeholder: 'computed' },
           { label: 'After intervention width', placeholder: 'computed' },
           { label: 'Confidence gain', placeholder: 'computed' },
+          { label: 'Worst-case FI delay', placeholder: 'computed' },
         ],
       },
       {
@@ -410,6 +577,12 @@ const skeletonRoutes: SkeletonRoute[] = [
           { kind: 'chart', title: 'After intervention funnel', subtitle: 'Compare narrowing/widening.' },
         ],
       },
+      {
+        title: 'Comparison table (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Before vs after', columns: ['Metric', 'Baseline', 'After', 'Delta'], rows: 6 },
+        ],
+      },
     ],
   },
   {
@@ -417,8 +590,30 @@ const skeletonRoutes: SkeletonRoute[] = [
     title: 'Goal Planner',
     sections: [
       { title: 'Multiple Goals', bullets: ['FI, house, sabbatical, buffer (placeholder)'] },
-      { title: 'Prioritization', bullets: ['Priority sliders (placeholder)', 'Conflict warnings (placeholder)', 'Optimized split (placeholder)'] },
-      { title: 'Expense Cut Impact', bullets: ['Rank expenses by “FI days bought per krone reduced” (placeholder)'] },
+      {
+        title: 'Prioritization',
+        bullets: ['Priority sliders (placeholder)', 'Conflict warnings (placeholder)', 'Optimized split (placeholder)'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'Priority sliders (placeholder)',
+            sliders: [
+              { label: 'FIRE', min: 0, max: 10, value: 8 },
+              { label: 'House', min: 0, max: 10, value: 5 },
+              { label: 'Sabbatical', min: 0, max: 10, value: 4 },
+              { label: 'Buffer', min: 0, max: 10, value: 7 },
+            ],
+          },
+          { kind: 'chart', title: 'Allocation over time', subtitle: 'Chart placeholder: monthly contributions split.' },
+        ],
+      },
+      {
+        title: 'Expense Cut Impact',
+        bullets: ['Rank expenses by “FI days bought per krone reduced” (placeholder)'],
+        widgets: [
+          { kind: 'table', title: 'Cuts ranked (placeholder)', columns: ['Expense', 'Cut', 'Monthly saved', 'FI days bought', 'Pain score'], rows: 6 },
+        ],
+      },
       {
         title: 'Goal list (placeholder)',
         fields: [
@@ -427,6 +622,10 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Priority', placeholder: 'slider (placeholder)' },
         ],
         actions: ['Add goal (placeholder)', 'Optimize split (placeholder)'],
+        widgets: [
+          { kind: 'table', title: 'Goals', columns: ['Goal', 'Target', 'Due', 'Funded', 'Status'], rows: 5 },
+          { kind: 'table', title: 'Conflict matrix (placeholder)', columns: ['Conflict', 'What it means', 'Suggested resolution'], rows: 4 },
+        ],
       },
     ],
   },
@@ -462,6 +661,13 @@ const skeletonRoutes: SkeletonRoute[] = [
           { kind: 'chart', title: 'Track comparison', subtitle: 'Chart placeholder: P10/P50/P90 over time.' },
         ],
       },
+      {
+        title: 'Per-track KPIs table (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'KPIs', columns: ['Track', 'FI range', 'Safe spend', 'Failure %', 'Savings-rate delta', 'Health'], rows: 5 },
+        ],
+        actions: ['Export runbook (placeholder)', 'Pin track to header (placeholder)'],
+      },
     ],
   },
   {
@@ -469,16 +675,53 @@ const skeletonRoutes: SkeletonRoute[] = [
     title: 'Plan Report',
     sections: [
       {
-        title: 'Plain-language summary',
-        bullets: ['“Your success depends mostly on X, Y, Z.” (placeholder)'],
+        title: 'Executive summary (placeholder)',
+        bullets: ['A report for humans: short, clear, and action-oriented.'],
+        fields: [
+          { label: 'Plan health', placeholder: 'green / yellow / red (placeholder)' },
+          { label: 'FI date range', placeholder: 'computed' },
+          { label: 'Worst-case delay', placeholder: 'computed' },
+          { label: 'Main driver', placeholder: 'computed' },
+        ],
+        widgets: [
+          { kind: 'chart', title: 'Plan trajectory', subtitle: 'Chart placeholder: baseline vs stress cases.' },
+        ],
       },
       {
         title: 'Key drivers (placeholder)',
         bullets: ['Savings rate', 'Fees', 'Taxes', 'Sequence risk', 'Spending flexibility'],
+        widgets: [
+          { kind: 'table', title: 'Drivers ranked (placeholder)', columns: ['Driver', 'Impact', 'Confidence', 'Suggested action'], rows: 5 },
+        ],
       },
       {
-        title: 'Next best actions',
+        title: 'Next best actions (placeholder)',
         bullets: ['Small changes with big impact (placeholder).'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Action cards',
+            cards: [
+              { title: 'Reduce fees', body: 'Lower fund fee by 0.3% could buy back months of FI time.' },
+              { title: 'Increase contribution', body: 'A small monthly increase often beats risky assumptions.' },
+              { title: 'Add flexibility plan', body: 'Define a downturn cut plan now, not in panic.' },
+            ],
+          },
+        ],
+        actions: ['Generate 7-day plan (placeholder)', 'Export report (placeholder)'],
+      },
+      {
+        title: 'Assumptions snapshot (placeholder)',
+        bullets: ['This should match the Assumptions Hub.'],
+        widgets: [
+          { kind: 'table', title: 'Assumptions', columns: ['Assumption', 'Value', 'Source', 'Last updated'], rows: 5 },
+        ],
+      },
+      {
+        title: 'Risks & mitigations (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Risk register', columns: ['Risk', 'Likelihood', 'Impact', 'Mitigation'], rows: 6 },
+        ],
       },
     ],
   },

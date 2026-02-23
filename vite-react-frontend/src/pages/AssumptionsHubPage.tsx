@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import PageLayout from '../components/PageLayout';
 import { useAssumptions } from '../state/assumptions';
+import { SkeletonWidgets, type SkeletonWidget } from './skeleton/SkeletonWidgets';
 
 const fieldRowStyle: React.CSSProperties = {
   display: 'grid',
@@ -120,6 +121,102 @@ const AssumptionsHubPage: React.FC = () => {
               />
             </div>
           </div>
+
+          <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
+            This page is intentionally “offline-first”: assumptions are stored in your browser for now.
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles (placeholder)</div>
+          <div style={{ opacity: 0.8, marginBottom: 10 }}>
+            Later: switch between sets like “Baseline”, “Conservative”, “Aggressive”, “Partner view”.
+          </div>
+          <SkeletonWidgets
+            widgets={
+              [
+                {
+                  kind: 'table',
+                  title: 'Profiles',
+                  columns: ['Profile', 'Inflation', 'Return', 'SWR', 'Notes'],
+                  rows: 4,
+                },
+                {
+                  kind: 'cards',
+                  title: 'Quick picks',
+                  cards: [
+                    { title: 'Baseline', body: 'Your default set for most pages and reports.' },
+                    { title: 'Conservative', body: 'Lower return / lower SWR. Stress-test friendly.' },
+                    { title: 'Aggressive', body: 'Higher return assumptions; used for upside exploration.' },
+                  ],
+                },
+              ] satisfies SkeletonWidget[]
+            }
+          />
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & guardrails (placeholder)</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={fieldRowStyle}>
+              <label htmlFor="assumptions-source" style={{ fontWeight: 700 }}>
+                Source note
+              </label>
+              <textarea
+                id="assumptions-source"
+                value={''}
+                readOnly
+                placeholder="Where did these assumptions come from? (links, rationale, date…)"
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={fieldRowStyle}>
+              <label htmlFor="assumptions-lock" style={{ fontWeight: 700 }}>
+                Lock baseline
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input id="assumptions-lock" type="checkbox" checked={false} disabled />
+                <div style={{ opacity: 0.8, fontSize: 13 }}>
+                  Placeholder: prevents accidental edits when generating reports.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" disabled style={{ opacity: 0.7 }}>
+                Export JSON (placeholder)
+              </button>
+              <button type="button" disabled style={{ opacity: 0.7 }}>
+                Import JSON (placeholder)
+              </button>
+              <button type="button" disabled style={{ opacity: 0.7 }}>
+                View change log (placeholder)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Impact preview (placeholder)</div>
+          <div style={{ opacity: 0.8, marginBottom: 10 }}>
+            Later: show how changes to inflation/return/SWR shift FI date range and safe spending.
+          </div>
+          <SkeletonWidgets
+            widgets={
+              [
+                { kind: 'chart', title: 'FI date range sensitivity', subtitle: 'Chart placeholder: sliders → range shifts.' },
+                { kind: 'chart', title: 'Safe monthly spending sensitivity', subtitle: 'Chart placeholder: SWR changes.' },
+                {
+                  kind: 'table',
+                  title: 'Sensitivity table',
+                  columns: ['Change', 'FI date shift', 'Safe spend shift', 'Risk note'],
+                  rows: 5,
+                },
+              ] satisfies SkeletonWidget[]
+            }
+          />
         </div>
 
         <div style={cardStyle}>
