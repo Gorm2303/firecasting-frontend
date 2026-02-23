@@ -50,6 +50,20 @@ const AssumptionsHubPage: React.FC = () => {
             </button>
           </div>
 
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 750 }}>
+              <input
+                type="checkbox"
+                checked={assumptions.showAssumptionsBar}
+                onChange={(e) => updateAssumptions({ showAssumptionsBar: e.target.checked })}
+              />
+              Show assumptions bar at top
+            </label>
+            <div style={{ opacity: 0.75, fontSize: 13, textAlign: 'right' }}>
+              Default is hidden.
+            </div>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
             <div style={fieldRowStyle}>
               <label htmlFor="assumptions-currency" style={{ fontWeight: 700 }}>

@@ -5,6 +5,7 @@ export type Assumptions = {
   inflationPct: number;
   expectedReturnPct: number;
   safeWithdrawalPct: number;
+  showAssumptionsBar: boolean;
 };
 
 const STORAGE_KEY = 'firecasting:assumptions:v1';
@@ -14,6 +15,7 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
   inflationPct: 2,
   expectedReturnPct: 5,
   safeWithdrawalPct: 4,
+  showAssumptionsBar: false,
 };
 
 type AssumptionsContextValue = {
@@ -51,6 +53,7 @@ const normalize = (raw: unknown): Assumptions => {
     inflationPct: asNumber(r.inflationPct, DEFAULT_ASSUMPTIONS.inflationPct),
     expectedReturnPct: asNumber(r.expectedReturnPct, DEFAULT_ASSUMPTIONS.expectedReturnPct),
     safeWithdrawalPct: asNumber(r.safeWithdrawalPct, DEFAULT_ASSUMPTIONS.safeWithdrawalPct),
+    showAssumptionsBar: r.showAssumptionsBar === true,
   };
 };
 
