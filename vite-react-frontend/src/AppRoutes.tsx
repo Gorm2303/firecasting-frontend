@@ -353,6 +353,40 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Fastest lever', placeholder: 'computed' },
         ],
       },
+      {
+        title: 'Goal “What-If” Slider Wall (placeholder)',
+        bullets: ['A grid of sliders with instant FI-date range changes (computed later).'],
+        widgets: [
+          {
+            kind: 'sliders',
+            title: 'What-If sliders',
+            sliders: [
+              { label: 'Retirement age', min: 40, max: 75, value: 60, unit: '' },
+              { label: 'Savings rate', min: 0, max: 80, value: 35, unit: '%' },
+              { label: 'Monthly expenses', min: 5000, max: 50000, value: 22000, unit: '' },
+              { label: 'Side income', min: 0, max: 20000, value: 2000, unit: '' },
+            ],
+          },
+          { kind: 'chart', title: 'FI date range changes', subtitle: 'Chart placeholder: instant feedback later (local calc initially).' },
+        ],
+      },
+      {
+        title: 'Timeline editor (placeholder)',
+        bullets: ['Drag-and-drop timeline for events: house purchase, sabbatical, kid, job change, pension start, FI milestone.'],
+        widgets: [
+          {
+            kind: 'timeline',
+            title: 'Timeline',
+            rows: [
+              { label: 'Deposit schedule', range: '2026–2046', note: 'monthly deposits (placeholder)' },
+              { label: 'House purchase', range: '2031', note: 'down payment + mortgage (placeholder)' },
+              { label: 'Parental leave', range: '2033', note: 'income drop (placeholder)' },
+              { label: 'Coast FIRE', range: '2040', note: 'milestone (placeholder)' },
+              { label: 'FIRE', range: '2046–2050', note: 'date range (placeholder)' },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
@@ -367,6 +401,13 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Baseline width', placeholder: 'computed' },
           { label: 'After intervention width', placeholder: 'computed' },
           { label: 'Confidence gain', placeholder: 'computed' },
+        ],
+      },
+      {
+        title: 'Funnels (placeholder)',
+        widgets: [
+          { kind: 'chart', title: 'Baseline funnel', subtitle: 'Uncertainty over time.' },
+          { kind: 'chart', title: 'After intervention funnel', subtitle: 'Compare narrowing/widening.' },
         ],
       },
     ],
@@ -404,6 +445,22 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Plan health', placeholder: 'green / yellow / red' },
         ],
         actions: ['Generate runbook (placeholder)', 'Simulate alerts (placeholder)'],
+      },
+      {
+        title: 'Runbook Action Cards (placeholder)',
+        bullets: ['Think runbook, not report. “If we hit percentile X, do this.”'],
+        widgets: [
+          {
+            kind: 'cards',
+            title: 'Percentile actions',
+            cards: [
+              { title: 'P10 actions', body: 'Reduce discretionary 12%, delay retirement 18 months, temporary side income target.' },
+              { title: 'P50 actions', body: 'Stay course, rebalance annually, keep emergency runway.' },
+              { title: 'P90 actions', body: 'Option to derisk, accelerate FI, fund mini-retirements.' },
+            ],
+          },
+          { kind: 'chart', title: 'Track comparison', subtitle: 'Chart placeholder: P10/P50/P90 over time.' },
+        ],
       },
     ],
   },
@@ -502,6 +559,15 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Total deposits (20y)', placeholder: 'computed' },
           { label: 'Pause months', placeholder: 'computed' },
         ],
+        widgets: [
+          {
+            kind: 'table',
+            title: 'Timeline preview (placeholder)',
+            columns: ['Year', 'Planned deposits', 'One-offs', 'Mode'],
+            rows: 5,
+          },
+          { kind: 'chart', title: 'Deposits over time', subtitle: 'Chart placeholder.' },
+        ],
       },
     ],
   },
@@ -564,6 +630,16 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Floor / ceiling band', placeholder: 'computed' },
           { label: 'Buffer months', placeholder: 'computed' },
         ],
+        widgets: [
+          {
+            kind: 'table',
+            title: 'Timeline preview (placeholder)',
+            columns: ['Year', 'Spending target', 'Income', 'Withdrawals', 'Mode'],
+            rows: 5,
+          },
+          { kind: 'chart', title: 'Withdrawals over time', subtitle: 'Chart placeholder.' },
+          { kind: 'chart', title: 'Floor/Ceiling band', subtitle: 'Chart placeholder.' },
+        ],
       },
     ],
   },
@@ -621,6 +697,29 @@ const skeletonRoutes: SkeletonRoute[] = [
         ],
         actions: ['Build calendar (placeholder)', 'Suggest buffer (placeholder)'],
       },
+      {
+        title: 'Calendar view (placeholder)',
+        widgets: [
+          {
+            kind: 'calendar',
+            title: 'Monthly cashflow',
+            months: [
+              { label: 'Jan', note: 'baseline' },
+              { label: 'Feb', note: 'baseline' },
+              { label: 'Mar', note: 'insurance spike (placeholder)' },
+              { label: 'Apr', note: 'baseline' },
+              { label: 'May', note: 'baseline' },
+              { label: 'Jun', note: 'travel spike (placeholder)' },
+              { label: 'Jul', note: 'baseline' },
+              { label: 'Aug', note: 'baseline' },
+              { label: 'Sep', note: 'subscription renewals (placeholder)' },
+              { label: 'Oct', note: 'baseline' },
+              { label: 'Nov', note: 'baseline' },
+              { label: 'Dec', note: 'gifts spike (placeholder)' },
+            ],
+          },
+        ],
+      },
     ],
   },
 
@@ -640,6 +739,13 @@ const skeletonRoutes: SkeletonRoute[] = [
           { label: 'Base currency', placeholder: 'e.g. DKK' },
         ],
         actions: ['Compute health score (placeholder)', 'Run x-ray (placeholder)'],
+      },
+      {
+        title: 'Portfolio X-Ray (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Exposure breakdown', columns: ['Category', 'Weight', 'Notes'], rows: 6 },
+          { kind: 'chart', title: 'Fee drag vs freedom', subtitle: 'Chart placeholder: FI-delay per fee component.' },
+        ],
       },
     ],
   },
@@ -672,11 +778,17 @@ const skeletonRoutes: SkeletonRoute[] = [
         title: 'New entry (placeholder)',
         fields: [
           { label: 'Decision', placeholder: 'what did you do?' },
-          { label: 'Thesis', placeholder: 'why did you do it?' },
+          { label: 'Thesis', placeholder: 'why did you do it?', multiline: true },
           { label: 'Confidence', placeholder: '0–100' },
           { label: 'Check-in date', placeholder: 'YYYY-MM-DD' },
         ],
         actions: ['Save entry (placeholder)'],
+      },
+      {
+        title: 'Entries (placeholder)',
+        widgets: [
+          { kind: 'table', title: 'Log', columns: ['Date', 'Decision', 'Confidence', 'Status'], rows: 5 },
+        ],
       },
     ],
   },

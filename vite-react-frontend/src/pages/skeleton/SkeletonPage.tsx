@@ -1,11 +1,13 @@
 import React from 'react';
 import PageLayout from '../../components/PageLayout';
+import { SkeletonWidgets, type SkeletonWidget } from './SkeletonWidgets';
 
 export type SkeletonSection = {
   title: string;
   bullets?: string[];
-  fields?: { label: string; placeholder: string }[];
+  fields?: { label: string; placeholder: string; multiline?: boolean }[];
   actions?: string[];
+  widgets?: SkeletonWidget[];
 };
 
 type Props = {
@@ -60,23 +62,49 @@ const SkeletonPage: React.FC<Props> = ({ title, subtitle, sections = [] }) => {
                         }}
                       >
                         <div style={{ fontWeight: 700, opacity: 0.95 }}>{f.label}</div>
-                        <input
-                          value=""
-                          readOnly
-                          placeholder={f.placeholder}
-                          aria-label={f.label}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            borderRadius: 10,
-                            border: '1px solid var(--fc-card-border)',
-                            background: 'transparent',
-                            color: 'inherit',
-                            boxSizing: 'border-box',
-                          }}
-                        />
+                        {f.multiline ? (
+                          <textarea
+                            value=""
+                            readOnly
+                            placeholder={f.placeholder}
+                            aria-label={f.label}
+                            rows={3}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: '1px solid var(--fc-card-border)',
+                              background: 'transparent',
+                              color: 'inherit',
+                              boxSizing: 'border-box',
+                              resize: 'vertical',
+                            }}
+                          />
+                        ) : (
+                          <input
+                            value=""
+                            readOnly
+                            placeholder={f.placeholder}
+                            aria-label={f.label}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: '1px solid var(--fc-card-border)',
+                              background: 'transparent',
+                              color: 'inherit',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {s.widgets && s.widgets.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <SkeletonWidgets widgets={s.widgets} />
                   </div>
                 )}
 
@@ -90,7 +118,7 @@ const SkeletonPage: React.FC<Props> = ({ title, subtitle, sections = [] }) => {
                   </div>
                 )}
 
-                {!s.bullets?.length && !s.fields?.length && !s.actions?.length && (
+                {!s.bullets?.length && !s.fields?.length && !s.actions?.length && !s.widgets?.length && (
                   <div style={{ opacity: 0.8 }}>Placeholder content.</div>
                 )}
               </section>
