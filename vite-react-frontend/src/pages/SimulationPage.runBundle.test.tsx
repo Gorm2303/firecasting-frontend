@@ -4,6 +4,9 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+import { AssumptionsProvider, getDefaultAssumptions } from '../state/assumptions';
+import { ExecutionDefaultsProvider } from '../state/executionDefaults';
+
 vi.mock('../api/simulation', () => {
   return {
     exportRunBundle: vi.fn(),
@@ -41,9 +44,16 @@ describe('SimulationPage run bundle import', () => {
     ensureFileTextPolyfill();
     window.localStorage.clear();
 
+    const assumptions = getDefaultAssumptions();
+    window.localStorage.setItem('firecasting:assumptions:v2', JSON.stringify({ current: assumptions, draft: assumptions }));
+
     render(
       <MemoryRouter initialEntries={['/simulation']}>
-        <SimulationPage />
+        <AssumptionsProvider>
+          <ExecutionDefaultsProvider>
+            <SimulationPage />
+          </ExecutionDefaultsProvider>
+        </AssumptionsProvider>
       </MemoryRouter>
     );
 
@@ -97,6 +107,9 @@ describe('SimulationPage run bundle import', () => {
   it('imports an advanced run bundle and populates all advanced fields', async () => {
     ensureFileTextPolyfill();
     window.localStorage.clear();
+
+    const assumptions = getDefaultAssumptions();
+    window.localStorage.setItem('firecasting:assumptions:v2', JSON.stringify({ current: assumptions, draft: assumptions }));
     window.localStorage.setItem(
       'firecasting:simulation:advancedFeatureFlags:v1',
       JSON.stringify({ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true })
@@ -104,7 +117,11 @@ describe('SimulationPage run bundle import', () => {
 
     render(
       <MemoryRouter initialEntries={['/simulation']}>
-        <SimulationPage />
+        <AssumptionsProvider>
+          <ExecutionDefaultsProvider>
+            <SimulationPage />
+          </ExecutionDefaultsProvider>
+        </AssumptionsProvider>
       </MemoryRouter>
     );
 
@@ -165,8 +182,9 @@ describe('SimulationPage run bundle import', () => {
       expect(screen.getByLabelText(/Return type/i)).toBeInTheDocument();
     });
 
-    expect(Number((screen.getByLabelText(/Inflation \(avg %/i) as HTMLInputElement).value)).toBeCloseTo(5, 6);
-    expect(Number((screen.getByLabelText(/Fee \(avg %/i) as HTMLInputElement).value)).toBeCloseTo(0.6, 6);
+    // Inflation + fee are global assumptions; the import should not override them.
+    expect(Number((screen.getByLabelText(/Inflation \(avg %/i) as HTMLInputElement).value)).toBeCloseTo(assumptions.inflationPct, 6);
+    expect(Number((screen.getByLabelText(/Fee \(avg %/i) as HTMLInputElement).value)).toBeCloseTo(assumptions.yearlyFeePct, 6);
 
     // Exemptions: duplicate labels exist; validate by value set.
     const limitInputs = screen.getAllByLabelText(/^Limit$/i) as HTMLInputElement[];

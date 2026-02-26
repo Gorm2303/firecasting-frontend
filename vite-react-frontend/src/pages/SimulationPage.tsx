@@ -162,7 +162,7 @@ const SimulationPage: React.FC = () => {
   const advancedPickerOverlayRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch {}
+    try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch { /* ignore localStorage failures */ }
   }, [mode]);
 
   useEffect(() => {
@@ -187,7 +187,7 @@ const SimulationPage: React.FC = () => {
   }, [advancedFeatureFlags]);
 
   useEffect(() => {
-    try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch {}
+    try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch { /* ignore localStorage failures */ }
   }, [autoExportSimulationCsv]);
 
   useEffect(() => {

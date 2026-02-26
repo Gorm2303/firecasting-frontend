@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { YearlySummary } from '../../models/YearlySummary';
 import { getApiBaseUrl } from '../../config/runtimeEnv';
 import { SimulationTimelineContext } from '../../models/types';
+import { DEFAULT_RETURN_TYPE } from '../../models/advancedSimulation';
+import { useAssumptions } from '../../state/assumptions';
 import {
   ArrayFieldConfig,
   FieldConfig,
@@ -244,7 +246,13 @@ const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[]
   return [];
 };
 
-const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequest => {
+const buildAdvancedRequest = (
+  data: Record<string, any>,
+  defaults: {
+    inflationPct: number;
+    returnType: string;
+  }
+): AdvancedSimulationRequest => {
   const paths = toNumberOrUndefined(data?.paths);
   const pathsInt = paths === undefined ? undefined : Math.trunc(paths);
 
@@ -265,7 +273,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
     taxRules: mapTaxExemptionsToRules(p?.taxExemptions),
   }));
 
-  const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? 2;
+  const avgInflationPct = toNumberOrUndefined(data?.inflation?.averagePercentage) ?? defaults.inflationPct;
   const inflationFactor = 1 + avgInflationPct / 100;
 
   const taxExemptionConfig = {
@@ -350,7 +358,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
     phases,
     overallTaxRule: mapOverallTaxRule(data.taxRule),
     taxPercentage: Number(data?.tax?.percentage ?? 0),
-    returnType: String(data?.returner?.type ?? 'dataDrivenReturn'),
+    returnType: String(data?.returner?.type ?? defaults.returnType),
     returnerConfig: hasReturnerConfig ? returnerConfig : undefined,
     taxExemptionConfig: hasTaxExemptionConfig ? taxExemptionConfig : undefined,
     inflationFactor,
@@ -358,6 +366,7 @@ const buildAdvancedRequest = (data: Record<string, any>): AdvancedSimulationRequ
 };
 
 const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, externalLoadRequest, externalLoadNonce }) => {
+  const { currentAssumptions } = useAssumptions();
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
   const [initialFormData, setInitialFormData] = useState<Record<string, any> | null>(null);
@@ -384,7 +393,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
 
   const hasTabErrors = (tabId: string): boolean => {
     return Object.keys(fieldErrors).some((path) => {
-      const fieldId = path.split(/[.\[]/)[0];
+      const fieldId = path.split(/[.[]/)[0];
       return (TAB_MAPPING[fieldId] || 'general') === tabId;
     });
   };
@@ -609,7 +618,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
 
   // Best-effort mapping from backend DTO paths to form-state paths.
   const mapRequestPathToFormPath = (rawPath: string): string => {
-    let p = stripToKnownRoot(String(rawPath ?? '').trim());
+    const p = stripToKnownRoot(String(rawPath ?? '').trim());
 
     // Convert `startDate.date` to the single date field
     if (p === 'startDate.date') return 'startDate';
@@ -980,7 +989,7 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
                 const phaseType = String(itemValue.phaseType || 'DEPOSIT').toUpperCase();
                 
                 let cardBorder = '1px solid #333';
-                let cardBg = 'transparent';
+                const cardBg = 'transparent';
                 if (phaseType === 'DEPOSIT') cardBorder = '1px solid #28a745';
                 if (phaseType === 'WITHDRAW') cardBorder = '1px solid #dc3545';
                 if (phaseType === 'PASSIVE') cardBorder = '1px solid #ffc107';
@@ -1076,7 +1085,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
       setSubmitErrorDetails([]);
       setFieldErrors({});
 
-      const req = buildAdvancedRequest(formData);
+      const req = buildAdvancedRequest(formData, {
+        inflationPct: currentAssumptions.inflationPct,
+        returnType: DEFAULT_RETURN_TYPE,
+      });
       setTimelineForRun({
         startDate: req.startDate?.date,
         phaseTypes: (req.phases ?? []).map((p) => p.phaseType),

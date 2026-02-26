@@ -2,15 +2,18 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import SimulationForm, { type TutorialStep } from './NormalInputForm';
+import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
 const renderWithSteps = (steps: TutorialStep[]) => {
   render(
-    <SimulationForm
-      tutorialSteps={steps}
-      onExitTutorial={() => {
-        // no-op
-      }}
-    />
+    <ExecutionDefaultsProvider>
+      <SimulationForm
+        tutorialSteps={steps}
+        onExitTutorial={() => {
+          // no-op
+        }}
+      />
+    </ExecutionDefaultsProvider>
   );
 };
 
@@ -63,6 +66,11 @@ describe('NormalInputForm tutorial auto-advance', () => {
   });
 
   it('accepts comma as decimal separator for numberEquals requirements', async () => {
+    const commaInput = document.createElement('input');
+    commaInput.id = 'comma-input';
+    commaInput.value = '0';
+    document.body.appendChild(commaInput);
+
     const steps: TutorialStep[] = [
       {
         id: 'fee',
@@ -73,7 +81,7 @@ describe('NormalInputForm tutorial auto-advance', () => {
         requires: [
           {
             kind: 'numberEquals',
-            selector: '[data-tour="fee"] input',
+            selector: '#comma-input',
             value: 0.5,
             tolerance: 1e-9,
             message: 'Set fee to 0.5.',
@@ -87,24 +95,32 @@ describe('NormalInputForm tutorial auto-advance', () => {
       },
     ];
 
-    render(
-      <SimulationForm
-        mode="advanced"
-        advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }}
-        tutorialSteps={steps}
-      />
-    );
+    try {
+      render(
+        <ExecutionDefaultsProvider>
+          <SimulationForm
+            mode="advanced"
+            advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }}
+            tutorialSteps={steps}
+          />
+        </ExecutionDefaultsProvider>
+      );
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('Fee');
+      expect(screen.getByRole('dialog')).toHaveTextContent('Fee');
 
-    const fee = screen.getByLabelText(/Fee \(avg % \/ year\)/i) as HTMLInputElement;
-    fireEvent.change(fee, { target: { value: '0,5' } });
+      await act(async () => {
+        commaInput.value = '0,5';
+        commaInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
-    });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('After fee');
+      expect(screen.getByRole('dialog')).toHaveTextContent('After fee');
+    } finally {
+      commaInput.remove();
+    }
   });
 
   it('does not lock out auto-advance if requirement becomes unmet right before the auto-advance re-check', async () => {

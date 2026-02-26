@@ -1,0 +1,222 @@
+[
+  {
+    "keyPath": "currency",
+    "tab": "worldModel",
+    "label": "Currency",
+    "unit": "string",
+    "default": "DKK",
+    "usedBy": ["AssumptionsHub", "AssumptionsSummaryBar", "MoneyPerspective"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "inflationPct",
+    "tab": "worldModel",
+    "label": "Inflation (%/year)",
+    "unit": "pct",
+    "default": 2,
+    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Explore", "Tutorial"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "yearlyFeePct",
+    "tab": "worldModel",
+    "label": "Yearly fee (%/year)",
+    "unit": "pct",
+    "default": 0.5,
+    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Tutorial"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "expectedReturnPct",
+    "tab": "worldModel",
+    "label": "Expected return (%/year)",
+    "unit": "pct",
+    "default": 5,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "safeWithdrawalPct",
+    "tab": "worldModel",
+    "label": "Safe withdrawal rate (%/year)",
+    "unit": "pct",
+    "default": 4,
+    "usedBy": ["AssumptionsHub", "AssumptionsSummaryBar"],
+    "overrideableByStrategy": false
+  },
+
+  {
+    "keyPath": "executionDefaults.paths",
+    "tab": "execution",
+    "label": "Paths (runs)",
+    "unit": "count",
+    "default": 10000,
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "executionDefaults.batchSize",
+    "tab": "execution",
+    "label": "Batch size",
+    "unit": "count",
+    "default": 10000,
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "executionDefaults.seedMode",
+    "tab": "execution",
+    "label": "Master seed mode",
+    "unit": "enum",
+    "default": "default",
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "taxExemptionDefaults.exemptionCardLimit",
+    "tab": "simulatorTax",
+    "label": "Exemption card limit (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 51600,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.exemptionCardYearlyIncrease",
+    "tab": "simulatorTax",
+    "label": "Exemption card yearly increase (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 1000,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionTaxRate",
+    "tab": "simulatorTax",
+    "label": "Stock exemption tax rate (%/year)",
+    "unit": "pct",
+    "default": 27,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionLimit",
+    "tab": "simulatorTax",
+    "label": "Stock exemption limit (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 67500,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionYearlyIncrease",
+    "tab": "simulatorTax",
+    "label": "Stock exemption yearly increase (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 1000,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "salaryTaxatorDefaults.municipalityId",
+    "tab": "salaryTaxator",
+    "label": "Default municipality id",
+    "unit": "string",
+    "default": "average",
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.defaultMunicipalTaxRatePct",
+    "tab": "salaryTaxator",
+    "label": "Fallback municipal tax rate (%)",
+    "unit": "pct",
+    "default": 25,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.churchMember",
+    "tab": "salaryTaxator",
+    "label": "Church member",
+    "unit": "boolean",
+    "default": false,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.employeePensionRatePct",
+    "tab": "salaryTaxator",
+    "label": "Employee pension rate (%)",
+    "unit": "pct",
+    "default": 0,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.otherDeductionsAnnualDkk",
+    "tab": "salaryTaxator",
+    "label": "Other deductions (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 0,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.atpMonthlyDkk",
+    "tab": "salaryTaxator",
+    "label": "ATP employee share (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 99,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk",
+    "tab": "salaryTaxator",
+    "label": "ATP eligibility proxy (gross monthly threshold DKK)",
+    "unit": "dkkPerMonth",
+    "default": 2340,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "moneyPerspectiveDefaults.workingHoursPerMonth",
+    "tab": "moneyPerspective",
+    "label": "Working hours per month",
+    "unit": "hoursPerMonth",
+    "default": 160,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.payRaisePct",
+    "tab": "moneyPerspective",
+    "label": "Pay raise (%/year)",
+    "unit": "pct",
+    "default": 2,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.timeHorizonYears",
+    "tab": "moneyPerspective",
+    "label": "Time horizon (years)",
+    "unit": "years",
+    "default": 10,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.coreExpenseMonthlyDkk",
+    "tab": "moneyPerspective",
+    "label": "Core expense (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 12000,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  }
+]

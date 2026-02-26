@@ -3,6 +3,16 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock('../../api/simulation', () => {
   return {
     startSimulation: vi.fn().mockResolvedValue('test-sim-id'),
@@ -13,14 +23,29 @@ vi.mock('../../api/simulation', () => {
 });
 
 import SimulationForm from './NormalInputForm';
+import { AssumptionsProvider, getDefaultAssumptions } from '../../state/assumptions';
+import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
 const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
+const EXECUTION_DEFAULTS_KEY = 'firecasting:executionDefaults:v1';
 
 describe('NormalInputForm advanced options persistence', () => {
   it('persists all advanced fields to localStorage (key contract)', async () => {
     window.localStorage.clear();
 
-    render(<SimulationForm mode="advanced" advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }} />);
+    const assumptions = getDefaultAssumptions();
+    window.localStorage.setItem(
+      'firecasting:assumptions:v2',
+      JSON.stringify({ current: assumptions, draft: assumptions })
+    );
+
+    render(
+      <AssumptionsProvider>
+        <ExecutionDefaultsProvider>
+          <SimulationForm mode="advanced" advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }} />
+        </ExecutionDefaultsProvider>
+      </AssumptionsProvider>
+    );
 
     // Wait for advanced fields to appear (mode->advancedEnabled effect).
     await waitFor(() => {
@@ -29,8 +54,9 @@ describe('NormalInputForm advanced options persistence', () => {
       expect(screen.getByLabelText(/Return type/i)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText(/Inflation \(avg %/i), { target: { value: '5' } });
-    fireEvent.change(screen.getByLabelText(/Fee \(avg %/i), { target: { value: '0.6' } });
+    expect(screen.getByLabelText(/Inflation \(avg %/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Fee \(avg %/i)).toBeDisabled();
+
     fireEvent.change(screen.getByLabelText(/Return type/i), { target: { value: 'distributionReturn' } });
     fireEvent.change(screen.getByLabelText(/Master seed/i), { target: { value: 'custom' } });
     const seedLabel = screen.getByText(/Master seed/i).closest('label');
@@ -48,13 +74,8 @@ describe('NormalInputForm advanced options persistence', () => {
     // This is intentionally explicit so adding/removing advanced fields breaks tests.
     expect(Object.keys(parsed).sort()).toEqual(
       [
-        'paths',
-        'batchSize',
         'enabled',
-        'inflationAveragePct',
-        'yearlyFeePercentage',
         'returnType',
-        'seedMode',
         'seed',
         'simpleAveragePercentage',
         'distributionType',
@@ -75,15 +96,23 @@ describe('NormalInputForm advanced options persistence', () => {
       ].sort()
     );
 
-    expect(parsed.inflationAveragePct).toBe(5);
-    expect(parsed.yearlyFeePercentage).toBe(0.6);
+    expect(parsed.inflationAveragePct).toBeUndefined();
+    expect(parsed.yearlyFeePercentage).toBeUndefined();
     expect(parsed.returnType).toBe('distributionReturn');
-    expect(parsed.seedMode).toBe('custom');
     expect(String(parsed.seed)).toBe('123');
+
+    const execDefaults = JSON.parse(window.localStorage.getItem(EXECUTION_DEFAULTS_KEY) as string);
+    expect(execDefaults.seedMode).toBe('custom');
   });
 
   it('rehydrates advanced fields from localStorage (round-trip)', async () => {
     window.localStorage.clear();
+
+    const assumptions = { ...getDefaultAssumptions(), inflationPct: 3, yearlyFeePct: 0.75 };
+    window.localStorage.setItem(
+      'firecasting:assumptions:v2',
+      JSON.stringify({ current: assumptions, draft: assumptions })
+    );
 
     window.localStorage.setItem(
       ADVANCED_OPTIONS_KEY,
@@ -113,11 +142,17 @@ describe('NormalInputForm advanced options persistence', () => {
       })
     );
 
-    render(<SimulationForm mode="advanced" advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }} />);
+    render(
+      <AssumptionsProvider>
+        <ExecutionDefaultsProvider>
+          <SimulationForm mode="advanced" advancedFeatureFlags={{ execution: true, inflation: true, fee: true, exemptions: true, returnModel: true }} />
+        </ExecutionDefaultsProvider>
+      </AssumptionsProvider>
+    );
 
     await waitFor(() => {
-      expect((screen.getByLabelText(/Inflation \(avg %/i) as HTMLInputElement).value).toBe('7');
-      expect((screen.getByLabelText(/Fee \(avg %/i) as HTMLInputElement).value).toBe('1.25');
+      expect((screen.getByLabelText(/Inflation \(avg %/i) as HTMLInputElement).value).toBe('3');
+      expect((screen.getByLabelText(/Fee \(avg %/i) as HTMLInputElement).value).toBe('0.75');
     });
 
     // Exemptions fields have duplicate labels, so validate by checking that at least

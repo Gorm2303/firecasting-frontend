@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import AssumptionsSummaryBar from './AssumptionsSummaryBar';
-import { useAssumptions } from '../state/assumptions';
+import { useUiPreferences } from '../state/uiPreferences';
 
 export type PageLayoutVariant = 'constrained' | 'wide';
 
@@ -57,7 +57,7 @@ const PageLayout: React.FC<Props> = ({
   const parentAlreadyHasPinnedGutter = useContext(PinnedNavGutterContext);
   const parentAlreadyHasAssumptionsBar = useContext(AssumptionsBarContext);
 
-  const { assumptions } = useAssumptions();
+  const { uiPrefs } = useUiPreferences();
 
   // In pinned layout, pages should be centered relative to the full viewport
   // by adding a right gutter equal to the pinned nav width.
@@ -89,7 +89,7 @@ const PageLayout: React.FC<Props> = ({
               : { width: '100%' }
           }
         >
-          {!parentAlreadyHasAssumptionsBar && assumptions.showAssumptionsBar && (
+          {!parentAlreadyHasAssumptionsBar && uiPrefs.showAssumptionsBar && (
             <div style={{ marginBottom: 12 }}>
               <AssumptionsSummaryBar />
             </div>

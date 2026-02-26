@@ -4,13 +4,19 @@ import {BrowserRouter} from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { AssumptionsProvider } from './state/assumptions'
+import { UiPreferencesProvider } from './state/uiPreferences'
+import { ExecutionDefaultsProvider } from './state/executionDefaults'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <AssumptionsProvider>
-        <App />
-      </AssumptionsProvider>
+      <UiPreferencesProvider>
+        <AssumptionsProvider>
+          <ExecutionDefaultsProvider>
+            <App />
+          </ExecutionDefaultsProvider>
+        </AssumptionsProvider>
+      </UiPreferencesProvider>
     </BrowserRouter>
   </StrictMode>,
 )

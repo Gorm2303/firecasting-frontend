@@ -62,7 +62,21 @@ export type AdvancedSimulationRequest = {
 
 export type MasterSeedMode = 'default' | 'custom' | 'random';
 
-const DEFAULT_MASTER_SEED = 1;
+export const DEFAULT_MASTER_SEED = 1;
+export const DEFAULT_RETURN_TYPE = 'dataDrivenReturn';
+
+export type AdvancedDefaults = {
+  inflationPct?: number;
+  yearlyFeePct?: number;
+  returnType?: string;
+  taxExemptionDefaults?: {
+    exemptionCardLimit?: number;
+    exemptionCardYearlyIncrease?: number;
+    stockExemptionTaxRate?: number;
+    stockExemptionLimit?: number;
+    stockExemptionYearlyIncrease?: number;
+  };
+};
 
 export function getRequestedSeed(req: AdvancedSimulationRequest | undefined | null): number | undefined {
   if (!req) return undefined;
@@ -85,12 +99,42 @@ export function seedForMode(mode: MasterSeedMode, customSeed?: number): number {
   return DEFAULT_MASTER_SEED;
 }
 
-export function normalToAdvancedWithDefaults(req: SimulationRequest): AdvancedSimulationRequest {
-  // Tax exemption frontend defaults (mirror backend defaults)
-  const taxExemptionConfig = {
-    exemptionCard: { limit: 51600, yearlyIncrease: 1000 },
-    stockExemption: { taxRate: 27, limit: 67500, yearlyIncrease: 1000 },
-  };
+export function normalToAdvancedWithDefaults(req: SimulationRequest, defaults?: AdvancedDefaults): AdvancedSimulationRequest {
+  const taxExemptionDefaults = defaults?.taxExemptionDefaults;
+  const hasTaxExemptionDefaults = !!taxExemptionDefaults && typeof taxExemptionDefaults === 'object';
+  const taxExemptionConfig = hasTaxExemptionDefaults
+    ? {
+        exemptionCard: {
+          ...(taxExemptionDefaults?.exemptionCardLimit !== undefined
+            ? { limit: taxExemptionDefaults.exemptionCardLimit }
+            : {}),
+          ...(taxExemptionDefaults?.exemptionCardYearlyIncrease !== undefined
+            ? { yearlyIncrease: taxExemptionDefaults.exemptionCardYearlyIncrease }
+            : {}),
+        },
+        stockExemption: {
+          ...(taxExemptionDefaults?.stockExemptionTaxRate !== undefined
+            ? { taxRate: taxExemptionDefaults.stockExemptionTaxRate }
+            : {}),
+          ...(taxExemptionDefaults?.stockExemptionLimit !== undefined
+            ? { limit: taxExemptionDefaults.stockExemptionLimit }
+            : {}),
+          ...(taxExemptionDefaults?.stockExemptionYearlyIncrease !== undefined
+            ? { yearlyIncrease: taxExemptionDefaults.stockExemptionYearlyIncrease }
+            : {}),
+        },
+      }
+    : undefined;
+
+  const inflationPct = typeof defaults?.inflationPct === 'number' && Number.isFinite(defaults.inflationPct)
+    ? defaults.inflationPct
+    : undefined;
+  const yearlyFeePct = typeof defaults?.yearlyFeePct === 'number' && Number.isFinite(defaults.yearlyFeePct)
+    ? defaults.yearlyFeePct
+    : undefined;
+  const returnType = typeof defaults?.returnType === 'string' && defaults.returnType.trim()
+    ? defaults.returnType
+    : DEFAULT_RETURN_TYPE;
 
   const seed = typeof req.seed === 'number' && Number.isFinite(req.seed) ? req.seed : undefined;
   const returnerConfig = seed !== undefined ? { seed } : undefined;
@@ -100,12 +144,12 @@ export function normalToAdvancedWithDefaults(req: SimulationRequest): AdvancedSi
     phases: req.phases,
     overallTaxRule: req.overallTaxRule,
     taxPercentage: req.taxPercentage,
-    returnType: 'dataDrivenReturn',
+    returnType,
     ...(seed !== undefined ? { seed } : {}),
     ...(returnerConfig ? { returnerConfig } : {}),
-    taxExemptionConfig,
-    inflationFactor: 1.02,
-    yearlyFeePercentage: 0.5,
+    ...(taxExemptionConfig ? { taxExemptionConfig } : {}),
+    ...(inflationPct !== undefined ? { inflationFactor: 1 + inflationPct / 100 } : {}),
+    ...(yearlyFeePct !== undefined ? { yearlyFeePercentage: yearlyFeePct } : {}),
   };
 }
 

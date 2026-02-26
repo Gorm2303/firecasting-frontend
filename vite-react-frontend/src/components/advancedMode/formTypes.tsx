@@ -93,8 +93,8 @@ export function evaluateVisibleWhen(rule: VisibleWhen | undefined, ctx: Visibili
   if ('notEquals' in rule) return actual !== rule.notEquals;
   if ('in' in rule) return Array.isArray(rule.in) ? rule.in.includes(actual as any) : false;
   if ('notIn' in rule) return Array.isArray(rule.notIn) ? !rule.notIn.includes(actual as any) : true;
-  if ('truthy' in rule) return Boolean(actual);
-  if ('falsy' in rule) return !Boolean(actual);
+  if ('truthy' in rule) return actual ? true : false;
+  if ('falsy' in rule) return !actual;
 
   const n = Number(actual);
   if ('gt' in rule) return Number.isFinite(n) && n > rule.gt;

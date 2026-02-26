@@ -1,6 +1,10 @@
 import React, { useMemo } from 'react';
 import PageLayout from '../components/PageLayout';
 import { useAssumptions } from '../state/assumptions';
+import { useUiPreferences } from '../state/uiPreferences';
+import { getDefaultExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
+import { listRegistryByTab } from '../state/assumptionsRegistry';
+import { listConventionsByGroup } from '../state/conventionsRegistry';
 import { SkeletonWidgets, type SkeletonWidget } from './skeleton/SkeletonWidgets';
 
 const fieldRowStyle: React.CSSProperties = {
@@ -28,10 +32,279 @@ const cardStyle: React.CSSProperties = {
   padding: 14,
 };
 
-const AssumptionsHubPage: React.FC = () => {
-  const { assumptions, updateAssumptions, resetAssumptions } = useAssumptions();
+type HubTabId = 'baseline' | 'execution' | 'conventions' | 'preview';
 
-  const jsonPreview = useMemo(() => JSON.stringify(assumptions, null, 2), [assumptions]);
+const AssumptionsHubPage: React.FC = () => {
+  const [activeTab, setActiveTab] = React.useState<HubTabId>('baseline');
+  const {
+    currentAssumptions,
+    draftAssumptions,
+    isDraftDirty,
+    updateDraftAssumptions,
+    resetDraftToCurrent,
+    resetDraftToDefaults,
+    saveDraft,
+  } = useAssumptions();
+  const { uiPrefs, updateUiPrefs } = useUiPreferences();
+  const { executionDefaults, updateExecutionDefaults, resetExecutionDefaults } = useExecutionDefaults();
+
+  const timingConventions = useMemo(() => listConventionsByGroup('timing'), []);
+  const executionRegistryItems = useMemo(() => listRegistryByTab('execution'), []);
+  const worldModelRegistryItems = useMemo(() => listRegistryByTab('worldModel'), []);
+  const simulatorTaxRegistryItems = useMemo(() => listRegistryByTab('simulatorTax'), []);
+  const salaryTaxatorRegistryItems = useMemo(() => listRegistryByTab('salaryTaxator'), []);
+  const moneyPerspectiveRegistryItems = useMemo(() => listRegistryByTab('moneyPerspective'), []);
+
+  const previewRegistryItems = useMemo(
+    () => [
+      ...worldModelRegistryItems,
+      ...simulatorTaxRegistryItems,
+      ...salaryTaxatorRegistryItems,
+      ...moneyPerspectiveRegistryItems,
+    ],
+    [moneyPerspectiveRegistryItems, salaryTaxatorRegistryItems, simulatorTaxRegistryItems, worldModelRegistryItems]
+  );
+
+  const jsonPreview = useMemo(() => JSON.stringify(draftAssumptions, null, 2), [draftAssumptions]);
+
+  const formatValue = useMemo(() => {
+    const stringify = (v: unknown): string => {
+      if (v === null) return 'null';
+      if (v === undefined) return '—';
+      if (typeof v === 'string') return v;
+      if (typeof v === 'number') return String(v);
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
+    };
+
+    return (unit: string, value: unknown): string => {
+      if (value === undefined) return '—';
+
+      if (unit === 'pct') {
+        return typeof value === 'number' ? `${value}%` : `${stringify(value)}%`;
+      }
+      if (unit === 'dkk' || unit === 'dkkPerMonth' || unit === 'dkkPerYear') {
+        return typeof value === 'number' ? `${value}` : stringify(value);
+      }
+      return stringify(value);
+    };
+  }, []);
+
+  const getValueAtKeyPath = useMemo(() => {
+    return (root: unknown, keyPath: string): unknown => {
+      const parts = keyPath.split('.').filter(Boolean);
+      let cursor: unknown = root;
+      for (const part of parts) {
+        if (!cursor || typeof cursor !== 'object') return undefined;
+        cursor = (cursor as Record<string, unknown>)[part];
+      }
+      return cursor;
+    };
+  }, []);
+
+  const assumptionsDiffRows = useMemo(() => {
+    const rows = previewRegistryItems
+      .map((item) => {
+        const from = getValueAtKeyPath(currentAssumptions, item.keyPath);
+        const to = getValueAtKeyPath(draftAssumptions, item.keyPath);
+        const same = Object.is(from, to) || JSON.stringify(from) === JSON.stringify(to);
+        if (same) return null;
+        return {
+          keyPath: item.keyPath,
+          label: item.label,
+          unit: item.unit,
+          usedBy: item.usedBy,
+          from,
+          to,
+        };
+      })
+      .filter(Boolean) as Array<{
+      keyPath: string;
+      label: string;
+      unit: string;
+      usedBy: string[];
+      from: unknown;
+      to: unknown;
+    }>;
+
+    rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
+    return rows;
+  }, [currentAssumptions, draftAssumptions, getValueAtKeyPath, previewRegistryItems]);
+
+  const executionOverridesRows = useMemo(() => {
+    const defaults = getDefaultExecutionDefaults();
+
+    const rows = executionRegistryItems
+      .map((item) => {
+        const prop = item.keyPath.replace('executionDefaults.', '');
+        const from = (defaults as Record<string, unknown>)[prop];
+        const to = (executionDefaults as Record<string, unknown>)[prop];
+        const same = Object.is(from, to) || JSON.stringify(from) === JSON.stringify(to);
+        if (same) return null;
+        return {
+          keyPath: item.keyPath,
+          label: item.label,
+          unit: item.unit,
+          usedBy: item.usedBy,
+          from,
+          to,
+        };
+      })
+      .filter(Boolean) as Array<{
+      keyPath: string;
+      label: string;
+      unit: string;
+      usedBy: string[];
+      from: unknown;
+      to: unknown;
+    }>;
+
+    rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
+    return rows;
+  }, [executionDefaults, executionRegistryItems]);
+
+  const setObjectValueAtPath = useMemo(() => {
+    const setAt = (root: unknown, parts: string[], value: unknown): unknown => {
+      if (parts.length === 0) return root;
+      const base = root && typeof root === 'object' ? (root as Record<string, unknown>) : {};
+      const [head, ...rest] = parts;
+
+      if (rest.length === 0) {
+        return { ...base, [head]: value };
+      }
+
+      return { ...base, [head]: setAt(base[head], rest, value) };
+    };
+
+    return setAt;
+  }, []);
+
+  const updateDraftValueAtKeyPath = useMemo(() => {
+    return (keyPath: string, nextValue: unknown) => {
+      const parts = keyPath.split('.').filter(Boolean);
+      if (parts.length === 0) return;
+
+      if (parts.length === 1) {
+        updateDraftAssumptions({ [parts[0]]: nextValue } as Partial<typeof draftAssumptions>);
+        return;
+      }
+
+      const [top, ...rest] = parts;
+      const nextTop = setObjectValueAtPath((draftAssumptions as Record<string, unknown>)[top], rest, nextValue);
+      updateDraftAssumptions({ [top]: nextTop } as Partial<typeof draftAssumptions>);
+    };
+  }, [draftAssumptions, setObjectValueAtPath, updateDraftAssumptions]);
+
+  const getStepForUnit = useMemo(() => {
+    return (unit: string): number => {
+      if (unit === 'pct') return 0.1;
+      return 1;
+    };
+  }, []);
+
+  const renderAssumptionRegistryField = useMemo(() => {
+    const isNumericUnit = (unit: string): boolean => {
+      return (
+        unit === 'pct' ||
+        unit === 'dkk' ||
+        unit === 'dkkPerMonth' ||
+        unit === 'dkkPerYear' ||
+        unit === 'hoursPerMonth' ||
+        unit === 'months' ||
+        unit === 'years' ||
+        unit === 'count'
+      );
+    };
+
+    return (item: { keyPath: string; label: string; unit: string; usedBy: string[] }) => {
+      const inputId = `assumptions-${item.keyPath.replace(/\./g, '-')}`;
+      const value = getValueAtKeyPath(draftAssumptions, item.keyPath);
+
+      const labelNode = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div>{item.label}</div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
+        </div>
+      );
+
+      if (item.unit === 'boolean') {
+        return (
+          <div key={item.keyPath} style={fieldRowStyle}>
+            <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+              {labelNode}
+            </label>
+            <input
+              id={inputId}
+              type="checkbox"
+              checked={Boolean(value)}
+              onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.checked)}
+            />
+          </div>
+        );
+      }
+
+      if (item.unit === 'string') {
+        const placeholder =
+          item.keyPath === 'currency'
+            ? 'e.g. DKK'
+            : item.keyPath === 'salaryTaxatorDefaults.municipalityId'
+              ? 'average or municipality id'
+              : undefined;
+
+        return (
+          <div key={item.keyPath} style={fieldRowStyle}>
+            <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+              {labelNode}
+            </label>
+            <input
+              id={inputId}
+              value={typeof value === 'string' ? value : value == null ? '' : String(value)}
+              onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.value)}
+              style={inputStyle}
+              placeholder={placeholder}
+            />
+          </div>
+        );
+      }
+
+      if (isNumericUnit(item.unit)) {
+        return (
+          <div key={item.keyPath} style={fieldRowStyle}>
+            <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+              {labelNode}
+            </label>
+            <input
+              id={inputId}
+              type="number"
+              step={getStepForUnit(item.unit)}
+              value={typeof value === 'number' ? value : value == null ? '' : Number(value)}
+              onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, Number(e.target.value))}
+              style={inputStyle}
+            />
+          </div>
+        );
+      }
+
+      // Fallback: render as text.
+      return (
+        <div key={item.keyPath} style={fieldRowStyle}>
+          <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+            {labelNode}
+          </label>
+          <input
+            id={inputId}
+            value={value == null ? '' : String(value)}
+            onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+      );
+    };
+  }, [draftAssumptions, getStepForUnit, getValueAtKeyPath, updateDraftValueAtKeyPath]);
 
   return (
     <PageLayout variant="constrained">
@@ -41,22 +314,69 @@ const AssumptionsHubPage: React.FC = () => {
           <div style={{ opacity: 0.78, marginTop: 6 }}>
             Single source of truth for the app’s baseline assumptions (stored locally for now).
           </div>
+          {isDraftDirty && (
+            <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
+              You have unsaved draft changes.
+            </div>
+          )}
         </div>
 
+        <div role="tablist" aria-label="Assumptions Hub sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(
+            [
+              { id: 'baseline' as const, label: 'Baseline' },
+              { id: 'execution' as const, label: 'Execution' },
+              { id: 'conventions' as const, label: 'Conventions' },
+              { id: 'preview' as const, label: 'Preview' },
+            ] satisfies Array<{ id: HubTabId; label: string }>
+          ).map((t) => {
+            const isActive = t.id === activeTab;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(t.id)}
+                style={{
+                  padding: '8px 10px',
+                  fontWeight: isActive ? 850 : 700,
+                  opacity: isActive ? 1 : 0.82,
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === 'baseline' && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ fontWeight: 850, fontSize: 18 }}>Baseline assumptions</div>
-            <button type="button" onClick={resetAssumptions} style={{ padding: '8px 10px' }}>
-              Reset
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" onClick={saveDraft} disabled={!isDraftDirty} style={{ padding: '8px 10px' }}>
+                Save
+              </button>
+              <button type="button" onClick={resetDraftToCurrent} disabled={!isDraftDirty} style={{ padding: '8px 10px' }}>
+                Cancel
+              </button>
+              <button type="button" onClick={resetDraftToDefaults} style={{ padding: '8px 10px' }}>
+                Reset to defaults
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+            Current (saved): {currentAssumptions.currency} · Inflation {currentAssumptions.inflationPct}% · Fee {currentAssumptions.yearlyFeePct}% · Return {currentAssumptions.expectedReturnPct}% · SWR {currentAssumptions.safeWithdrawalPct}%
           </div>
 
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 750 }}>
               <input
                 type="checkbox"
-                checked={assumptions.showAssumptionsBar}
-                onChange={(e) => updateAssumptions({ showAssumptionsBar: e.target.checked })}
+                checked={uiPrefs.showAssumptionsBar}
+                onChange={(e) => updateUiPrefs({ showAssumptionsBar: e.target.checked })}
               />
               Show assumptions bar at top
             </label>
@@ -66,60 +386,34 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-            <div style={fieldRowStyle}>
-              <label htmlFor="assumptions-currency" style={{ fontWeight: 700 }}>
-                Currency
-              </label>
-              <input
-                id="assumptions-currency"
-                value={assumptions.currency}
-                onChange={(e) => updateAssumptions({ currency: e.target.value })}
-                style={inputStyle}
-                placeholder="e.g. DKK"
-              />
+            {worldModelRegistryItems.map(renderAssumptionRegistryField)}
+
+            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
+              Simulator tax exemption defaults
+            </div>
+            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
+              Defaults used when tax exemption rules are enabled in simulator phases.
             </div>
 
-            <div style={fieldRowStyle}>
-              <label htmlFor="assumptions-inflation" style={{ fontWeight: 700 }}>
-                Inflation (% / year)
-              </label>
-              <input
-                id="assumptions-inflation"
-                type="number"
-                step="0.1"
-                value={assumptions.inflationPct}
-                onChange={(e) => updateAssumptions({ inflationPct: Number(e.target.value) })}
-                style={inputStyle}
-              />
+            {simulatorTaxRegistryItems.map(renderAssumptionRegistryField)}
+
+            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
+              Salary Taxator defaults
+            </div>
+            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
+              Baseline inputs used to prefill Salary Taxator.
             </div>
 
-            <div style={fieldRowStyle}>
-              <label htmlFor="assumptions-return" style={{ fontWeight: 700 }}>
-                Expected return (% / year)
-              </label>
-              <input
-                id="assumptions-return"
-                type="number"
-                step="0.1"
-                value={assumptions.expectedReturnPct}
-                onChange={(e) => updateAssumptions({ expectedReturnPct: Number(e.target.value) })}
-                style={inputStyle}
-              />
+            {salaryTaxatorRegistryItems.map(renderAssumptionRegistryField)}
+
+            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
+              Money Perspectivator defaults
+            </div>
+            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
+              Baseline inputs used to prefill Money Perspectivator.
             </div>
 
-            <div style={fieldRowStyle}>
-              <label htmlFor="assumptions-swr" style={{ fontWeight: 700 }}>
-                Safe withdrawal rate (% / year)
-              </label>
-              <input
-                id="assumptions-swr"
-                type="number"
-                step="0.1"
-                value={assumptions.safeWithdrawalPct}
-                onChange={(e) => updateAssumptions({ safeWithdrawalPct: Number(e.target.value) })}
-                style={inputStyle}
-              />
-            </div>
+            {moneyPerspectiveRegistryItems.map(renderAssumptionRegistryField)}
           </div>
 
           <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
@@ -127,6 +421,97 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
         </div>
 
+        )}
+
+        {activeTab === 'execution' && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ fontWeight: 850, fontSize: 18 }}>Execution defaults</div>
+            <button type="button" onClick={resetExecutionDefaults} style={{ padding: '8px 10px' }}>
+              Reset to defaults
+            </button>
+          </div>
+          <div style={{ opacity: 0.78, marginTop: 6, fontSize: 13 }}>
+            Defaults used when running simulations (paths/batching/seeding). Stored locally.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+            {executionRegistryItems.map((item) => {
+              if (item.keyPath === 'executionDefaults.paths') {
+                return (
+                  <div key={item.keyPath} style={fieldRowStyle}>
+                    <label htmlFor="execution-paths" style={{ fontWeight: 700 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div>{item.label}</div>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
+                      </div>
+                    </label>
+                    <input
+                      id="execution-paths"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={executionDefaults.paths}
+                      onChange={(e) => updateExecutionDefaults({ paths: Number(e.target.value) })}
+                      style={inputStyle}
+                    />
+                  </div>
+                );
+              }
+
+              if (item.keyPath === 'executionDefaults.batchSize') {
+                return (
+                  <div key={item.keyPath} style={fieldRowStyle}>
+                    <label htmlFor="execution-batch" style={{ fontWeight: 700 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div>{item.label}</div>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
+                      </div>
+                    </label>
+                    <input
+                      id="execution-batch"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={executionDefaults.batchSize}
+                      onChange={(e) => updateExecutionDefaults({ batchSize: Number(e.target.value) })}
+                      style={inputStyle}
+                    />
+                  </div>
+                );
+              }
+
+              if (item.keyPath === 'executionDefaults.seedMode') {
+                return (
+                  <div key={item.keyPath} style={fieldRowStyle}>
+                    <label htmlFor="execution-seed-mode" style={{ fontWeight: 700 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div>{item.label}</div>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
+                      </div>
+                    </label>
+                    <select
+                      id="execution-seed-mode"
+                      value={executionDefaults.seedMode}
+                      onChange={(e) => updateExecutionDefaults({ seedMode: e.target.value as typeof executionDefaults.seedMode })}
+                      style={inputStyle}
+                    >
+                      <option value="default">Default</option>
+                      <option value="custom">Custom</option>
+                      <option value="random">Random</option>
+                    </select>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </div>
+        </div>
+
+        )}
+
+        {activeTab === 'baseline' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles (placeholder)</div>
           <div style={{ opacity: 0.8, marginBottom: 10 }}>
@@ -155,6 +540,31 @@ const AssumptionsHubPage: React.FC = () => {
           />
         </div>
 
+        )}
+
+        {activeTab === 'conventions' && (
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 6 }}>Simulation conventions</div>
+          <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13 }}>
+            Fixed modeling conventions used by normal-mode UI copy (not editable yet).
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {timingConventions.map((c) => (
+              <div key={c.id}>
+                <div style={{ fontWeight: 800 }}>{c.label}</div>
+                <div style={{ opacity: 0.85, fontSize: 13 }}>
+                  {c.description} <span style={{ opacity: 0.85 }}>(Token: {c.token})</span>
+                </div>
+                <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {c.usedBy.join(', ')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        )}
+
+        {activeTab === 'baseline' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & guardrails (placeholder)</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -198,6 +608,9 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
         </div>
 
+        )}
+
+        {activeTab === 'baseline' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Impact preview (placeholder)</div>
           <div style={{ opacity: 0.8, marginBottom: 10 }}>
@@ -219,10 +632,56 @@ const AssumptionsHubPage: React.FC = () => {
           />
         </div>
 
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 8 }}>Preview</div>
-          <pre style={{ margin: 0, overflow: 'auto', opacity: 0.92 }}>{jsonPreview}</pre>
-        </div>
+        )}
+
+        {activeTab === 'preview' && (
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 8 }}>Preview</div>
+
+            <div style={{ opacity: 0.82, fontSize: 13, marginBottom: 10 }}>
+              Draft changes are shown as current → draft. Execution defaults are shown as default → current.
+            </div>
+
+            <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Baseline changes</div>
+            {assumptionsDiffRows.length === 0 ? (
+              <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No baseline changes.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {assumptionsDiffRows.map((r) => (
+                  <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                    <div style={{ fontWeight: 800 }}>{r.label}</div>
+                    <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                      {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                    </div>
+                    <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {r.usedBy.join(', ')}</div>
+                    <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Execution overrides</div>
+            {executionOverridesRows.length === 0 ? (
+              <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No execution overrides.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {executionOverridesRows.map((r) => (
+                  <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                    <div style={{ fontWeight: 800 }}>{r.label}</div>
+                    <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                      {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                    </div>
+                    <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {r.usedBy.join(', ')}</div>
+                    <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Raw draft JSON</div>
+            <pre style={{ margin: 0, overflow: 'auto', opacity: 0.92 }}>{jsonPreview}</pre>
+          </div>
+        )}
       </div>
     </PageLayout>
   );

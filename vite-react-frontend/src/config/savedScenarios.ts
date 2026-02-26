@@ -1,6 +1,7 @@
 import type { SimulationRequest } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
 import { advancedToNormalRequest, normalToAdvancedWithDefaults } from '../models/advancedSimulation';
+import { loadCurrentAssumptionsFromStorage } from '../state/assumptions';
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
@@ -111,7 +112,18 @@ export function listSavedScenarios(): SavedScenario[] {
 
   const migrated: SavedScenario[] = v1.map((s) => {
     const normalReq = s.request as SimulationRequest;
-    const advancedRequest = normalToAdvancedWithDefaults(normalReq);
+    const assumptions = loadCurrentAssumptionsFromStorage();
+    const advancedRequest = normalToAdvancedWithDefaults(normalReq, {
+      inflationPct: assumptions.inflationPct,
+      yearlyFeePct: assumptions.yearlyFeePct,
+      taxExemptionDefaults: {
+        exemptionCardLimit: assumptions.taxExemptionDefaults.exemptionCardLimit,
+        exemptionCardYearlyIncrease: assumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        stockExemptionTaxRate: assumptions.taxExemptionDefaults.stockExemptionTaxRate,
+        stockExemptionLimit: assumptions.taxExemptionDefaults.stockExemptionLimit,
+        stockExemptionYearlyIncrease: assumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+      },
+    });
     return {
       id: String(s.id),
       name: String(s.name),

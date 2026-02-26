@@ -1,4 +1,7 @@
 import type { PhaseRequest, SimulationRequest } from '../../models/types';
+import { DEFAULT_RETURN_TYPE } from '../../models/advancedSimulation';
+import { SIMULATION_TIMING_CONVENTIONS } from '../../config/simulationConventions';
+import { useAssumptions } from '../../state/assumptions';
 
 const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 const nf2 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
@@ -34,12 +37,12 @@ type Props = {
 };
 
 export default function AssumptionsPanel({ request }: Props) {
+  const { currentAssumptions } = useAssumptions();
   const deposit = findPhase(request.phases, 'DEPOSIT');
   const withdraw = findPhase(request.phases, 'WITHDRAW');
 
-  // These are the current legacy defaults used by the backend /start endpoint.
-  const returnType = 'dataDrivenReturn';
-  const inflationFactorPerYear = 1.02;
+  const returnType = DEFAULT_RETURN_TYPE;
+  const inflationFactorPerYear = 1 + (Number(currentAssumptions.inflationPct) || 0) / 100;
 
   const monthlyDeposit = Number(deposit?.monthlyDeposit ?? 0) || 0;
   const yearlyIncreasePct = Number(deposit?.yearlyIncreaseInPercentage ?? 0) || 0;
@@ -103,7 +106,7 @@ export default function AssumptionsPanel({ request }: Props) {
         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Inflation (real spending)</summary>
         <div style={{ fontSize: 13, lineHeight: 1.35, marginTop: 6, opacity: 0.95 }}>
           <div>
-            Inflation compounds once per simulation year (at year-end). In normal mode the default factor is{' '}
+            Inflation compounds once per simulation year (at {SIMULATION_TIMING_CONVENTIONS.inflationCompounds}). In normal mode the default factor is{' '}
             <b>{inflationFactorPerYear}</b> (≈ {fmtPct((inflationFactorPerYear - 1) * 100)}% per year).
           </div>
           {baseMonthlyWithdraw > 0 && (
@@ -130,7 +133,7 @@ export default function AssumptionsPanel({ request }: Props) {
 
           {request.overallTaxRule === 'NOTIONAL' && (
             <div style={{ marginTop: 6 }}>
-              Notional gains tax is applied at year-end on gains since the previous year-end.
+              Notional gains tax is applied at {SIMULATION_TIMING_CONVENTIONS.notionalGainsTaxApplied} on gains since the previous year-end.
               Example using your numbers: if the portfolio earns {fmtMoney(exampleYearlyGain)} in a year, tax is about{' '}
               {fmtMoney(exampleNotionalTax)}.
             </div>
@@ -138,7 +141,7 @@ export default function AssumptionsPanel({ request }: Props) {
 
           {request.overallTaxRule === 'CAPITAL' && (
             <div style={{ marginTop: 6 }}>
-              Capital gains tax is applied when withdrawing (month-end). The model estimates what fraction of a withdrawal
+              Capital gains tax is applied when withdrawing ({SIMULATION_TIMING_CONVENTIONS.capitalGainsTaxApplied}). The model estimates what fraction of a withdrawal
               is “gains” vs “principal” based on deposited vs current capital.
               {baseMonthlyWithdraw > 0 && (
                 <>
@@ -159,7 +162,7 @@ export default function AssumptionsPanel({ request }: Props) {
         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Contributions & withdrawals</summary>
         <div style={{ fontSize: 13, lineHeight: 1.35, marginTop: 6, opacity: 0.95 }}>
           <div>
-            Deposits happen at month-end, and your deposit phase increases the monthly deposit once per year.
+            Deposits happen at {SIMULATION_TIMING_CONVENTIONS.monthlyDeposit}, and your deposit phase increases the monthly deposit {SIMULATION_TIMING_CONVENTIONS.yearlyDepositIncrease}.
           </div>
           {monthlyDeposit > 0 && (
             <div style={{ marginTop: 6 }}>

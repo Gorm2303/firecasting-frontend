@@ -7,7 +7,7 @@ import NormalPhaseList from '../../components/normalMode/NormalPhaseList';
 import SimulationProgress from '../../components/SimulationProgress';
 import { findRunForInput, startAdvancedSimulation, type StartRunResponse } from '../../api/simulation';
 import type { AdvancedSimulationRequest, MasterSeedMode } from '../../models/advancedSimulation';
-import { advancedToNormalRequest, normalToAdvancedWithDefaults, seedForMode } from '../../models/advancedSimulation';
+import { advancedToNormalRequest, DEFAULT_MASTER_SEED, DEFAULT_RETURN_TYPE, normalToAdvancedWithDefaults, seedForMode } from '../../models/advancedSimulation';
 import { createDefaultSimulationRequest, createDefaultPhase } from '../../config/simulationDefaults';
 import { getTemplateById, resolveTemplateToRequest, SIMULATION_TEMPLATES, type SimulationTemplateId, type TemplateAdvancedDefaults } from '../../config/simulationTemplates';
 import {
@@ -26,6 +26,9 @@ import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeSce
 import { draftToIntOrZero, draftToNumberOrZero, isValidDecimalDraft, isValidIntegerDraft, parseLocaleNumber } from '../../utils/numberInput';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
+import { useAssumptions } from '../../state/assumptions';
+import { getDefaultExecutionDefaults, useExecutionDefaults } from '../../state/executionDefaults';
+import { appendSimulationSnapshot } from '../../state/simulationSnapshots';
 
 const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
 const NORMAL_DRAFT_KEY = 'firecasting:normalDraft:v1';
@@ -89,7 +92,7 @@ const parseReturnType = (v: any): ReturnType => {
   const s = String(v ?? '').trim();
   if (s === 'distributionReturn' || s === 'dataDrivenReturn' || s === 'simpleReturn') return s;
   // Keep backward/forward compatibility (backend defaults SimpleDailyReturn for unknown).
-  return 'dataDrivenReturn';
+  return DEFAULT_RETURN_TYPE;
 };
 
 const parseDistributionType = (v: any): DistributionType => {
@@ -408,7 +411,6 @@ const Coachmark: React.FC<{
 
   useEffect(() => {
     let cancelled = false;
-    let startDelay: number | undefined;
     let pollTimer: number | undefined;
     let raf: number | null = null;
     let observer: MutationObserver | null = null;
@@ -470,7 +472,7 @@ const Coachmark: React.FC<{
 
     // Optional delay for dynamic UI. Prefer polling over large delays to avoid visible "jump".
     const delay = step.waitFor && step.waitFor > 0 ? step.waitFor : 0;
-    startDelay = window.setTimeout(() => {
+    const startDelay = window.setTimeout(() => {
       if (cancelled) return;
 
       // Poll briefly so steps that depend on newly-rendered elements don't jump to center.
@@ -661,6 +663,8 @@ const NormalInputForm = React.forwardRef<NormalInputFormHandle, NormalInputFormP
 ref
 ) {
   const navigate = useNavigate();
+  const { currentAssumptions } = useAssumptions();
+  const { executionDefaults, updateExecutionDefaults } = useExecutionDefaults();
   const initialDefaults = useMemo(() => createDefaultSimulationRequest(), []);
   const isTutorial = Boolean(tutorialSteps && tutorialSteps.length > 0);
 
@@ -675,15 +679,15 @@ ref
     return {
       enabled: false,
       // Execution params (defaults align with backend defaults; backend will clamp/validate anyway).
-      paths: '10000',
-      batchSize: '10000',
-      inflationAveragePct: '2',
-      yearlyFeePercentage: '0.5',
+      paths: String(executionDefaults.paths),
+      batchSize: String(executionDefaults.batchSize),
+      inflationAveragePct: String(currentAssumptions.inflationPct),
+      yearlyFeePercentage: String(currentAssumptions.yearlyFeePct),
 
       // Returner
-      returnType: 'dataDrivenReturn' as ReturnType,
-      seedMode: 'default' as MasterSeedMode,
-      seed: '1',
+      returnType: DEFAULT_RETURN_TYPE as ReturnType,
+      seedMode: executionDefaults.seedMode as MasterSeedMode,
+      seed: String(DEFAULT_MASTER_SEED),
       simpleAveragePercentage: '7',
       distributionType: 'normal' as DistributionType,
       normalMean: '0.07',
@@ -715,13 +719,24 @@ ref
       }),
 
       // Tax (defaults only; exemptions must still be enabled per-phase)
-      exemptionCardLimit: '51600',
-      exemptionCardYearlyIncrease: '1000',
-      stockExemptionTaxRate: '27',
-      stockExemptionLimit: '67500',
-      stockExemptionYearlyIncrease: '1000',
+      exemptionCardLimit: String(currentAssumptions.taxExemptionDefaults.exemptionCardLimit),
+      exemptionCardYearlyIncrease: String(currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease),
+      stockExemptionTaxRate: String(currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate),
+      stockExemptionLimit: String(currentAssumptions.taxExemptionDefaults.stockExemptionLimit),
+      stockExemptionYearlyIncrease: String(currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease),
     };
-  }, []);
+  }, [
+    executionDefaults.batchSize,
+    executionDefaults.paths,
+    executionDefaults.seedMode,
+    currentAssumptions.inflationPct,
+    currentAssumptions.yearlyFeePct,
+    currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+    currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+    currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+    currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+    currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+  ]);
 
   const initialAdvancedState = useMemo<{
     enabled: boolean;
@@ -769,23 +784,21 @@ ref
       }
       const parsed = JSON.parse(raw);
       const enabled = Boolean(parsed?.enabled);
-      const paths = parsed?.paths ?? fallbackDefaults.paths;
-      const batchSize = parsed?.batchSize ?? fallbackDefaults.batchSize;
-      const inflationAveragePct = String(parsed?.inflationAveragePct ?? fallbackDefaults.inflationAveragePct);
-      const yearlyFeePercentage = String(parsed?.yearlyFeePercentage ?? fallbackDefaults.yearlyFeePercentage);
+      const paths = fallbackDefaults.paths;
+      const batchSize = fallbackDefaults.batchSize;
+      // Inflation + fee are global assumptions; do not rehydrate them from advanced-options storage.
+      const inflationAveragePct = String(fallbackDefaults.inflationAveragePct);
+      const yearlyFeePercentage = String(fallbackDefaults.yearlyFeePercentage);
       const returnType = parseReturnType(parsed?.returnType);
       const distributionType = parseDistributionType(parsed?.distributionType);
       const seedRaw = parsed?.seed ?? fallbackDefaults.seed;
-      const seedMode: MasterSeedMode =
-        parsed?.seedMode === 'default' || parsed?.seedMode === 'custom' || parsed?.seedMode === 'random'
-          ? parsed.seedMode
-          : (() => {
-              const n = Number(seedRaw);
-              if (Number.isFinite(n) && n < 0) return 'random';
-              // Back-compat: previously we always stored "1". Treat that as default.
-              if (String(seedRaw) === String(fallbackDefaults.seed)) return 'default';
-              return 'custom';
-            })();
+      const seedMode: MasterSeedMode = (() => {
+        const n = Number(seedRaw);
+        if (Number.isFinite(n) && n < 0) return 'random';
+        // If the stored seed differs from the default seed, assume custom mode.
+        if (String(seedRaw) !== String(fallbackDefaults.seed)) return 'custom';
+        return fallbackDefaults.seedMode;
+      })();
 
       const seed = seedMode === 'random' ? String(fallbackDefaults.seed) : String(seedRaw);
       const simpleAveragePercentage = parsed?.simpleAveragePercentage ?? fallbackDefaults.simpleAveragePercentage;
@@ -857,6 +870,17 @@ ref
   const [inflationAveragePct, setInflationAveragePct] = useState<string>(String(initialAdvancedState.inflationAveragePct));
   const [yearlyFeePercentage, setYearlyFeePercentage] = useState<string>(String(initialAdvancedState.yearlyFeePercentage));
 
+  // Inflation + fee are global assumptions. Keep UI in sync with the authority.
+  useEffect(() => {
+    const next = String(currentAssumptions.inflationPct);
+    setInflationAveragePct((prev) => (prev === next ? prev : next));
+  }, [currentAssumptions.inflationPct]);
+
+  useEffect(() => {
+    const next = String(currentAssumptions.yearlyFeePct);
+    setYearlyFeePercentage((prev) => (prev === next ? prev : next));
+  }, [currentAssumptions.yearlyFeePct]);
+
   const [exemptionCardLimit, setExemptionCardLimit] = useState<string>(String(initialAdvancedState.exemptionCardLimit));
   const [exemptionCardYearlyIncrease, setExemptionCardYearlyIncrease] = useState<string>(String(initialAdvancedState.exemptionCardYearlyIncrease));
   const [stockExemptionTaxRate, setStockExemptionTaxRate] = useState<string>(String(initialAdvancedState.stockExemptionTaxRate));
@@ -865,7 +889,7 @@ ref
 
   const [returnType, setReturnType] = useState<ReturnType>(initialAdvancedState.returnType);
   const [seedMode, setSeedMode] = useState<MasterSeedMode>(initialAdvancedState.seedMode ?? 'default');
-  const [seed, setSeed] = useState<string>(String(initialAdvancedState.seed ?? '1'));
+  const [seed, setSeed] = useState<string>(String(initialAdvancedState.seed ?? DEFAULT_MASTER_SEED));
   const [simpleAveragePercentage, setSimpleAveragePercentage] = useState<string>(String(initialAdvancedState.simpleAveragePercentage ?? ''));
 
   const [distributionType, setDistributionType] = useState<DistributionType>(initialAdvancedState.distributionType);
@@ -990,7 +1014,7 @@ ref
     yearlyFeePercentage: initialAdvancedState.yearlyFeePercentage,
     returnType: initialAdvancedState.returnType,
     seedMode: initialAdvancedState.seedMode ?? 'default',
-    seed: String(initialAdvancedState.seed ?? '1'),
+    seed: String(initialAdvancedState.seed ?? DEFAULT_MASTER_SEED),
     simpleAveragePercentage: String(initialAdvancedState.simpleAveragePercentage ?? ''),
     distributionType: initialAdvancedState.distributionType,
     normalMean: String(initialAdvancedState.normalMean ?? ''),
@@ -1191,9 +1215,9 @@ ref
     }
 
     // Advanced-only fields: reset to wrong values so the tutorial can teach them explicitly.
-    // Exception: paths + batch should remain at their normal default (10000) in the advanced tutorial.
-    setPaths(advancedMode ? '10000' : '0');
-    setBatchSize(advancedMode ? '10000' : '0');
+    // Exception: paths + batch should remain at their normal default in the advanced tutorial.
+    setPaths(advancedMode ? String(hardDefaultAdvancedUi.paths) : '0');
+    setBatchSize(advancedMode ? String(hardDefaultAdvancedUi.batchSize) : '0');
     setInflationAveragePct('0');
     setYearlyFeePercentage('0');
 
@@ -1205,7 +1229,7 @@ ref
 
     // Advanced-only selects: set to a "wrong" option so advanced tutorial steps require action.
     setSeedMode('default');
-    setSeed('1');
+    setSeed(String(DEFAULT_MASTER_SEED));
     setReturnType('simpleReturn');
     setSimpleAveragePercentage('0');
     setDistributionType('normal');
@@ -1217,7 +1241,7 @@ ref
     setStudentSigma('');
     setStudentNu('');
     setRegimeTickMonths('');
-  }, [advancedMode, isTutorial]);
+  }, [advancedMode, hardDefaultAdvancedUi.batchSize, hardDefaultAdvancedUi.paths, isTutorial]);
 
   const [userEditTick, setUserEditTick] = useState(0);
   const hasUserEditedRef = useRef(false);
@@ -1312,8 +1336,14 @@ ref
     // Backend will clamp/validate and also defaults when missing.
     const pathsToSend = isAdvancedRun && executionFeatureOn ? clampExec(draftToIntOrZero(paths)) : undefined;
     const batchSizeToSend = isAdvancedRun && executionFeatureOn ? clampExec(draftToIntOrZero(batchSize)) : undefined;
-    const inflationFactorToSend = isAdvancedRun && inflationFeatureOn ? 1 + draftToNumberOrZero(inflationAveragePct) / 100 : undefined;
-    const yearlyFeePercentageToSend = isAdvancedRun && feeFeatureOn ? draftToNumberOrZero(yearlyFeePercentage) : undefined;
+    // Inflation + fee are global assumptions and should apply to both normal and advanced runs.
+    // (Normal runs still go through the unified advanced endpoint.)
+    const inflationFactorToSend = inflationFeatureOn
+      ? 1 + (Number(currentAssumptions.inflationPct) || 0) / 100
+      : undefined;
+    const yearlyFeePercentageToSend = feeFeatureOn
+      ? (Number(currentAssumptions.yearlyFeePct) || 0)
+      : undefined;
 
     const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
       isAdvancedRun && exemptionsFeatureOn
@@ -1411,8 +1441,9 @@ ref
     executionFeatureOn,
     exemptionsFeatureOn,
     feeFeatureOn,
-    inflationAveragePct,
     inflationFeatureOn,
+    currentAssumptions.inflationPct,
+    currentAssumptions.yearlyFeePct,
     normalMean,
     normalStdDev,
     overallTaxRule,
@@ -1503,16 +1534,6 @@ ref
       if (b !== '') setBatchSize(b);
     }
 
-    if (externalLoadAdvanced.inflationAveragePct !== undefined) {
-      const pct = Number(externalLoadAdvanced.inflationAveragePct);
-      if (Number.isFinite(pct)) setInflationAveragePct(String(pct));
-    }
-
-    if (externalLoadAdvanced.yearlyFeePercentage !== undefined) {
-      const pct = Number(externalLoadAdvanced.yearlyFeePercentage);
-      if (Number.isFinite(pct)) setYearlyFeePercentage(String(pct));
-    }
-
     const taxCfg = externalLoadAdvanced.taxExemptionConfig;
     if (taxCfg?.exemptionCard) {
       if (taxCfg.exemptionCard.limit !== undefined) setExemptionCardLimit(String(taxCfg.exemptionCard.limit));
@@ -1596,8 +1617,6 @@ ref
     setAdvancedEnabled,
     setPaths,
     setBatchSize,
-    setInflationAveragePct,
-    setYearlyFeePercentage,
     setExemptionCardLimit,
     setExemptionCardYearlyIncrease,
     setStockExemptionTaxRate,
@@ -1622,23 +1641,11 @@ ref
   useEffect(() => {
     if (isTutorial) return;
     try {
-      const toFiniteNumberOrEmptyString = (v: string): number | '' => {
-        const s = String(v ?? '').trim();
-        if (s === '') return '';
-        const n = Number(s);
-        return Number.isFinite(n) ? n : '';
-      };
-
       window.localStorage.setItem(
         ADVANCED_OPTIONS_KEY,
         JSON.stringify({
           enabled: advancedEnabled,
-          paths,
-          batchSize,
-          inflationAveragePct: toFiniteNumberOrEmptyString(inflationAveragePct),
-          yearlyFeePercentage: toFiniteNumberOrEmptyString(yearlyFeePercentage),
           returnType,
-          seedMode,
           seed,
           simpleAveragePercentage,
           distributionType,
@@ -1663,12 +1670,7 @@ ref
     }
   }, [
     advancedEnabled,
-    paths,
-    batchSize,
-    inflationAveragePct,
-    yearlyFeePercentage,
     returnType,
-    seedMode,
     seed,
     simpleAveragePercentage,
     distributionType,
@@ -1691,13 +1693,15 @@ ref
   // Baseline advanced defaults (used when applying templates).
   // Applying a template should reset *all* advanced values to the template defaults,
   // not keep whatever advanced values the user previously experimented with.
+  const templateBaselineExecutionDefaults = useMemo(() => getDefaultExecutionDefaults(), []);
+
   const defaultAdvancedUi = useMemo<AdvancedUiSnapshot>(() => ({
-    paths: String(hardDefaultAdvancedUi.paths),
-    batchSize: String(hardDefaultAdvancedUi.batchSize),
+    paths: String(templateBaselineExecutionDefaults.paths),
+    batchSize: String(templateBaselineExecutionDefaults.batchSize),
     inflationAveragePct: hardDefaultAdvancedUi.inflationAveragePct,
     yearlyFeePercentage: hardDefaultAdvancedUi.yearlyFeePercentage,
     returnType: hardDefaultAdvancedUi.returnType,
-    seedMode: hardDefaultAdvancedUi.seedMode,
+    seedMode: templateBaselineExecutionDefaults.seedMode,
     seed: String(hardDefaultAdvancedUi.seed),
     simpleAveragePercentage: String(hardDefaultAdvancedUi.simpleAveragePercentage),
     distributionType: hardDefaultAdvancedUi.distributionType,
@@ -1715,7 +1719,7 @@ ref
     stockExemptionTaxRate: String(hardDefaultAdvancedUi.stockExemptionTaxRate),
     stockExemptionLimit: String(hardDefaultAdvancedUi.stockExemptionLimit),
     stockExemptionYearlyIncrease: String(hardDefaultAdvancedUi.stockExemptionYearlyIncrease),
-  }), [hardDefaultAdvancedUi]);
+  }), [hardDefaultAdvancedUi, templateBaselineExecutionDefaults.batchSize, templateBaselineExecutionDefaults.paths, templateBaselineExecutionDefaults.seedMode]);
 
   const refreshSavedScenarios = useCallback(() => {
     setSavedScenarios(listSavedScenarios());
@@ -1808,14 +1812,21 @@ ref
     // UI section is disabled/hidden.
     applyDefaultsIfBlank({
       tax: {
-        exemptionCard: { limit: 51600, increase: 1000 },
-        stockExemption: { taxRate: 27, limit: 67500, increase: 1000 },
+        exemptionCard: {
+          limit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+          increase: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        },
+        stockExemption: {
+          taxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+          limit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+          increase: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+        },
       },
-      inflation: { averagePercentage: 2 },
+      inflation: { averagePercentage: currentAssumptions.inflationPct },
       returner: {
-        type: 'dataDrivenReturn',
+        type: DEFAULT_RETURN_TYPE,
         simpleReturn: { averagePercentage: 7 },
-        random: { seed: 1 },
+        random: { seed: DEFAULT_MASTER_SEED },
         distribution: {
           type: 'normal',
           brownianMotion: { drift: 0.07, volatility: 0.2 },
@@ -1864,12 +1875,12 @@ ref
   const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === selectedScenarioId), [savedScenarios, selectedScenarioId]);
   const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === compareScenarioId), [savedScenarios, compareScenarioId]);
   const scenarioASummary = useMemo(
-    () => (scenarioA ? summarizeScenario(scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest)) : null),
-    [scenarioA]
+    () => (scenarioA ? summarizeScenario(scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest), currentAssumptions) : null),
+    [currentAssumptions, scenarioA]
   );
   const scenarioBSummary = useMemo(
-    () => (scenarioB ? summarizeScenario(scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest)) : null),
-    [scenarioB]
+    () => (scenarioB ? summarizeScenario(scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest), currentAssumptions) : null),
+    [currentAssumptions, scenarioB]
   );
 
   const fmtNumber = useMemo(
@@ -1996,6 +2007,12 @@ ref
       lastRunRequestRef.current = req;
 
       const started = await startAdvancedSimulation(req);
+      appendSimulationSnapshot({
+        runId: started.id,
+        createdAt: started.createdAt ?? new Date().toISOString(),
+        assumptions: currentAssumptions,
+        advancedRequest: req,
+      });
       lastStartedRunMetaRef.current = started;
       lastRunWasNormalRef.current = !advancedEnabled;
       setSimulationId(started.id);
@@ -2004,7 +2021,7 @@ ref
       alert((err as Error).message);
       setSimulateInProgress(false);
     }
-  }, [advancedEnabled]);
+  }, [advancedEnabled, currentAssumptions]);
 
   const handleLoadScenario = useCallback((scenarioId: string) => {
     if (!scenarioId) return;
@@ -2106,12 +2123,6 @@ ref
     if (adv.returnType !== undefined) patch.returnType = adv.returnType as ReturnType;
     if (adv.seedMode !== undefined) patch.seedMode = adv.seedMode;
     if (adv.seed !== undefined) patch.seed = String(Math.trunc(Number(adv.seed)));
-
-    if (adv.exemptionCardLimit !== undefined) patch.exemptionCardLimit = String(adv.exemptionCardLimit);
-    if (adv.exemptionCardYearlyIncrease !== undefined) patch.exemptionCardYearlyIncrease = String(adv.exemptionCardYearlyIncrease);
-    if (adv.stockExemptionTaxRate !== undefined) patch.stockExemptionTaxRate = String(adv.stockExemptionTaxRate);
-    if (adv.stockExemptionLimit !== undefined) patch.stockExemptionLimit = String(adv.stockExemptionLimit);
-    if (adv.stockExemptionYearlyIncrease !== undefined) patch.stockExemptionYearlyIncrease = String(adv.stockExemptionYearlyIncrease);
 
     return patch;
   }, []);
@@ -2330,9 +2341,9 @@ ref
     }
 
     // Keep advanced fields at 0, and choose a "wrong" return type.
-    // Exception: paths + batch should remain at their normal default (10000) in the advanced tutorial.
-    setPaths(advancedMode ? '10000' : '0');
-    setBatchSize(advancedMode ? '10000' : '0');
+    // Exception: paths + batch should remain at their normal default in the advanced tutorial.
+    setPaths(advancedMode ? String(hardDefaultAdvancedUi.paths) : '0');
+    setBatchSize(advancedMode ? String(hardDefaultAdvancedUi.batchSize) : '0');
     setInflationAveragePct('0');
     setYearlyFeePercentage('0');
 
@@ -2343,7 +2354,7 @@ ref
     setStockExemptionYearlyIncrease('0');
 
     setSeedMode('default');
-    setSeed('1');
+    setSeed(String(DEFAULT_MASTER_SEED));
     setReturnType('simpleReturn');
     setSimpleAveragePercentage('0');
     setDistributionType('normal');
@@ -2357,6 +2368,8 @@ ref
     setRegimeTickMonths('');
   }, [
     advancedMode,
+    hardDefaultAdvancedUi.batchSize,
+    hardDefaultAdvancedUi.paths,
     setBatchSize,
     setDistributionType,
     setExemptionCardLimit,
@@ -2411,6 +2424,15 @@ ref
 
     // Apply advanced template defaults (do not change UI mode)
     const adv = d.targetAdvancedUi;
+
+    // Execution defaults are global (persisted) and are now the single source of truth for
+    // paths/batchSize/seedMode. Applying a template should reset them alongside the UI.
+    updateExecutionDefaults({
+      paths: Math.trunc(Number(adv.paths)),
+      batchSize: Math.trunc(Number(adv.batchSize)),
+      seedMode: adv.seedMode,
+    });
+
     setPaths(String(adv.paths));
     setBatchSize(String(adv.batchSize));
     setInflationAveragePct(String(adv.inflationAveragePct));
@@ -2458,7 +2480,7 @@ ref
       normal: d.normal,
       advanced: d.advanced,
     });
-  }, [applyTutorialTemplate, buildTemplateDiff]);
+  }, [applyTutorialTemplate, buildTemplateDiff, updateExecutionDefaults]);
 
   const openTemplatePreview = useCallback((templateId: TemplatePickerId) => {
     // In tutorials, only allow Tutorial + Custom (prevents skipping tutorial steps via other presets).
@@ -2585,7 +2607,17 @@ ref
 
     applyRequestToForm(decoded);
     setSelectedScenarioId('');
-    void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded));
+    void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded, {
+      inflationPct: currentAssumptions.inflationPct,
+      yearlyFeePct: currentAssumptions.yearlyFeePct,
+      taxExemptionDefaults: {
+        exemptionCardLimit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+        exemptionCardYearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        stockExemptionTaxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+        stockExemptionLimit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+        stockExemptionYearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+      },
+    }));
     hasAppliedScenarioFromUrlRef.current = true;
 
     // If this scenario came from an internal navigation (e.g. Explore -> Clone to form),
@@ -2684,9 +2716,10 @@ ref
                       markUserEdited();
                       const next = e.target.value as MasterSeedMode;
                       setSeedMode(next);
+                      if (!isTutorial) updateExecutionDefaults({ seedMode: next });
                       if (next === 'custom') {
                         const n = toNumOrUndef(seed);
-                        if (!n || n <= 0) setSeed('1');
+                        if (!n || n <= 0) setSeed(String(DEFAULT_MASTER_SEED));
                       }
                     }}
                     disabled={simulateInProgress}
@@ -2738,6 +2771,10 @@ ref
                           if (!isValidIntegerDraft(next)) return;
                           markUserEdited();
                           setPaths(next);
+                          const n = Number(next);
+                          if (!isTutorial && Number.isFinite(n) && n > 0) {
+                            updateExecutionDefaults({ paths: Math.trunc(n) });
+                          }
                         }}
                         disabled={simulateInProgress}
                         style={inputStyle}
@@ -2761,6 +2798,10 @@ ref
                           if (!isValidIntegerDraft(next)) return;
                           markUserEdited();
                           setBatchSize(next);
+                          const n = Number(next);
+                          if (!isTutorial && Number.isFinite(n) && n > 0) {
+                            updateExecutionDefaults({ batchSize: Math.trunc(n) });
+                          }
                         }}
                         disabled={simulateInProgress}
                         style={inputStyle}
@@ -2847,14 +2888,21 @@ ref
                   type="text"
                   inputMode="decimal"
                   value={inflationAveragePct}
-                  onChange={(e) => { markUserEdited(); setInflationAveragePct(e.target.value); }}
-                  disabled={simulateInProgress}
+                  disabled={true}
                   style={inputStyle}
                 />
                 <InfoTooltip label="(i)">
                   Average annual inflation (in %) used to inflation-adjust withdrawals/spending over time.
                   This affects how your “real” spending power changes from year to year.
                 </InfoTooltip>
+                <button
+                  type="button"
+                  onClick={() => navigate('/assumptions')}
+                  disabled={simulateInProgress}
+                  style={btn('ghost')}
+                >
+                  Edit in Assumptions Hub
+                </button>
               </div>
             </label>
           )}
@@ -2867,13 +2915,20 @@ ref
                   type="text"
                   inputMode="decimal"
                   value={yearlyFeePercentage}
-                  onChange={(e) => { markUserEdited(); setYearlyFeePercentage(e.target.value); }}
-                  disabled={simulateInProgress}
+                  disabled={true}
                   style={inputStyle}
                 />
                 <InfoTooltip label="(i)">
                   Annual fee charged on current capital at year-end (in %). For example, 0.5 means 0.5% of capital is deducted each year.
                 </InfoTooltip>
+                <button
+                  type="button"
+                  onClick={() => navigate('/assumptions')}
+                  disabled={simulateInProgress}
+                  style={btn('ghost')}
+                >
+                  Edit in Assumptions Hub
+                </button>
               </div>
             </label>
           )}
@@ -3657,9 +3712,7 @@ ref
               setLastCompletedRun({ id: completedId, advancedRequest: lastRunRequestRef.current });
             }
 
-            const inflationFactorPerYear = inflationFeatureOn
-              ? 1 + (Number(inflationAveragePct) || 0) / 100
-              : 1.02;
+            const inflationFactorPerYear = 1 + (Number(currentAssumptions.inflationPct) || 0) / 100;
             const timeline: SimulationTimelineContext = {
               startDate,
               phaseTypes: phases.map((p) => p.phaseType),

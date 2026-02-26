@@ -44,6 +44,7 @@ import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { saveScenario } from '../../config/savedScenarios';
 import { startAdvancedSimulation } from '../../api/simulation';
 import { normalToAdvancedWithDefaults } from '../../models/advancedSimulation';
+import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
 describe('NormalInputForm scenarios', () => {
   it('saves and reloads a scenario with identical inputs', async () => {
@@ -54,7 +55,11 @@ describe('NormalInputForm scenarios', () => {
     window.localStorage.clear();
 
     const ref = React.createRef<NormalInputFormHandle>();
-    render(<SimulationForm ref={ref} />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
 
     const startDate = screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2033-02-03' } });
@@ -120,11 +125,25 @@ describe('NormalInputForm scenarios', () => {
       ],
     };
 
-    const advanced = normalToAdvancedWithDefaults(request as any);
+    const advanced = normalToAdvancedWithDefaults(request as any, {
+      inflationPct: 2,
+      yearlyFeePct: 0.5,
+      taxExemptionDefaults: {
+        exemptionCardLimit: 51600,
+        exemptionCardYearlyIncrease: 1000,
+        stockExemptionTaxRate: 27,
+        stockExemptionLimit: 67500,
+        stockExemptionYearlyIncrease: 1000,
+      },
+    });
     saveScenario('Maximal scenario', advanced as any);
 
     const ref = React.createRef<NormalInputFormHandle>();
-    render(<SimulationForm ref={ref} />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
 
     act(() => {
       ref.current?.openSavedScenarios();
@@ -163,7 +182,17 @@ describe('NormalInputForm scenarios', () => {
           { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 500, monthlyDeposit: 50 },
           { phaseType: 'PASSIVE', durationInMonths: 6 },
         ],
-      } as any) as any
+      } as any, {
+        inflationPct: 2,
+        yearlyFeePct: 0.5,
+        taxExemptionDefaults: {
+          exemptionCardLimit: 51600,
+          exemptionCardYearlyIncrease: 1000,
+          stockExemptionTaxRate: 27,
+          stockExemptionLimit: 67500,
+          stockExemptionYearlyIncrease: 1000,
+        },
+      }) as any
     );
     saveScenario(
       'Scenario B',
@@ -175,11 +204,25 @@ describe('NormalInputForm scenarios', () => {
           { phaseType: 'DEPOSIT', durationInMonths: 12, initialDeposit: 700, monthlyDeposit: 40 },
           { phaseType: 'WITHDRAW', durationInMonths: 12, withdrawAmount: 1000 },
         ],
-      } as any) as any
+      } as any, {
+        inflationPct: 2,
+        yearlyFeePct: 0.5,
+        taxExemptionDefaults: {
+          exemptionCardLimit: 51600,
+          exemptionCardYearlyIncrease: 1000,
+          stockExemptionTaxRate: 27,
+          stockExemptionLimit: 67500,
+          stockExemptionYearlyIncrease: 1000,
+        },
+      }) as any
     );
 
     const ref = React.createRef<NormalInputFormHandle>();
-    render(<SimulationForm ref={ref} />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
 
     act(() => {
       ref.current?.openSavedScenarios();
@@ -223,7 +266,11 @@ describe('NormalInputForm scenarios', () => {
     window.localStorage.clear();
 
     const ref = React.createRef<NormalInputFormHandle>();
-    render(<SimulationForm ref={ref} />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
 

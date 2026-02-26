@@ -21,6 +21,7 @@ vi.mock('qrcode.react', () => {
 import { startAdvancedSimulation } from '../../api/simulation';
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
 import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
 describe('NormalInputForm share links', () => {
   it('creates a share link for a saved scenario', async () => {
@@ -30,7 +31,11 @@ describe('NormalInputForm share links', () => {
     window.localStorage.clear();
 
     const ref = React.createRef<NormalInputFormHandle>();
-    render(<SimulationForm ref={ref} />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
 
     act(() => {
       ref.current?.openSavedScenarios();
@@ -95,7 +100,11 @@ describe('NormalInputForm share links', () => {
     const param = encodeScenarioToShareParam(request);
     window.history.pushState({}, '', `/simulation?scenario=${param}`);
 
-    render(<SimulationForm />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm />
+      </ExecutionDefaultsProvider>
+    );
 
     await waitFor(() => {
       expect(startAdvancedSimulation).toHaveBeenCalled();

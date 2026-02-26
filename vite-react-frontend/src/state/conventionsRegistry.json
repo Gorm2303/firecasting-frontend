@@ -1,0 +1,58 @@
+[
+  {
+    "id": "timing.simulationStep",
+    "group": "timing",
+    "label": "Simulation step",
+    "token": "month-by-month",
+    "description": "The simulator advances month-by-month.",
+    "usedBy": ["AssumptionsHub", "NormalPhaseList", "AssumptionsPanel"]
+  },
+  {
+    "id": "timing.initialDeposit",
+    "group": "timing",
+    "label": "Initial deposit timing",
+    "token": "beginning of phase",
+    "description": "A one-time initial deposit is applied at the beginning of the phase.",
+    "usedBy": ["AssumptionsHub", "NormalPhaseList"]
+  },
+  {
+    "id": "timing.monthlyDeposit",
+    "group": "timing",
+    "label": "Monthly deposit timing",
+    "token": "month-end",
+    "description": "Monthly deposits are applied at each month-end during the phase.",
+    "usedBy": ["AssumptionsHub", "NormalPhaseList", "AssumptionsPanel"]
+  },
+  {
+    "id": "timing.yearlyDepositIncrease",
+    "group": "timing",
+    "label": "Yearly deposit increase timing",
+    "token": "once per year",
+    "description": "Yearly deposit increases are applied once per simulation year.",
+    "usedBy": ["AssumptionsHub", "NormalPhaseList", "AssumptionsPanel"]
+  },
+  {
+    "id": "timing.inflationCompounds",
+    "group": "timing",
+    "label": "Inflation compounding timing",
+    "token": "year-end",
+    "description": "Inflation adjustments compound at year-end.",
+    "usedBy": ["AssumptionsHub", "AssumptionsPanel"]
+  },
+  {
+    "id": "timing.capitalGainsTaxApplied",
+    "group": "timing",
+    "label": "Capital gains tax timing",
+    "token": "month-end",
+    "description": "Capital gains tax is applied at month-end when withdrawals occur.",
+    "usedBy": ["AssumptionsHub", "AssumptionsPanel"]
+  },
+  {
+    "id": "timing.notionalGainsTaxApplied",
+    "group": "timing",
+    "label": "Notional gains tax timing",
+    "token": "year-end",
+    "description": "Notional gains tax is applied at year-end on gains since the previous year-end.",
+    "usedBy": ["AssumptionsHub", "AssumptionsPanel"]
+  }
+]
