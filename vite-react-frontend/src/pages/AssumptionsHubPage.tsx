@@ -306,6 +306,70 @@ const AssumptionsHubPage: React.FC = () => {
     };
   }, [draftAssumptions, getStepForUnit, getValueAtKeyPath, updateDraftValueAtKeyPath]);
 
+  const updateExecutionValueAtKeyPath = useMemo(() => {
+    return (keyPath: string, nextValue: unknown) => {
+      const prefix = 'executionDefaults.';
+      if (!keyPath.startsWith(prefix)) return;
+      const prop = keyPath.slice(prefix.length);
+      if (!prop) return;
+
+      updateExecutionDefaults({ [prop]: nextValue } as Partial<typeof executionDefaults>);
+    };
+  }, [executionDefaults, updateExecutionDefaults]);
+
+  const renderExecutionRegistryField = useMemo(() => {
+    const labelNode = (label: string, usedBy: string[]) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div>{label}</div>
+        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>
+      </div>
+    );
+
+    return (item: { keyPath: string; label: string; unit: string; usedBy: string[] }) => {
+      const inputId = `execution-${item.keyPath.replace(/\./g, '-')}`;
+      const prop = item.keyPath.replace('executionDefaults.', '');
+      const value = (executionDefaults as Record<string, unknown>)[prop];
+
+      if (item.unit === 'enum' && item.keyPath === 'executionDefaults.seedMode') {
+        return (
+          <div key={item.keyPath} style={fieldRowStyle}>
+            <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+              {labelNode(item.label, item.usedBy)}
+            </label>
+            <select
+              id={inputId}
+              value={typeof value === 'string' ? value : String(value ?? '')}
+              onChange={(e) => updateExecutionValueAtKeyPath(item.keyPath, e.target.value)}
+              style={inputStyle}
+            >
+              <option value="default">Default</option>
+              <option value="custom">Custom</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+        );
+      }
+
+      // Treat execution numeric fields as positive integers.
+      return (
+        <div key={item.keyPath} style={fieldRowStyle}>
+          <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+            {labelNode(item.label, item.usedBy)}
+          </label>
+          <input
+            id={inputId}
+            type="number"
+            min={1}
+            step={1}
+            value={typeof value === 'number' ? value : value == null ? '' : Number(value)}
+            onChange={(e) => updateExecutionValueAtKeyPath(item.keyPath, Number(e.target.value))}
+            style={inputStyle}
+          />
+        </div>
+      );
+    };
+  }, [executionDefaults, updateExecutionValueAtKeyPath]);
+
   return (
     <PageLayout variant="constrained">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -436,76 +500,7 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-            {executionRegistryItems.map((item) => {
-              if (item.keyPath === 'executionDefaults.paths') {
-                return (
-                  <div key={item.keyPath} style={fieldRowStyle}>
-                    <label htmlFor="execution-paths" style={{ fontWeight: 700 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div>{item.label}</div>
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
-                      </div>
-                    </label>
-                    <input
-                      id="execution-paths"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={executionDefaults.paths}
-                      onChange={(e) => updateExecutionDefaults({ paths: Number(e.target.value) })}
-                      style={inputStyle}
-                    />
-                  </div>
-                );
-              }
-
-              if (item.keyPath === 'executionDefaults.batchSize') {
-                return (
-                  <div key={item.keyPath} style={fieldRowStyle}>
-                    <label htmlFor="execution-batch" style={{ fontWeight: 700 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div>{item.label}</div>
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
-                      </div>
-                    </label>
-                    <input
-                      id="execution-batch"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={executionDefaults.batchSize}
-                      onChange={(e) => updateExecutionDefaults({ batchSize: Number(e.target.value) })}
-                      style={inputStyle}
-                    />
-                  </div>
-                );
-              }
-
-              if (item.keyPath === 'executionDefaults.seedMode') {
-                return (
-                  <div key={item.keyPath} style={fieldRowStyle}>
-                    <label htmlFor="execution-seed-mode" style={{ fontWeight: 700 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div>{item.label}</div>
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
-                      </div>
-                    </label>
-                    <select
-                      id="execution-seed-mode"
-                      value={executionDefaults.seedMode}
-                      onChange={(e) => updateExecutionDefaults({ seedMode: e.target.value as typeof executionDefaults.seedMode })}
-                      style={inputStyle}
-                    >
-                      <option value="default">Default</option>
-                      <option value="custom">Custom</option>
-                      <option value="random">Random</option>
-                    </select>
-                  </div>
-                );
-              }
-
-              return null;
-            })}
+            {executionRegistryItems.map(renderExecutionRegistryField)}
           </div>
         </div>
 
