@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { appendAssumptionsHistory } from './assumptionsHistory';
 
 export type Assumptions = {
   currency: string;
@@ -108,7 +109,7 @@ const asString = (v: unknown, fallback: string): string => {
   return typeof v === 'string' && v.trim() ? v : fallback;
 };
 
-const normalize = (raw: unknown): Assumptions => {
+export const normalizeAssumptions = (raw: unknown): Assumptions => {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
 
   const taxExemptionDefaults = (r.taxExemptionDefaults && typeof r.taxExemptionDefaults === 'object'
@@ -205,8 +206,8 @@ const areEqual = (a: Assumptions, b: Assumptions): boolean => {
 
 const normalizeStoreV2 = (raw: unknown): AssumptionsStoreV2 => {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const current = normalize(r.current);
-  const draft = normalize(r.draft);
+  const current = normalizeAssumptions(r.current);
+  const draft = normalizeAssumptions(r.draft);
   return { current, draft };
 };
 
@@ -236,7 +237,7 @@ export const loadCurrentAssumptionsFromStorage = (): Assumptions => {
   }
 
   const v1Raw = safeParse(window.localStorage.getItem(STORAGE_KEY_V1));
-  return normalize(v1Raw);
+  return normalizeAssumptions(v1Raw);
 };
 
 export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -252,7 +253,7 @@ export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const v1Raw = safeParse(window.localStorage.getItem(STORAGE_KEY_V1));
     migrateShowAssumptionsBarIfPresent(v1Raw);
-    const current = normalize(v1Raw);
+    const current = normalizeAssumptions(v1Raw);
     return { current, draft: current };
   });
 
@@ -266,11 +267,12 @@ export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [store]);
 
   const setDraftAssumptions = useCallback(
-    (next: Assumptions) => setStore((prev) => ({ ...prev, draft: normalize(next) })),
+    (next: Assumptions) => setStore((prev) => ({ ...prev, draft: normalizeAssumptions(next) })),
     []
   );
   const updateDraftAssumptions = useCallback(
-    (patch: Partial<Assumptions>) => setStore((prev) => ({ ...prev, draft: normalize({ ...prev.draft, ...patch }) })),
+    (patch: Partial<Assumptions>) =>
+      setStore((prev) => ({ ...prev, draft: normalizeAssumptions({ ...prev.draft, ...patch }) })),
     []
   );
   const resetDraftToCurrent = useCallback(
@@ -281,10 +283,16 @@ export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     () => setStore((prev) => ({ ...prev, draft: DEFAULT_ASSUMPTIONS })),
     []
   );
-  const saveDraft = useCallback(
-    () => setStore((prev) => ({ current: prev.draft, draft: prev.draft })),
-    []
-  );
+  const saveDraft = useCallback(() => {
+    setStore((prev) => {
+      try {
+        appendAssumptionsHistory(prev.draft);
+      } catch {
+        /* ignore */
+      }
+      return { current: prev.draft, draft: prev.draft };
+    });
+  }, []);
   const discardDraft = resetDraftToCurrent;
 
   const isDraftDirty = useMemo(() => !areEqual(store.current, store.draft), [store.current, store.draft]);

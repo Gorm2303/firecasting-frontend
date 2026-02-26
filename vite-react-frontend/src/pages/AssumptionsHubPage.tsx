@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import PageLayout from '../components/PageLayout';
-import { useAssumptions } from '../state/assumptions';
+import { normalizeAssumptions, useAssumptions } from '../state/assumptions';
 import { useUiPreferences } from '../state/uiPreferences';
 import { getDefaultExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
 import { listRegistryByTab } from '../state/assumptionsRegistry';
 import { listConventionsByGroup } from '../state/conventionsRegistry';
+import { listAssumptionsHistory } from '../state/assumptionsHistory';
 import { SkeletonWidgets, type SkeletonWidget } from './skeleton/SkeletonWidgets';
 
 const fieldRowStyle: React.CSSProperties = {
@@ -36,11 +37,14 @@ type HubTabId = 'baseline' | 'execution' | 'conventions' | 'preview';
 
 const AssumptionsHubPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<HubTabId>('baseline');
+  const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = React.useState(false);
+  const [importStatus, setImportStatus] = React.useState<string>('');
   const {
     currentAssumptions,
     draftAssumptions,
     isDraftDirty,
     updateDraftAssumptions,
+    setDraftAssumptions,
     resetDraftToCurrent,
     resetDraftToDefaults,
     saveDraft,
@@ -66,6 +70,48 @@ const AssumptionsHubPage: React.FC = () => {
   );
 
   const jsonPreview = useMemo(() => JSON.stringify(draftAssumptions, null, 2), [draftAssumptions]);
+
+  const assumptionsHistory = useMemo(() => {
+    if (!showAssumptionsChangeLog) return [];
+    return listAssumptionsHistory();
+  }, [showAssumptionsChangeLog]);
+
+  const exportAssumptionsJson = useMemo(() => {
+    return () => {
+      const payload = {
+        current: currentAssumptions,
+        draft: draftAssumptions,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'assumptions-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }, [currentAssumptions, draftAssumptions]);
+
+  const importAssumptionsJson = useMemo(() => {
+    return async (file: File | null) => {
+      setImportStatus('');
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const raw = JSON.parse(text);
+
+        const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+        const imported = (candidate.draft ?? candidate.current ?? raw) as unknown;
+
+        setDraftAssumptions(normalizeAssumptions(imported));
+        setImportStatus('Imported into draft. Review and click Save to apply.');
+      } catch {
+        setImportStatus('Import failed: invalid JSON.');
+      }
+    };
+  }, [setDraftAssumptions]);
 
   const formatValue = useMemo(() => {
     const stringify = (v: unknown): string => {
@@ -590,16 +636,66 @@ const AssumptionsHubPage: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" disabled style={{ opacity: 0.7 }}>
-                Export JSON (placeholder)
+              <button type="button" onClick={exportAssumptionsJson}>
+                Export JSON
               </button>
-              <button type="button" disabled style={{ opacity: 0.7 }}>
-                Import JSON (placeholder)
-              </button>
-              <button type="button" disabled style={{ opacity: 0.7 }}>
-                View change log (placeholder)
+              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <input
+                  type="file"
+                  accept="application/json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files && e.target.files.length ? e.target.files[0] : null;
+                    void importAssumptionsJson(file);
+                    e.target.value = '';
+                  }}
+                />
+                <span
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid var(--fc-card-border)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  Import JSON
+                </span>
+              </label>
+              <button type="button" onClick={() => setShowAssumptionsChangeLog((v) => !v)}>
+                {showAssumptionsChangeLog ? 'Hide change log' : 'View change log'}
               </button>
             </div>
+
+            {importStatus && <div style={{ fontSize: 13, opacity: 0.85 }}>{importStatus}</div>}
+
+            {showAssumptionsChangeLog && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Change log</div>
+                {assumptionsHistory.length === 0 ? (
+                  <div style={{ opacity: 0.8, fontSize: 13 }}>No saved snapshots yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {assumptionsHistory.slice(0, 20).map((e) => (
+                      <div
+                        key={e.id}
+                        style={{
+                          padding: '10px 12px',
+                          border: '1px solid var(--fc-card-border)',
+                          borderRadius: 12,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800 }}>{new Date(e.createdAt).toLocaleString()}</div>
+                        <div style={{ opacity: 0.82, fontSize: 13, marginTop: 2 }}>
+                          {e.assumptions.currency} · Inflation {e.assumptions.inflationPct}% · Fee {e.assumptions.yearlyFeePct}% · Return{' '}
+                          {e.assumptions.expectedReturnPct}% · SWR {e.assumptions.safeWithdrawalPct}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
