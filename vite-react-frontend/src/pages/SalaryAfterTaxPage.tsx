@@ -189,7 +189,11 @@ const SalaryAfterTaxPage: React.FC = () => {
     { label: 'AM base', value: breakdown.amBaseAnnualDkk, note: 'gross - pension - ATP' },
     { label: 'AM-bidrag (8%)', value: -breakdown.amBidragAnnualDkk, note: '8% of AM base' },
     { label: 'Personal income after AM', value: breakdown.personalIncomeAfterAmAnnualDkk, note: 'AM base - AM-bidrag' },
-    { label: 'Personfradrag', value: -breakdown.personfradragAnnualDkk, note: '2026 default' },
+    {
+      label: 'Personfradrag',
+      value: -breakdown.personfradragAnnualDkk,
+      note: `first ${formatDkk(DK_TAX_YEAR_2026.personfradragAnnualDkk)} of income`,
+    },
     {
       label: 'Beskæftigelsesfradrag',
       value: -breakdown.beskaeftigelsesfradragAnnualDkk,

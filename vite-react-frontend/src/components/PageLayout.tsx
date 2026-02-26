@@ -1,4 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
+import AssumptionsSummaryBar from './AssumptionsSummaryBar';
+import { useAssumptions } from '../state/assumptions';
 
 export type PageLayoutVariant = 'constrained' | 'wide';
 
@@ -14,6 +16,7 @@ type Props = {
 const PINNED_NAV_WIDTH_PX = 240;
 
 const PinnedNavGutterContext = React.createContext<boolean>(false);
+const AssumptionsBarContext = React.createContext<boolean>(false);
 
 const usePinnedNav = (): boolean => {
   const [isPinned, setIsPinned] = useState(() => {
@@ -52,6 +55,9 @@ const PageLayout: React.FC<Props> = ({
   // card layout). In pinned layout we must only compensate once, otherwise the
   // inner content shifts left.
   const parentAlreadyHasPinnedGutter = useContext(PinnedNavGutterContext);
+  const parentAlreadyHasAssumptionsBar = useContext(AssumptionsBarContext);
+
+  const { assumptions } = useAssumptions();
 
   // In pinned layout, pages should be centered relative to the full viewport
   // by adding a right gutter equal to the pinned nav width.
@@ -61,9 +67,11 @@ const PageLayout: React.FC<Props> = ({
     () => parentAlreadyHasPinnedGutter || pinnedRightGutterPx > 0,
     [parentAlreadyHasPinnedGutter, pinnedRightGutterPx]
   );
+  const provideAssumptionsBar = true;
 
   return (
     <PinnedNavGutterContext.Provider value={providePinnedGutter}>
+      <AssumptionsBarContext.Provider value={provideAssumptionsBar}>
       <div
         style={{
           width: '100%',
@@ -81,9 +89,15 @@ const PageLayout: React.FC<Props> = ({
               : { width: '100%' }
           }
         >
+          {!parentAlreadyHasAssumptionsBar && assumptions.showAssumptionsBar && (
+            <div style={{ marginBottom: 12 }}>
+              <AssumptionsSummaryBar />
+            </div>
+          )}
           {children}
         </div>
       </div>
+      </AssumptionsBarContext.Provider>
     </PinnedNavGutterContext.Provider>
   );
 };

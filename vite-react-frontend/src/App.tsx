@@ -1,17 +1,8 @@
 // App.tsx
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import InfoPage from './pages/InfoPage';
-import ExplorePage from './pages/ExplorePage';
-import SimulationPage from './pages/SimulationPage';
-import TutorialPage from './pages/TutorialPage';
-import TutorialLandingPage from './pages/TutorialLandingPage';
-import RunDiffPage from './pages/RunDiffPage';
+import { Link } from 'react-router-dom';
 import AppNavDrawer from './components/AppNavDrawer';
-import SalaryAfterTaxPage from './pages/SalaryAfterTaxPage';
-import ProgressTrackerPage from './pages/ProgressTrackerPage';
-import MoneyPerspectivePage from './pages/MoneyPerspectivePage';
-import LandingPage from './pages/LandingPage';
+import AppRoutes from './AppRoutes';
 
 const App: React.FC = () => {
   const [isPinnedNav, setIsPinnedNav] = useState(() => {
@@ -41,22 +32,7 @@ const App: React.FC = () => {
           <AppNavDrawer />
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/tutorial" element={<TutorialLandingPage />} />
-              <Route path="/tutorial/:mode" element={<TutorialPage />} />
-              <Route path="/diff-scenarios" element={<RunDiffPage />} />
-              <Route path="/salary-after-tax" element={<SalaryAfterTaxPage />} />
-              <Route path="/progress-tracker" element={<ProgressTrackerPage />} />
-              <Route path="/money-perspective" element={<MoneyPerspectivePage />} />
-              <Route path="/simulation" element={<SimulationPage />} />
-              <Route path="/simulation/tutorial" element={<TutorialLandingPage />} />
-              <Route path="/simulation/tutorial/:mode" element={<TutorialPage />} />
-              <Route path="/simulation/diff" element={<RunDiffPage />} />
-              <Route path="/explore" element={<ExplorePage />} />
-              <Route path="/info" element={<InfoPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AppRoutes />
           </div>
         </div>
       ) : (
@@ -87,22 +63,7 @@ const App: React.FC = () => {
           </header>
 
           <div style={{ flex: 1 }}>
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/tutorial" element={<TutorialLandingPage />} />
-              <Route path="/tutorial/:mode" element={<TutorialPage />} />
-              <Route path="/diff-scenarios" element={<RunDiffPage />} />
-              <Route path="/salary-after-tax" element={<SalaryAfterTaxPage />} />
-              <Route path="/progress-tracker" element={<ProgressTrackerPage />} />
-              <Route path="/money-perspective" element={<MoneyPerspectivePage />} />
-              <Route path="/simulation" element={<SimulationPage />} />
-              <Route path="/simulation/tutorial" element={<TutorialLandingPage />} />
-              <Route path="/simulation/tutorial/:mode" element={<TutorialPage />} />
-              <Route path="/simulation/diff" element={<RunDiffPage />} />
-              <Route path="/explore" element={<ExplorePage />} />
-              <Route path="/info" element={<InfoPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AppRoutes />
           </div>
         </div>
       )}
