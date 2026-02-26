@@ -30,7 +30,6 @@ const base64Decode = (b64: string): string => {
     return new TextDecoder().decode(bytes);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const BufferAny = (globalThis as any).Buffer as any;
   if (BufferAny) return BufferAny.from(b64, 'base64').toString('utf-8');
 

@@ -59,14 +59,20 @@ function makePchipInterpolator(xs: number[], ys: number[]) {
 
   if (n === 0) {
     return {
-      evalAt: (_x: number) => 0,
+      evalAt: (_x: number) => {
+        void _x;
+        return 0;
+      },
     };
   }
 
   if (n === 1) {
     const y0 = Number(ys[0]) || 0;
     return {
-      evalAt: (_x: number) => y0,
+      evalAt: (_x: number) => {
+        void _x;
+        return y0;
+      },
     };
   }
 
@@ -330,12 +336,12 @@ export function transformYearlyToMonthly(yearly: YearlySummary[], options?: Tran
       }
 
       // Spline interpolation per metric across all known points.
-      let averageCapital = interpAverage.evalAt(idx);
+      const averageCapital = interpAverage.evalAt(idx);
       let medianCapital = interpMedian.evalAt(idx);
       let minCapital = interpMin.evalAt(idx);
       let maxCapital = interpMax.evalAt(idx);
       let stdDevCapital = interpStd.evalAt(idx);
-      let cumulativeGrowthRate = interpGrowth.evalAt(idx);
+      const cumulativeGrowthRate = interpGrowth.evalAt(idx);
       let quantile5 = interpQ5.evalAt(idx);
       let quantile25 = interpQ25.evalAt(idx);
       let quantile75 = interpQ75.evalAt(idx);

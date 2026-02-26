@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:assumptions-registry": "node scripts/generate-assumptions-registry.mjs"
   },
   "dependencies": {
     "lz-string": "^1.5.0",
