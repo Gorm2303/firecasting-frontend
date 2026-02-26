@@ -102,7 +102,6 @@ const FeedbackPage: React.FC = () => {
   }, [vote, voteKey]);
 
   const onVote = (id: PaymentModelId) => {
-    if (vote) return;
     setVote(id);
   };
 
@@ -120,7 +119,7 @@ const FeedbackPage: React.FC = () => {
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 6 }}>Payment model vote</div>
           <div style={{ opacity: 0.85 }}>
             {vote ? (
-              <>Your vote is recorded. Thanks.</>
+              <>Your vote is recorded. You can switch to a different option at any time.</>
             ) : (
               <>Choose one option below. This is limited to one vote per user (currently enforced locally in your browser).</>
             )}
@@ -147,11 +146,11 @@ const FeedbackPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => onVote(m.id)}
-                    disabled={!!vote}
+                    disabled={vote === m.id}
                     style={{ padding: '8px 10px' }}
-                    aria-disabled={!!vote}
+                    aria-disabled={vote === m.id}
                   >
-                    {vote === m.id ? 'Voted' : 'Vote'}
+                    {vote === m.id ? 'Voted' : vote ? 'Switch vote' : 'Vote'}
                   </button>
                 </div>
 

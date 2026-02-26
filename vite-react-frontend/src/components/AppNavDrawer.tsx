@@ -141,6 +141,8 @@ export const NAV_GROUPS: NavGroup[] = [
 
 const LIVE_PATHS = new Set<string>([
   '/info',
+  '/feedback',
+  '/assumptions',
   '/tutorial',
   '/diff-scenarios',
   '/salary-after-tax',

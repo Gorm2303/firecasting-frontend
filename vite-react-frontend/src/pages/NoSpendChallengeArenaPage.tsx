@@ -18,7 +18,7 @@ type NoSpendChallenge = {
   logs: NoSpendLog[];
 };
 
-const STORAGE_KEY = 'firecasting.noSpendChallenge.v1';
+const STORAGE_KEY = 'firecasting:no-spend-challenge:v1';
 
 function todayYmd(): string {
   const d = new Date();
@@ -76,7 +76,13 @@ const tableCell: React.CSSProperties = {
 };
 
 const NoSpendChallengeArenaPage: React.FC = () => {
-  const [challenge, setChallenge] = useState<NoSpendChallenge | null>(() => safeParseChallenge(localStorage.getItem(STORAGE_KEY)));
+  const [challenge, setChallenge] = useState<NoSpendChallenge | null>(() => {
+    try {
+      return safeParseChallenge(localStorage.getItem(STORAGE_KEY));
+    } catch {
+      return null;
+    }
+  });
 
   const [durationDays, setDurationDays] = useState(14);
   const [startedAt, setStartedAt] = useState(() => todayYmd());
@@ -89,11 +95,15 @@ const NoSpendChallengeArenaPage: React.FC = () => {
   const [note, setNote] = useState('');
 
   useEffect(() => {
-    if (!challenge) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
+    try {
+      if (!challenge) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(challenge));
+    } catch {
+      // storage unavailable or quota exceeded; UI continues without persistence
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(challenge));
   }, [challenge]);
 
   const endDate = useMemo(() => {
@@ -125,9 +135,9 @@ const NoSpendChallengeArenaPage: React.FC = () => {
   function daysBetween(startYmd: string, endYmd: string): number {
     const [sy, sm, sd] = startYmd.split('-').map((x) => Number(x));
     const [ey, em, ed] = endYmd.split('-').map((x) => Number(x));
-    const start = new Date(sy, sm - 1, sd);
-    const end = new Date(ey, em - 1, ed);
-    const ms = end.getTime() - start.getTime();
+    const startMs = Date.UTC(sy, sm - 1, sd);
+    const endMs = Date.UTC(ey, em - 1, ed);
+    const ms = endMs - startMs;
     return Math.floor(ms / (24 * 60 * 60 * 1000));
   }
 
