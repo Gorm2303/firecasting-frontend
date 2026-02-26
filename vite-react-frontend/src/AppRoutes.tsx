@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import ExplorePage from './pages/ExplorePage';
 import DecisionJournalPage from './pages/DecisionJournalPage';
+import CategoryLandingPage from './pages/CategoryLandingPage';
 import InfoPage from './pages/InfoPage';
 import LandingPage from './pages/LandingPage';
 import MoneyPerspectivePage from './pages/MoneyPerspectivePage';
@@ -1340,6 +1341,7 @@ const AppRoutes: React.FC = () => {
     <Routes>
       {/* Firecasting */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/category/:categoryId" element={<CategoryLandingPage />} />
       <Route path="/info" element={<InfoPage />} />
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/assumptions" element={<AssumptionsHubPage />} />
