@@ -9,6 +9,75 @@ export type Assumptions = {
   expectedReturnPct: number;
   safeWithdrawalPct: number;
 
+  /** Income assumptions and conventions shared across cashflow/tax/simulator views. */
+  incomeSetupDefaults: {
+    incomeModelType: 'grossFirst' | 'netFirst';
+    payCadence: 'monthly' | 'biweekly' | 'yearly';
+    salaryGrowthRule: 'fixedPct' | 'inflationLinked';
+    bonusFrequency: 'none' | 'yearly' | 'monthly';
+    bonusPct: number;
+    taxEnabled: boolean;
+    taxRegime: 'DK' | 'none';
+  };
+
+  /** Deposit strategy conventions (defaults used when a strategy does not specify). */
+  depositStrategyDefaults: {
+    depositTiming: 'startOfMonth' | 'endOfMonth';
+    contributionCadence: 'monthly' | 'yearly';
+    escalationMode: 'none' | 'pctYearly' | 'fixedDkkYearly';
+    escalationPct: number;
+    escalationDkkPerYear: number;
+    inflationAdjustContributions: boolean;
+    emergencyBufferTargetMonths: number;
+    routingPriority: 'buffer>debt>wrappers>taxable' | 'buffer>goals>debt>wrappers>taxable';
+  };
+
+  /** Passive (market/portfolio) conventions beyond the core world-model knobs. */
+  passiveStrategyDefaults: {
+    returnModel: 'fixed' | 'normal' | 'historical';
+    volatilityPct: number;
+    rebalancing: 'none' | 'annual' | 'threshold';
+    cashDragPct: number;
+  };
+
+  /** Withdrawal conventions (templates/philosophy defaults, not a full strategy editor). */
+  withdrawalStrategyDefaults: {
+    withdrawalRule: 'fixedPct' | 'fixedReal' | 'guardrails';
+    inflationAdjustSpending: boolean;
+    guardrailFloorPct: number;
+    guardrailCeilingPct: number;
+    maxCutPctPerYear: number;
+    cashBufferTargetMonths: number;
+  };
+
+  /** Policy builder conventions (signals/governance defaults). */
+  policyBuilderDefaults: {
+    evaluationFrequency: 'monthly' | 'quarterly' | 'yearly';
+    conflictResolution: 'priority' | 'mostConservative' | 'firstMatch';
+    cooldownMonths: number;
+    maxSpendingCutPctPerYear: number;
+    maxDepositIncreasePctPerYear: number;
+    warnFailureRiskPct: number;
+    criticalFailureRiskPct: number;
+  };
+
+  /** FIRE milestone definitions and conventions. */
+  fireMilestonesDefaults: {
+    confidenceTarget: 'P50' | 'P90' | 'P95';
+    milestoneStability: 'instant' | 'sustained';
+    sustainedMonths: number;
+    baristaFireRequiredMonthlyIncomeDkk: number;
+    leanSpendingMonthlyDkk: number;
+    fatSpendingMonthlyDkk: number;
+  };
+
+  /** Goal planner conventions and defaults. */
+  goalPlannerDefaults: {
+    fundingOrder: 'buffer>debt>goals>fi' | 'buffer>goals>debt>fi';
+    goalInflationHandling: 'nominal' | 'real';
+    goalRiskHandling: 'default' | 'highCertainty';
+  };
+
   /** Defaults for simulator tax exemptions (DK-specific modeling inputs). */
   taxExemptionDefaults: {
     exemptionCardLimit: number;
@@ -50,6 +119,68 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
   yearlyFeePct: 0.5,
   expectedReturnPct: 5,
   safeWithdrawalPct: 4,
+
+  incomeSetupDefaults: {
+    incomeModelType: 'grossFirst',
+    payCadence: 'monthly',
+    salaryGrowthRule: 'fixedPct',
+    bonusFrequency: 'none',
+    bonusPct: 0,
+    taxEnabled: true,
+    taxRegime: 'DK',
+  },
+
+  depositStrategyDefaults: {
+    depositTiming: 'endOfMonth',
+    contributionCadence: 'monthly',
+    escalationMode: 'none',
+    escalationPct: 0,
+    escalationDkkPerYear: 0,
+    inflationAdjustContributions: false,
+    emergencyBufferTargetMonths: 6,
+    routingPriority: 'buffer>debt>wrappers>taxable',
+  },
+
+  passiveStrategyDefaults: {
+    returnModel: 'fixed',
+    volatilityPct: 15,
+    rebalancing: 'none',
+    cashDragPct: 0,
+  },
+
+  withdrawalStrategyDefaults: {
+    withdrawalRule: 'fixedPct',
+    inflationAdjustSpending: true,
+    guardrailFloorPct: 3,
+    guardrailCeilingPct: 5,
+    maxCutPctPerYear: 10,
+    cashBufferTargetMonths: 6,
+  },
+
+  policyBuilderDefaults: {
+    evaluationFrequency: 'monthly',
+    conflictResolution: 'priority',
+    cooldownMonths: 3,
+    maxSpendingCutPctPerYear: 10,
+    maxDepositIncreasePctPerYear: 10,
+    warnFailureRiskPct: 10,
+    criticalFailureRiskPct: 20,
+  },
+
+  fireMilestonesDefaults: {
+    confidenceTarget: 'P90',
+    milestoneStability: 'instant',
+    sustainedMonths: 12,
+    baristaFireRequiredMonthlyIncomeDkk: 0,
+    leanSpendingMonthlyDkk: 12_000,
+    fatSpendingMonthlyDkk: 30_000,
+  },
+
+  goalPlannerDefaults: {
+    fundingOrder: 'buffer>debt>goals>fi',
+    goalInflationHandling: 'real',
+    goalRiskHandling: 'default',
+  },
 
   taxExemptionDefaults: {
     exemptionCardLimit: 51600,
@@ -110,8 +241,41 @@ const asString = (v: unknown, fallback: string): string => {
   return typeof v === 'string' && v.trim() ? v : fallback;
 };
 
+const asEnum = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => {
+  const s = typeof v === 'string' ? (v as string).trim() : '';
+  return (allowed as readonly string[]).includes(s) ? (s as T) : fallback;
+};
+
 export const normalizeAssumptions = (raw: unknown): Assumptions => {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+
+  const incomeDefaults = (r.incomeSetupDefaults && typeof r.incomeSetupDefaults === 'object'
+    ? (r.incomeSetupDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const depositDefaults = (r.depositStrategyDefaults && typeof r.depositStrategyDefaults === 'object'
+    ? (r.depositStrategyDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const passiveDefaults = (r.passiveStrategyDefaults && typeof r.passiveStrategyDefaults === 'object'
+    ? (r.passiveStrategyDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const withdrawalDefaults = (r.withdrawalStrategyDefaults && typeof r.withdrawalStrategyDefaults === 'object'
+    ? (r.withdrawalStrategyDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const policyDefaults = (r.policyBuilderDefaults && typeof r.policyBuilderDefaults === 'object'
+    ? (r.policyBuilderDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const milestoneDefaults = (r.fireMilestonesDefaults && typeof r.fireMilestonesDefaults === 'object'
+    ? (r.fireMilestonesDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const goalDefaults = (r.goalPlannerDefaults && typeof r.goalPlannerDefaults === 'object'
+    ? (r.goalPlannerDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
 
   const taxExemptionDefaults = (r.taxExemptionDefaults && typeof r.taxExemptionDefaults === 'object'
     ? (r.taxExemptionDefaults as Record<string, unknown>)
@@ -131,6 +295,68 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
     yearlyFeePct: asNumber(r.yearlyFeePct, DEFAULT_ASSUMPTIONS.yearlyFeePct),
     expectedReturnPct: asNumber(r.expectedReturnPct, DEFAULT_ASSUMPTIONS.expectedReturnPct),
     safeWithdrawalPct: asNumber(r.safeWithdrawalPct, DEFAULT_ASSUMPTIONS.safeWithdrawalPct),
+
+    incomeSetupDefaults: {
+      incomeModelType: asEnum(incomeDefaults.incomeModelType, ['grossFirst', 'netFirst'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.incomeModelType),
+      payCadence: asEnum(incomeDefaults.payCadence, ['monthly', 'biweekly', 'yearly'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.payCadence),
+      salaryGrowthRule: asEnum(incomeDefaults.salaryGrowthRule, ['fixedPct', 'inflationLinked'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.salaryGrowthRule),
+      bonusFrequency: asEnum(incomeDefaults.bonusFrequency, ['none', 'yearly', 'monthly'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusFrequency),
+      bonusPct: asNumber(incomeDefaults.bonusPct, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusPct),
+      taxEnabled: incomeDefaults.taxEnabled === true,
+      taxRegime: asEnum(incomeDefaults.taxRegime, ['DK', 'none'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.taxRegime),
+    },
+
+    depositStrategyDefaults: {
+      depositTiming: asEnum(depositDefaults.depositTiming, ['startOfMonth', 'endOfMonth'] as const, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.depositTiming),
+      contributionCadence: asEnum(depositDefaults.contributionCadence, ['monthly', 'yearly'] as const, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.contributionCadence),
+      escalationMode: asEnum(depositDefaults.escalationMode, ['none', 'pctYearly', 'fixedDkkYearly'] as const, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.escalationMode),
+      escalationPct: asNumber(depositDefaults.escalationPct, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.escalationPct),
+      escalationDkkPerYear: asNumber(depositDefaults.escalationDkkPerYear, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.escalationDkkPerYear),
+      inflationAdjustContributions: depositDefaults.inflationAdjustContributions === true,
+      emergencyBufferTargetMonths: Math.max(0, Math.trunc(asNumber(depositDefaults.emergencyBufferTargetMonths, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.emergencyBufferTargetMonths))),
+      routingPriority: asEnum(depositDefaults.routingPriority, ['buffer>debt>wrappers>taxable', 'buffer>goals>debt>wrappers>taxable'] as const, DEFAULT_ASSUMPTIONS.depositStrategyDefaults.routingPriority),
+    },
+
+    passiveStrategyDefaults: {
+      returnModel: asEnum(passiveDefaults.returnModel, ['fixed', 'normal', 'historical'] as const, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.returnModel),
+      volatilityPct: asNumber(passiveDefaults.volatilityPct, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.volatilityPct),
+      rebalancing: asEnum(passiveDefaults.rebalancing, ['none', 'annual', 'threshold'] as const, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.rebalancing),
+      cashDragPct: asNumber(passiveDefaults.cashDragPct, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.cashDragPct),
+    },
+
+    withdrawalStrategyDefaults: {
+      withdrawalRule: asEnum(withdrawalDefaults.withdrawalRule, ['fixedPct', 'fixedReal', 'guardrails'] as const, DEFAULT_ASSUMPTIONS.withdrawalStrategyDefaults.withdrawalRule),
+      inflationAdjustSpending: withdrawalDefaults.inflationAdjustSpending !== false,
+      guardrailFloorPct: asNumber(withdrawalDefaults.guardrailFloorPct, DEFAULT_ASSUMPTIONS.withdrawalStrategyDefaults.guardrailFloorPct),
+      guardrailCeilingPct: asNumber(withdrawalDefaults.guardrailCeilingPct, DEFAULT_ASSUMPTIONS.withdrawalStrategyDefaults.guardrailCeilingPct),
+      maxCutPctPerYear: asNumber(withdrawalDefaults.maxCutPctPerYear, DEFAULT_ASSUMPTIONS.withdrawalStrategyDefaults.maxCutPctPerYear),
+      cashBufferTargetMonths: Math.max(0, Math.trunc(asNumber(withdrawalDefaults.cashBufferTargetMonths, DEFAULT_ASSUMPTIONS.withdrawalStrategyDefaults.cashBufferTargetMonths))),
+    },
+
+    policyBuilderDefaults: {
+      evaluationFrequency: asEnum(policyDefaults.evaluationFrequency, ['monthly', 'quarterly', 'yearly'] as const, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.evaluationFrequency),
+      conflictResolution: asEnum(policyDefaults.conflictResolution, ['priority', 'mostConservative', 'firstMatch'] as const, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.conflictResolution),
+      cooldownMonths: Math.max(0, Math.trunc(asNumber(policyDefaults.cooldownMonths, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.cooldownMonths))),
+      maxSpendingCutPctPerYear: asNumber(policyDefaults.maxSpendingCutPctPerYear, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.maxSpendingCutPctPerYear),
+      maxDepositIncreasePctPerYear: asNumber(policyDefaults.maxDepositIncreasePctPerYear, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.maxDepositIncreasePctPerYear),
+      warnFailureRiskPct: asNumber(policyDefaults.warnFailureRiskPct, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.warnFailureRiskPct),
+      criticalFailureRiskPct: asNumber(policyDefaults.criticalFailureRiskPct, DEFAULT_ASSUMPTIONS.policyBuilderDefaults.criticalFailureRiskPct),
+    },
+
+    fireMilestonesDefaults: {
+      confidenceTarget: asEnum(milestoneDefaults.confidenceTarget, ['P50', 'P90', 'P95'] as const, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.confidenceTarget),
+      milestoneStability: asEnum(milestoneDefaults.milestoneStability, ['instant', 'sustained'] as const, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.milestoneStability),
+      sustainedMonths: Math.max(0, Math.trunc(asNumber(milestoneDefaults.sustainedMonths, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.sustainedMonths))),
+      baristaFireRequiredMonthlyIncomeDkk: asNumber(milestoneDefaults.baristaFireRequiredMonthlyIncomeDkk, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.baristaFireRequiredMonthlyIncomeDkk),
+      leanSpendingMonthlyDkk: asNumber(milestoneDefaults.leanSpendingMonthlyDkk, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.leanSpendingMonthlyDkk),
+      fatSpendingMonthlyDkk: asNumber(milestoneDefaults.fatSpendingMonthlyDkk, DEFAULT_ASSUMPTIONS.fireMilestonesDefaults.fatSpendingMonthlyDkk),
+    },
+
+    goalPlannerDefaults: {
+      fundingOrder: asEnum(goalDefaults.fundingOrder, ['buffer>debt>goals>fi', 'buffer>goals>debt>fi'] as const, DEFAULT_ASSUMPTIONS.goalPlannerDefaults.fundingOrder),
+      goalInflationHandling: asEnum(goalDefaults.goalInflationHandling, ['nominal', 'real'] as const, DEFAULT_ASSUMPTIONS.goalPlannerDefaults.goalInflationHandling),
+      goalRiskHandling: asEnum(goalDefaults.goalRiskHandling, ['default', 'highCertainty'] as const, DEFAULT_ASSUMPTIONS.goalPlannerDefaults.goalRiskHandling),
+    },
 
     taxExemptionDefaults: {
       exemptionCardLimit: asNumber(
