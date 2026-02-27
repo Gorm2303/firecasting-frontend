@@ -18,6 +18,7 @@ for (const item of items) {
 
 const tabOrder = [
   'worldModel',
+  'execution',
   'incomeSetup',
   'depositStrategy',
   'simulatorTax',
@@ -49,7 +50,7 @@ const filterUsedBy = (usedBy) => {
         .filter((x) => !isHubInternal(x))
     : [];
 
-  return Array.from(new Set(cleaned));
+  return Array.from(new Set(cleaned)).sort((a, b) => a.localeCompare(b));
 };
 
 const renderItem = (x) => {
@@ -69,7 +70,8 @@ for (const tab of orderedTabs) {
   const list = byTab.get(tab) ?? [];
   if (list.length === 0) continue;
   md += `\n## ${tab}\n\n`;
-  for (const item of list) md += renderItem(item) + '\n';
+  const sorted = [...list].sort((a, b) => String(a.keyPath ?? '').localeCompare(String(b.keyPath ?? '')));
+  for (const item of sorted) md += renderItem(item) + '\n';
 }
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
