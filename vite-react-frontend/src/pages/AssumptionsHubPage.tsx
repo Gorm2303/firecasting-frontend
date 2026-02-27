@@ -782,23 +782,6 @@ const AssumptionsHubPage: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
                   {coreWorldModelRegistryItems.map(renderAssumptionRegistryField)}
-
-                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Simulator tax exemption defaults</div>
-                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
-                    Defaults used when tax exemption rules are enabled in simulator phases.
-                  </div>
-
-                  {simulatorTaxRegistryItems.map(renderAssumptionRegistryField)}
-
-                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Salary Taxator defaults</div>
-                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Salary Taxator.</div>
-
-                  {salaryTaxatorRegistryItems.map(renderAssumptionRegistryField)}
-
-                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Money Perspectivator defaults</div>
-                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Money Perspectivator.</div>
-
-                  {moneyPerspectiveRegistryItems.map(renderAssumptionRegistryField)}
                 </div>
 
                 <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
@@ -810,6 +793,20 @@ const AssumptionsHubPage: React.FC = () => {
             {activeTab === 'income' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
                 {incomeSetupRegistryItems.map(renderAssumptionRegistryField)}
+
+                <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Salary Taxator defaults</div>
+                <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Salary Taxator.</div>
+                {salaryTaxatorRegistryItems.map(renderAssumptionRegistryField)}
+
+                <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Money Perspectivator defaults</div>
+                <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Money Perspectivator.</div>
+                {moneyPerspectiveRegistryItems.map(renderAssumptionRegistryField)}
+
+                <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Simulator tax exemption defaults</div>
+                <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
+                  Defaults used when tax exemption rules are enabled in simulator phases.
+                </div>
+                {simulatorTaxRegistryItems.map(renderAssumptionRegistryField)}
               </div>
             )}
 
