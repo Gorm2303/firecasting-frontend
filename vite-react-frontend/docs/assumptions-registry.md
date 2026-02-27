@@ -8,17 +8,17 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **currency** — Currency
   - Default: "DKK" (string)
-  - Used by: AssumptionsSummaryBar, MoneyPerspective
+  - Used by: MoneyPerspective
   - Overrideable by strategy: no
 
 - **inflationPct** — Inflation (%/year)
   - Default: 2 (pct)
-  - Used by: Simulation, MoneyPerspective
+  - Used by: Simulation, MoneyPerspective, Explore, Tutorial
   - Overrideable by strategy: no
 
 - **yearlyFeePct** — Yearly fee (%/year)
   - Default: 0.5 (pct)
-  - Used by: Simulation, MoneyPerspective
+  - Used by: Simulation, MoneyPerspective, Tutorial
   - Overrideable by strategy: no
 
 - **expectedReturnPct** — Expected return (%/year)
@@ -28,7 +28,7 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **safeWithdrawalPct** — Safe withdrawal rate (%/year)
   - Default: 4 (pct)
-  - Used by: AssumptionsSummaryBar
+  - Used by: —
   - Overrideable by strategy: no
 
 
@@ -72,6 +72,21 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
   - Used by: SalaryTaxator
   - Overrideable by strategy: yes
 
+- **salaryTaxatorDefaults.churchMember** — Church member
+  - Default: false (boolean)
+  - Used by: SalaryTaxator
+  - Overrideable by strategy: yes
+
+- **salaryTaxatorDefaults.employeePensionRatePct** — Employee pension rate (%)
+  - Default: 0 (pct)
+  - Used by: SalaryTaxator
+  - Overrideable by strategy: yes
+
+- **salaryTaxatorDefaults.otherDeductionsAnnualDkk** — Other deductions (DKK/year)
+  - Default: 0 (dkkPerYear)
+  - Used by: SalaryTaxator
+  - Overrideable by strategy: yes
+
 - **salaryTaxatorDefaults.atpMonthlyDkk** — ATP employee share (DKK/month)
   - Default: 99 (dkkPerMonth)
   - Used by: SalaryTaxator
@@ -80,5 +95,46 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 - **salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk** — ATP eligibility proxy (gross monthly threshold DKK)
   - Default: 2340 (dkkPerMonth)
   - Used by: SalaryTaxator
+  - Overrideable by strategy: yes
+
+
+## moneyPerspective
+
+- **moneyPerspectiveDefaults.workingHoursPerMonth** — Working hours per month
+  - Default: 160 (hoursPerMonth)
+  - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+- **moneyPerspectiveDefaults.payRaisePct** — Pay raise (%/year)
+  - Default: 2 (pct)
+  - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+- **moneyPerspectiveDefaults.timeHorizonYears** — Time horizon (years)
+  - Default: 10 (years)
+  - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+- **moneyPerspectiveDefaults.coreExpenseMonthlyDkk** — Core expense (DKK/month)
+  - Default: 12000 (dkkPerMonth)
+  - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+
+## execution
+
+- **executionDefaults.paths** — Paths (runs)
+  - Default: 10000 (count)
+  - Used by: Simulation
+  - Overrideable by strategy: yes
+
+- **executionDefaults.batchSize** — Batch size
+  - Default: 10000 (count)
+  - Used by: Simulation
+  - Overrideable by strategy: yes
+
+- **executionDefaults.seedMode** — Master seed mode
+  - Default: "default" (enum)
+  - Used by: Simulation
   - Overrideable by strategy: yes
 

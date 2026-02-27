@@ -36,12 +36,28 @@ const intro =
 
 let md = title + intro;
 
+const filterUsedBy = (usedBy) => {
+  const isHubInternal = (label) => {
+    const normalized = String(label).replace(/\s+/g, '').toLowerCase();
+    return normalized.includes('assumptionshub') || normalized.includes('assumptionssummarybar');
+  };
+
+  const cleaned = Array.isArray(usedBy)
+    ? usedBy
+        .map((x) => String(x).trim())
+        .filter(Boolean)
+        .filter((x) => !isHubInternal(x))
+    : [];
+
+  return Array.from(new Set(cleaned));
+};
+
 const renderItem = (x) => {
   const key = String(x.keyPath ?? '');
   const label = String(x.label ?? '');
   const unit = String(x.unit ?? '');
   const def = JSON.stringify(x.default);
-  const usedBy = Array.isArray(x.usedBy) ? x.usedBy.map(String).join(', ') : '';
+  const usedBy = filterUsedBy(x.usedBy).join(', ');
   const overr = x.overrideableByStrategy ? 'yes' : 'no';
   return `- **${key}** — ${label}\n  - Default: ${def} (${unit})\n  - Used by: ${usedBy || '—'}\n  - Overrideable by strategy: ${overr}\n`;
 };
