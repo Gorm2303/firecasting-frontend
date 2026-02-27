@@ -22,6 +22,7 @@ import {
 } from '../../config/savedScenarios';
 import { deepEqual } from '../../utils/deepEqual';
 import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { normalizeTaxRules } from '../../utils/taxRules';
 import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeScenario';
 import { draftToIntOrZero, draftToNumberOrZero, isValidDecimalDraft, isValidIntegerDraft, parseLocaleNumber } from '../../utils/numberInput';
 import { QRCodeSVG } from 'qrcode.react';
@@ -1266,7 +1267,7 @@ ref
     markUserEdited();
     setPhases(phs => phs.filter((_, i) => i !== index));
   };
-  const handlePhaseToggleRule = (index: number, rule: 'EXEMPTIONCARD' | 'STOCKEXEMPTION') => {
+  const handlePhaseToggleRule = (index: number, rule: NonNullable<PhaseRequest['taxRules']>[number]) => {
     markUserEdited();
     setPhases(phs =>
       phs.map((p, i) => {
@@ -1317,6 +1318,18 @@ ref
     const seedNum = seedForMode(seedMode, toNumOrUndef(seed));
     const isAdvancedRun = advancedEnabled;
 
+    const assumptionsTaxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] = {
+      exemptionCard: {
+        limit: Number(currentAssumptions.taxExemptionDefaults.exemptionCardLimit) || 0,
+        yearlyIncrease: Number(currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease) || 0,
+      },
+      stockExemption: {
+        taxRate: Number(currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate) || 0,
+        limit: Number(currentAssumptions.taxExemptionDefaults.stockExemptionLimit) || 0,
+        yearlyIncrease: Number(currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease) || 0,
+      },
+    };
+
     // Base request (always present)
     const base: AdvancedSimulationRequest = {
       startDate: { date: startDate },
@@ -1345,20 +1358,22 @@ ref
       ? (Number(currentAssumptions.yearlyFeePct) || 0)
       : undefined;
 
-    const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined =
-      isAdvancedRun && exemptionsFeatureOn
-        ? {
-            exemptionCard: {
-              limit: draftToIntOrZero(exemptionCardLimit),
-              yearlyIncrease: draftToIntOrZero(exemptionCardYearlyIncrease),
-            },
-            stockExemption: {
-              taxRate: draftToNumberOrZero(stockExemptionTaxRate),
-              limit: draftToIntOrZero(stockExemptionLimit),
-              yearlyIncrease: draftToIntOrZero(stockExemptionYearlyIncrease),
-            },
-          }
-        : undefined;
+    const anyTaxRulesEnabled = base.phases.some((p) => Array.isArray(p.taxRules) && p.taxRules.length > 0);
+    const taxExemptionConfig: AdvancedSimulationRequest['taxExemptionConfig'] | undefined = anyTaxRulesEnabled
+      ? (isAdvancedRun && exemptionsFeatureOn
+          ? {
+              exemptionCard: {
+                limit: draftToIntOrZero(exemptionCardLimit),
+                yearlyIncrease: draftToIntOrZero(exemptionCardYearlyIncrease),
+              },
+              stockExemption: {
+                taxRate: draftToNumberOrZero(stockExemptionTaxRate),
+                limit: draftToIntOrZero(stockExemptionLimit),
+                yearlyIncrease: draftToIntOrZero(stockExemptionYearlyIncrease),
+              },
+            }
+          : assumptionsTaxExemptionConfig)
+      : undefined;
 
     // In normal mode, ignore any persisted advanced return-model settings.
     const returnTypeToSend: ReturnType = isAdvancedRun && returnModelFeatureOn ? returnType : 'dataDrivenReturn';
@@ -2034,9 +2049,44 @@ ref
     const reqForForm = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
     applyRequestToForm(reqForForm);
     setSelectedScenarioId(scenario.id);
-    void runSimulationWithRequest(scenario.advancedRequest);
+
+    const normalizedAdvanced: AdvancedSimulationRequest = {
+      ...scenario.advancedRequest,
+      phases: (scenario.advancedRequest.phases ?? []).map((p: any) => ({
+        ...p,
+        taxRules: normalizeTaxRules(p?.taxRules),
+      })),
+    };
+
+    const hasAnyTaxRules = (normalizedAdvanced.phases ?? []).some((p: any) => (p?.taxRules?.length ?? 0) > 0);
+    const cfg = normalizedAdvanced.taxExemptionConfig;
+    const hasExplicitTaxExemptionConfig =
+      cfg?.exemptionCard?.limit !== undefined ||
+      cfg?.exemptionCard?.yearlyIncrease !== undefined ||
+      cfg?.stockExemption?.taxRate !== undefined ||
+      cfg?.stockExemption?.limit !== undefined ||
+      cfg?.stockExemption?.yearlyIncrease !== undefined;
+
+    const assumptionsTaxExemptionConfig = {
+      exemptionCard: {
+        limit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+        yearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+      },
+      stockExemption: {
+        taxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+        limit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+        yearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+      },
+    };
+
+    const requestToRun =
+      hasAnyTaxRules && !hasExplicitTaxExemptionConfig
+        ? { ...normalizedAdvanced, taxExemptionConfig: assumptionsTaxExemptionConfig }
+        : normalizedAdvanced;
+
+    void runSimulationWithRequest(requestToRun);
     closeScenarioModal();
-  }, [applyRequestToForm, closeScenarioModal, isDirty, runSimulationWithRequest]);
+  }, [applyRequestToForm, closeScenarioModal, currentAssumptions.taxExemptionDefaults, isDirty, runSimulationWithRequest]);
 
   const handleShareScenario = useCallback(() => {
     if (!selectedScenarioId) return;
