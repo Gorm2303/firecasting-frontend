@@ -185,7 +185,7 @@ type AdvancedPhaseRequest = {
   withdrawAmount?: number;
   lowerVariationPercentage?: number;
   upperVariationPercentage?: number;
-  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  taxRules?: ('exemptioncard' | 'stockexemption')[];
 };
 
 type AdvancedSimulationRequest = {
@@ -238,11 +238,12 @@ const mapOverallTaxRule = (v: any): string => {
   return s || 'capital';
 };
 
-const mapTaxExemptionsToRules = (v: any): ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[] => {
-  const s = String(v ?? '').toUpperCase();
-  if (s === 'EXEMPTIONCARD') return ['EXEMPTIONCARD'];
-  if (s === 'STOCKEXEMPTION') return ['STOCKEXEMPTION'];
-  if (s === 'BOTH') return ['EXEMPTIONCARD', 'STOCKEXEMPTION'];
+const mapTaxExemptionsToRules = (v: any): ('exemptioncard' | 'stockexemption')[] => {
+  const raw = String(v ?? '').trim();
+  const s = raw.toUpperCase();
+  if (s === 'EXEMPTIONCARD' || s === 'EXEMPTION_CARD' || raw.toLowerCase() === 'exemptioncard') return ['exemptioncard'];
+  if (s === 'STOCKEXEMPTION' || s === 'STOCK_EXEMPTION' || raw.toLowerCase() === 'stockexemption') return ['stockexemption'];
+  if (s === 'BOTH') return ['exemptioncard', 'stockexemption'];
   return [];
 };
 
@@ -251,6 +252,13 @@ const buildAdvancedRequest = (
   defaults: {
     inflationPct: number;
     returnType: string;
+    taxExemptionDefaults?: {
+      exemptionCardLimit?: number;
+      exemptionCardYearlyIncrease?: number;
+      stockExemptionTaxRate?: number;
+      stockExemptionLimit?: number;
+      stockExemptionYearlyIncrease?: number;
+    };
   }
 ): AdvancedSimulationRequest => {
   const paths = toNumberOrUndefined(data?.paths);
@@ -294,6 +302,35 @@ const buildAdvancedRequest = (
     taxExemptionConfig.stockExemption.taxRate !== undefined ||
     taxExemptionConfig.stockExemption.limit !== undefined ||
     taxExemptionConfig.stockExemption.yearlyIncrease !== undefined;
+
+  const hasAnyTaxRules = phases.some((p) => (p.taxRules?.length ?? 0) > 0);
+
+  const assumptionsTaxExemptionConfig = defaults.taxExemptionDefaults
+    ? {
+        exemptionCard: {
+          ...(defaults.taxExemptionDefaults.exemptionCardLimit !== undefined
+            ? { limit: defaults.taxExemptionDefaults.exemptionCardLimit }
+            : {}),
+          ...(defaults.taxExemptionDefaults.exemptionCardYearlyIncrease !== undefined
+            ? { yearlyIncrease: defaults.taxExemptionDefaults.exemptionCardYearlyIncrease }
+            : {}),
+        },
+        stockExemption: {
+          ...(defaults.taxExemptionDefaults.stockExemptionTaxRate !== undefined
+            ? { taxRate: defaults.taxExemptionDefaults.stockExemptionTaxRate }
+            : {}),
+          ...(defaults.taxExemptionDefaults.stockExemptionLimit !== undefined
+            ? { limit: defaults.taxExemptionDefaults.stockExemptionLimit }
+            : {}),
+          ...(defaults.taxExemptionDefaults.stockExemptionYearlyIncrease !== undefined
+            ? { yearlyIncrease: defaults.taxExemptionDefaults.stockExemptionYearlyIncrease }
+            : {}),
+        },
+      }
+    : undefined;
+
+  const resolvedTaxExemptionConfig =
+    hasAnyTaxRules && !hasTaxExemptionConfig ? assumptionsTaxExemptionConfig : hasTaxExemptionConfig ? taxExemptionConfig : undefined;
 
   const regimeBasedInput = data?.returner?.distribution?.regimeBased;
   const regimesInput: any[] = Array.isArray(regimeBasedInput?.regimes) ? regimeBasedInput.regimes : [];
@@ -360,7 +397,7 @@ const buildAdvancedRequest = (
     taxPercentage: Number(data?.tax?.percentage ?? 0),
     returnType: String(data?.returner?.type ?? defaults.returnType),
     returnerConfig: hasReturnerConfig ? returnerConfig : undefined,
-    taxExemptionConfig: hasTaxExemptionConfig ? taxExemptionConfig : undefined,
+    taxExemptionConfig: resolvedTaxExemptionConfig,
     inflationFactor,
   };
 };
@@ -448,9 +485,10 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
     };
 
     const rulesToExemptions = (rules: any): string => {
-      const arr = Array.isArray(rules) ? rules.map((x) => String(x).toUpperCase()) : [];
-      const hasE = arr.includes('EXEMPTIONCARD');
-      const hasS = arr.includes('STOCKEXEMPTION');
+      const arr = Array.isArray(rules) ? rules.map((x) => String(x).trim().toUpperCase()) : [];
+      const normalized = arr.map((x) => x.replace(/_/g, ''));
+      const hasE = normalized.includes('EXEMPTIONCARD');
+      const hasS = normalized.includes('STOCKEXEMPTION');
       if (hasE && hasS) return 'BOTH';
       if (hasE) return 'EXEMPTIONCARD';
       if (hasS) return 'STOCKEXEMPTION';
@@ -1088,6 +1126,13 @@ const AdvancedInputForm: React.FC<InputFormProps> = ({ onSimulationComplete, ext
       const req = buildAdvancedRequest(formData, {
         inflationPct: currentAssumptions.inflationPct,
         returnType: DEFAULT_RETURN_TYPE,
+        taxExemptionDefaults: {
+          exemptionCardLimit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+          exemptionCardYearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+          stockExemptionTaxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+          stockExemptionLimit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+          stockExemptionYearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+        },
       });
       setTimelineForRun({
         startDate: req.startDate?.date,
