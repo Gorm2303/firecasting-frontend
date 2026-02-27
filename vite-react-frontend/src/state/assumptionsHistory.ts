@@ -4,6 +4,7 @@ export type AssumptionsHistoryEntry = {
   id: string;
   createdAt: string;
   assumptions: Assumptions;
+  sourceNote?: string;
 };
 
 const STORAGE_KEY_V1 = 'firecasting:assumptionsHistory:v1';
@@ -43,11 +44,12 @@ export const listAssumptionsHistory = (): AssumptionsHistoryEntry[] => {
   return items.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 };
 
-export const appendAssumptionsHistory = (assumptions: Assumptions) => {
+export const appendAssumptionsHistory = (assumptions: Assumptions, meta?: { sourceNote?: string }) => {
   const createdAt = new Date().toISOString();
   const id = `${createdAt}:${Math.random().toString(16).slice(2)}`;
 
-  const entry: AssumptionsHistoryEntry = { id, createdAt, assumptions };
+  const sourceNote = meta?.sourceNote ? String(meta.sourceNote) : undefined;
+  const entry: AssumptionsHistoryEntry = { id, createdAt, assumptions, sourceNote };
   const existing = readAll();
 
   const next = [entry, ...existing].slice(0, MAX_ENTRIES);

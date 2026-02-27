@@ -873,7 +873,7 @@ const AssumptionsHubPage: React.FC = () => {
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontWeight: 800, marginBottom: 6 }}>Change log</div>
                 {assumptionsHistory.length === 0 ? (
-                  <div style={{ opacity: 0.8, fontSize: 13 }}>No saved snapshots yet.</div>
+                  <div style={{ opacity: 0.8, fontSize: 13 }}>No saved entries yet.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {assumptionsHistory.slice(0, 20).map((e) => (
@@ -903,6 +903,9 @@ const AssumptionsHubPage: React.FC = () => {
                           {e.assumptions.currency} · Inflation {e.assumptions.inflationPct}% · Fee {e.assumptions.yearlyFeePct}% · Return{' '}
                           {e.assumptions.expectedReturnPct}% · SWR {e.assumptions.safeWithdrawalPct}%
                         </div>
+                        {e.sourceNote && (
+                          <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{e.sourceNote}</div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { appendAssumptionsHistory } from './assumptionsHistory';
+import { loadAssumptionsGovernance } from './assumptionsGovernance';
 
 export type Assumptions = {
   currency: string;
@@ -286,7 +287,8 @@ export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const saveDraft = useCallback(() => {
     setStore((prev) => {
       try {
-        appendAssumptionsHistory(prev.draft);
+        const g = loadAssumptionsGovernance();
+        appendAssumptionsHistory(prev.draft, { sourceNote: g.sourceNote });
       } catch {
         /* ignore */
       }
