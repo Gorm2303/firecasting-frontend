@@ -1,7 +1,7 @@
 import type { SimulationRequest } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
 import { advancedToNormalRequest, normalToAdvancedWithDefaults } from '../models/advancedSimulation';
-import { loadCurrentAssumptionsFromStorage } from '../state/assumptions';
+import { loadCurrentAssumptionsFromStorage, type AssumptionsOverride } from '../state/assumptions';
 import { normalizeTaxRules } from '../utils/taxRules';
 
 function isFiniteNumber(v: unknown): v is number {
@@ -55,6 +55,10 @@ export type SavedScenario = {
   id: string;
   name: string;
   savedAt: string;
+  /** Optional per-scenario overlay on top of the current baseline assumptions.
+   * Used to model scenario-specific world-model tweaks without mutating the global baseline.
+   */
+  assumptionsOverride?: AssumptionsOverride | null;
   /** Canonical scenario footprint used for reruns/diff and to match backend persistence. */
   advancedRequest: AdvancedSimulationRequest;
   /** Backward-compatible subset for older UI flows / share links. */
@@ -182,7 +186,8 @@ export function saveScenario(
   advancedRequest: AdvancedSimulationRequest,
   id?: string,
   runId?: string | null,
-  lastRunMeta?: SavedScenario['lastRunMeta']
+  lastRunMeta?: SavedScenario['lastRunMeta'],
+  assumptionsOverride?: SavedScenario['assumptionsOverride']
 ): SavedScenario {
   if (typeof window === 'undefined') throw new Error('Cannot save scenario outside browser');
 
@@ -198,6 +203,7 @@ export function saveScenario(
     id: id ?? newId(),
     name: trimmed,
     savedAt: now,
+    ...(assumptionsOverride !== undefined ? { assumptionsOverride } : {}),
     advancedRequest: normalizedAdvanced,
     request: advancedToNormalRequest(normalizedAdvanced),
     runId: runId ?? undefined,

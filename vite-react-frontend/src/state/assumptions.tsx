@@ -109,6 +109,16 @@ export type Assumptions = {
   };
 };
 
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K];
+};
+
+export type AssumptionsOverride = DeepPartial<Assumptions>;
+
 const STORAGE_KEY_V1 = 'firecasting:assumptions:v1';
 const STORAGE_KEY_V2 = 'firecasting:assumptions:v2';
 const UI_PREFS_KEY_V1 = 'firecasting:uiPrefs:v1';
@@ -207,6 +217,31 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
     coreExpenseMonthlyDkk: 12_000,
   },
 };
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const deepMerge = <T,>(base: T, patch: DeepPartial<T> | null | undefined): T => {
+  if (!patch) return base;
+  if (!isPlainObject(base) || !isPlainObject(patch)) return (patch as unknown as T) ?? base;
+
+  const out: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    const prev = out[k];
+    if (isPlainObject(prev) && isPlainObject(v)) {
+      out[k] = deepMerge(prev, v as any);
+    } else {
+      out[k] = v as any;
+    }
+  }
+  return out as unknown as T;
+};
+
+export function applyAssumptionsOverride(base: Assumptions, override?: AssumptionsOverride | null): Assumptions {
+  if (!override || (isPlainObject(override) && Object.keys(override).length === 0)) return base;
+  return normalizeAssumptions(deepMerge(base, override));
+}
 
 type AssumptionsContextValue = {
   currentAssumptions: Assumptions;

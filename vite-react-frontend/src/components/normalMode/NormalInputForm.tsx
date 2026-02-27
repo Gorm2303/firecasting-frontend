@@ -27,7 +27,7 @@ import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeSce
 import { draftToIntOrZero, draftToNumberOrZero, isValidDecimalDraft, isValidIntegerDraft, parseLocaleNumber } from '../../utils/numberInput';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
-import { useAssumptions } from '../../state/assumptions';
+import { applyAssumptionsOverride, useAssumptions, type Assumptions, type AssumptionsOverride } from '../../state/assumptions';
 import { getDefaultExecutionDefaults, useExecutionDefaults } from '../../state/executionDefaults';
 import { appendSimulationSnapshot } from '../../state/simulationSnapshots';
 
@@ -1994,7 +1994,8 @@ ref
         requestToSave,
         existing.id,
         resolvedRunId ?? (keepExistingRunId ? existing.runId : undefined),
-        metaToStore ?? existing.lastRunMeta
+        metaToStore ?? existing.lastRunMeta,
+        existing.assumptionsOverride
       );
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
@@ -2006,7 +2007,10 @@ ref
     setSelectedScenarioId(saved.id);
   }, [currentAdvancedRequest, refreshSavedScenarios, lastCompletedRun]);
 
-  const runSimulationWithRequest = useCallback(async (req: AdvancedSimulationRequest) => {
+  const runSimulationWithRequest = useCallback(async (
+    req: AdvancedSimulationRequest,
+    snapshot?: { assumptionsUsed?: Assumptions; assumptionsOverride?: AssumptionsOverride | null }
+  ) => {
     const total = (req.phases ?? []).reduce((s, p: any) => s + (Number(p.durationInMonths) || 0), 0);
     if (total > MAX_MONTHS) {
       alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(total)}).`);
@@ -2022,10 +2026,12 @@ ref
       lastRunRequestRef.current = req;
 
       const started = await startAdvancedSimulation(req);
+      const assumptionsUsed = snapshot?.assumptionsUsed ?? currentAssumptions;
       appendSimulationSnapshot({
         runId: started.id,
         createdAt: started.createdAt ?? new Date().toISOString(),
-        assumptions: currentAssumptions,
+        assumptions: assumptionsUsed,
+        ...(snapshot?.assumptionsOverride !== undefined ? { assumptionsOverride: snapshot.assumptionsOverride } : {}),
         advancedRequest: req,
       });
       lastStartedRunMetaRef.current = started;
@@ -2050,6 +2056,8 @@ ref
     applyRequestToForm(reqForForm);
     setSelectedScenarioId(scenario.id);
 
+    const assumptionsUsed = applyAssumptionsOverride(currentAssumptions, scenario.assumptionsOverride ?? null);
+
     const normalizedAdvanced: AdvancedSimulationRequest = {
       ...scenario.advancedRequest,
       phases: (scenario.advancedRequest.phases ?? []).map((p: any) => ({
@@ -2069,13 +2077,13 @@ ref
 
     const assumptionsTaxExemptionConfig = {
       exemptionCard: {
-        limit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
-        yearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        limit: assumptionsUsed.taxExemptionDefaults.exemptionCardLimit,
+        yearlyIncrease: assumptionsUsed.taxExemptionDefaults.exemptionCardYearlyIncrease,
       },
       stockExemption: {
-        taxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
-        limit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
-        yearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+        taxRate: assumptionsUsed.taxExemptionDefaults.stockExemptionTaxRate,
+        limit: assumptionsUsed.taxExemptionDefaults.stockExemptionLimit,
+        yearlyIncrease: assumptionsUsed.taxExemptionDefaults.stockExemptionYearlyIncrease,
       },
     };
 
@@ -2084,9 +2092,12 @@ ref
         ? { ...normalizedAdvanced, taxExemptionConfig: assumptionsTaxExemptionConfig }
         : normalizedAdvanced;
 
-    void runSimulationWithRequest(requestToRun);
+    void runSimulationWithRequest(requestToRun, {
+      assumptionsUsed,
+      assumptionsOverride: scenario.assumptionsOverride ?? null,
+    });
     closeScenarioModal();
-  }, [applyRequestToForm, closeScenarioModal, currentAssumptions.taxExemptionDefaults, isDirty, runSimulationWithRequest]);
+  }, [applyRequestToForm, closeScenarioModal, currentAssumptions, isDirty, runSimulationWithRequest]);
 
   const handleShareScenario = useCallback(() => {
     if (!selectedScenarioId) return;
@@ -3852,6 +3863,7 @@ ref
                 {savedScenarios.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                    {s.assumptionsOverride && Object.keys(s.assumptionsOverride as any).length > 0 ? ' (overrides)' : ''}
                   </option>
                 ))}
               </select>
@@ -3873,6 +3885,7 @@ ref
                 {savedScenarios.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                    {s.assumptionsOverride && Object.keys(s.assumptionsOverride as any).length > 0 ? ' (overrides)' : ''}
                   </option>
                 ))}
               </select>
