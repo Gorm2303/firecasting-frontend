@@ -87,6 +87,7 @@ const AssumptionsHubPage: React.FC = () => {
   const timingConventions = useMemo(() => listConventionsByGroup('timing'), []);
   const executionRegistryItems = useMemo(() => listRegistryByTab('execution'), []);
   const worldModelRegistryItems = useMemo(() => listRegistryByTab('worldModel'), []);
+  const passiveStrategyRegistryItems = useMemo(() => listRegistryByTab('passiveStrategy'), []);
   const incomeSetupRegistryItems = useMemo(() => listRegistryByTab('incomeSetup'), []);
   const depositStrategyRegistryItems = useMemo(() => listRegistryByTab('depositStrategy'), []);
   const simulatorTaxRegistryItems = useMemo(() => listRegistryByTab('simulatorTax'), []);
@@ -97,17 +98,10 @@ const AssumptionsHubPage: React.FC = () => {
   const salaryTaxatorRegistryItems = useMemo(() => listRegistryByTab('salaryTaxator'), []);
   const moneyPerspectiveRegistryItems = useMemo(() => listRegistryByTab('moneyPerspective'), []);
 
-  const passiveStrategyRegistryItems = useMemo(() => {
-    return worldModelRegistryItems.filter((x) => x.keyPath.startsWith('passiveStrategyDefaults.'));
-  }, [worldModelRegistryItems]);
-
-  const coreWorldModelRegistryItems = useMemo(() => {
-    return worldModelRegistryItems.filter((x) => !x.keyPath.startsWith('passiveStrategyDefaults.'));
-  }, [worldModelRegistryItems]);
-
   const previewRegistryItems = useMemo(
     () => [
       ...worldModelRegistryItems,
+      ...passiveStrategyRegistryItems,
       ...incomeSetupRegistryItems,
       ...depositStrategyRegistryItems,
       ...simulatorTaxRegistryItems,
@@ -124,6 +118,7 @@ const AssumptionsHubPage: React.FC = () => {
       incomeSetupRegistryItems,
       milestonesRegistryItems,
       moneyPerspectiveRegistryItems,
+      passiveStrategyRegistryItems,
       policyBuilderRegistryItems,
       salaryTaxatorRegistryItems,
       simulatorTaxRegistryItems,
@@ -781,7 +776,7 @@ const AssumptionsHubPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-                  {coreWorldModelRegistryItems.map(renderAssumptionRegistryField)}
+                  {worldModelRegistryItems.map(renderAssumptionRegistryField)}
                 </div>
 
                 <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
