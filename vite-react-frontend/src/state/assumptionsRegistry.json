@@ -212,7 +212,7 @@
 
   {
     "keyPath": "passiveStrategyDefaults.returnModel",
-    "tab": "worldModel",
+    "tab": "passiveStrategy",
     "label": "Return model",
     "unit": "enum",
     "default": "fixed",
@@ -221,7 +221,7 @@
   },
   {
     "keyPath": "passiveStrategyDefaults.volatilityPct",
-    "tab": "worldModel",
+    "tab": "passiveStrategy",
     "label": "Volatility (%/year)",
     "unit": "pct",
     "default": 15,
@@ -230,7 +230,7 @@
   },
   {
     "keyPath": "passiveStrategyDefaults.rebalancing",
-    "tab": "worldModel",
+    "tab": "passiveStrategy",
     "label": "Rebalancing convention",
     "unit": "enum",
     "default": "none",
@@ -239,7 +239,7 @@
   },
   {
     "keyPath": "passiveStrategyDefaults.cashDragPct",
-    "tab": "worldModel",
+    "tab": "passiveStrategy",
     "label": "Cash drag (%/year)",
     "unit": "pct",
     "default": 0,

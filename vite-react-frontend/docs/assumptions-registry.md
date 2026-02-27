@@ -21,26 +21,6 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
   - Used by: Explore, MoneyPerspective, Simulation, Tutorial
   - Overrideable by strategy: no
 
-- **passiveStrategyDefaults.cashDragPct** — Cash drag (%/year)
-  - Default: 0 (pct)
-  - Used by: —
-  - Overrideable by strategy: yes
-
-- **passiveStrategyDefaults.rebalancing** — Rebalancing convention
-  - Default: "none" (enum)
-  - Used by: —
-  - Overrideable by strategy: yes
-
-- **passiveStrategyDefaults.returnModel** — Return model
-  - Default: "fixed" (enum)
-  - Used by: —
-  - Overrideable by strategy: yes
-
-- **passiveStrategyDefaults.volatilityPct** — Volatility (%/year)
-  - Default: 15 (pct)
-  - Used by: —
-  - Overrideable by strategy: yes
-
 - **safeWithdrawalPct** — Safe withdrawal rate (%/year)
   - Default: 4 (pct)
   - Used by: —
@@ -359,5 +339,28 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 - **moneyPerspectiveDefaults.workingHoursPerMonth** — Working hours per month
   - Default: 160 (hoursPerMonth)
   - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+
+## passiveStrategy
+
+- **passiveStrategyDefaults.cashDragPct** — Cash drag (%/year)
+  - Default: 0 (pct)
+  - Used by: —
+  - Overrideable by strategy: yes
+
+- **passiveStrategyDefaults.rebalancing** — Rebalancing convention
+  - Default: "none" (enum)
+  - Used by: —
+  - Overrideable by strategy: yes
+
+- **passiveStrategyDefaults.returnModel** — Return model
+  - Default: "fixed" (enum)
+  - Used by: —
+  - Overrideable by strategy: yes
+
+- **passiveStrategyDefaults.volatilityPct** — Volatility (%/year)
+  - Default: 15 (pct)
+  - Used by: —
   - Overrideable by strategy: yes
 
