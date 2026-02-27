@@ -1,4 +1,5 @@
 import type { SimulationRequest } from './types';
+import { normalizeTaxRules } from '../utils/taxRules';
 
 // Shared request shape for the backend `/start-advanced` endpoint.
 // Keep this in `models/` so UI, API, and scenario storage all agree.
@@ -141,7 +142,7 @@ export function normalToAdvancedWithDefaults(req: SimulationRequest, defaults?: 
 
   return {
     startDate: req.startDate,
-    phases: req.phases,
+    phases: (req.phases ?? []).map((p: any) => ({ ...p, taxRules: normalizeTaxRules(p?.taxRules) })),
     overallTaxRule: req.overallTaxRule,
     taxPercentage: req.taxPercentage,
     returnType,
@@ -157,7 +158,7 @@ export function advancedToNormalRequest(req: AdvancedSimulationRequest): Simulat
   const seed = getRequestedSeed(req);
   return {
     startDate: req.startDate,
-    phases: (req.phases ?? []).map((p) => ({ ...p, taxRules: p.taxRules ?? [] })),
+    phases: (req.phases ?? []).map((p: any) => ({ ...p, taxRules: normalizeTaxRules(p?.taxRules) })),
     overallTaxRule: req.overallTaxRule as SimulationRequest['overallTaxRule'],
     taxPercentage: req.taxPercentage,
     ...(seed !== undefined ? { seed } : {}),
