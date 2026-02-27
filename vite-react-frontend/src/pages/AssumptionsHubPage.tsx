@@ -1307,19 +1307,19 @@ const AssumptionsHubPage: React.FC = () => {
                       return (
                         <div
                           key={r.keyPath}
-                {snapshotAdvancedRequestDiffRows.length === 0 ? (
-                  <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No re-run request changes.</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                    {snapshotAdvancedRequestDiffRows.map((r) => (
-                      <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                        <div style={{ fontWeight: 800 }}>{r.label}</div>
-                        <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
-                          {formatValue('', r.from)} → {formatValue('', r.to)}
+                          style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}
+                        >
+                          <div style={{ fontWeight: 800 }}>{r.label}</div>
+                          <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                            {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                          </div>
+                          {usedBy.length > 0 && (
+                            <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {usedBy.join(', ')}</div>
+                          )}
+                          <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
                         </div>
-                        <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

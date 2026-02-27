@@ -2,6 +2,7 @@ import rawRegistry from './assumptionsRegistry.json';
 
 export type AssumptionsTabId =
   | 'worldModel'
+  | 'passiveStrategy'
   | 'execution'
   | 'simulatorTax'
   | 'salaryTaxator'
