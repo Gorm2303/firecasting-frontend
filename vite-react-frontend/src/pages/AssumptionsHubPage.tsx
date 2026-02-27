@@ -9,7 +9,7 @@ import { clearAssumptionsHistory, listAssumptionsHistory } from '../state/assump
 import { deleteAssumptionsProfile, listAssumptionsProfiles, saveAssumptionsProfile } from '../state/assumptionsProfiles';
 import { loadAssumptionsGovernance, saveAssumptionsGovernance, type AssumptionsGovernance } from '../state/assumptionsGovernance';
 import { listSimulationSnapshots } from '../state/simulationSnapshots';
-import { computeAssumptionsImpact } from '../utils/assumptionsImpact';
+import { computeAssumptionsImpact, computeAssumptionsImpactSensitivity } from '../utils/assumptionsImpact';
 
 const fieldRowStyle: React.CSSProperties = {
   display: 'grid',
@@ -242,6 +242,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const currentImpact = useMemo(() => computeAssumptionsImpact(currentAssumptions), [currentAssumptions]);
   const draftImpact = useMemo(() => computeAssumptionsImpact(draftAssumptions), [draftAssumptions]);
+  const draftImpactSensitivity = useMemo(() => computeAssumptionsImpactSensitivity(draftAssumptions), [draftAssumptions]);
 
   const snapshotDiffRows = useMemo(() => {
     if (!selectedSnapshotAssumptions) return [];
@@ -1005,6 +1006,56 @@ const AssumptionsHubPage: React.FC = () => {
                 ));
               }
             )()}
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sensitivity (draft)</div>
+            <div style={{ opacity: 0.78, fontSize: 13, marginBottom: 10 }}>
+              Small one-at-a-time bumps to highlight what moves the preview metrics.
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    'minmax(220px, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)',
+                  gap: 10,
+                }}
+              >
+                {(
+                  () => {
+                    const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+                    const nf2 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+
+                    const fmtDeltaPct = (v: number): string => `${v >= 0 ? '+' : ''}${nf2.format(v)}pp`;
+                    const fmtDeltaMoney = (v: number | null): string => (v === null ? '—' : `${v >= 0 ? '+' : ''}${nf0.format(v)}`);
+
+                    return (
+                      <>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Change</div>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ Net return</div>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ Real return</div>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ Expense @ horizon</div>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ Safe spend / 1M</div>
+                        <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ FI number</div>
+
+                        {draftImpactSensitivity.rows.map((r) => (
+                          <React.Fragment key={r.label}>
+                            <div style={{ opacity: 0.92 }}>{r.label}</div>
+                            <div style={{ fontWeight: 750 }}>{fmtDeltaPct(r.deltaFromBase.nominalNetReturnPct)}</div>
+                            <div style={{ fontWeight: 750 }}>{fmtDeltaPct(r.deltaFromBase.approxRealReturnPct)}</div>
+                            <div style={{ fontWeight: 750 }}>{fmtDeltaMoney(r.deltaFromBase.coreExpenseMonthlyNominalAtHorizonDkk)}</div>
+                            <div style={{ fontWeight: 750 }}>{fmtDeltaMoney(r.deltaFromBase.safeMonthlySpendPer1MDkk)}</div>
+                            <div style={{ fontWeight: 750 }}>{fmtDeltaMoney(r.deltaFromBase.fiNumberDkk)}</div>
+                          </React.Fragment>
+                        ))}
+                      </>
+                    );
+                  }
+                )()}
+              </div>
+            </div>
           </div>
         </div>
 

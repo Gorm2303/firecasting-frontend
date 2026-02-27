@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Assumptions } from '../state/assumptions';
-import { computeAssumptionsImpact } from './assumptionsImpact';
+import { computeAssumptionsImpact, computeAssumptionsImpactSensitivity } from './assumptionsImpact';
 
 const a = (overrides: Partial<Assumptions> = {}): Assumptions => {
   return {
@@ -58,5 +58,43 @@ describe('computeAssumptionsImpact', () => {
   it('handles zero SWR by returning null FI number', () => {
     const impact = computeAssumptionsImpact(a({ safeWithdrawalPct: 0 }));
     expect(impact.fiNumberDkk).toBeNull();
+  });
+});
+
+describe('computeAssumptionsImpactSensitivity', () => {
+  it('produces expected deltas for return/fee/inflation/SWR bumps', () => {
+    const base = a({
+      inflationPct: 2,
+      yearlyFeePct: 0.5,
+      expectedReturnPct: 5,
+      safeWithdrawalPct: 4,
+      moneyPerspectiveDefaults: {
+        workingHoursPerMonth: 160,
+        payRaisePct: 2,
+        timeHorizonYears: 10,
+        coreExpenseMonthlyDkk: 12_000,
+      },
+    });
+
+    const s = computeAssumptionsImpactSensitivity(base);
+    expect(s.rows).toHaveLength(4);
+
+    const byLabel = Object.fromEntries(s.rows.map((r) => [r.label, r] as const));
+
+    expect(byLabel['+1pp expected return']!.deltaFromBase.nominalNetReturnPct).toBeCloseTo(1, 8);
+    expect(byLabel['+0.5pp yearly fee']!.deltaFromBase.nominalNetReturnPct).toBeCloseTo(-0.5, 8);
+
+    // +1pp inflation reduces approx real return (net unchanged, denominator increases)
+    expect(byLabel['+1pp inflation']!.deltaFromBase.approxRealReturnPct).toBeLessThan(0);
+
+    // +0.5pp SWR increases safe spend per 1M by exactly 1_000_000*(0.5%)/12
+    expect(byLabel['+0.5pp safe withdrawal rate']!.deltaFromBase.safeMonthlySpendPer1MDkk).toBeCloseTo(
+      (1_000_000 * 0.005) / 12,
+      6
+    );
+    // and reduces FI number
+    const fiDelta = byLabel['+0.5pp safe withdrawal rate']!.deltaFromBase.fiNumberDkk;
+    expect(fiDelta).not.toBeNull();
+    expect(fiDelta as number).toBeLessThan(0);
   });
 });
