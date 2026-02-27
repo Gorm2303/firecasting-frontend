@@ -5,7 +5,7 @@ export type PhaseSummary = {
   index: number;
   phaseType: PhaseRequest['phaseType'];
   durationInMonths: number;
-  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  taxRules?: PhaseRequest['taxRules'];
   taxExemptionsActive?: {
     card: boolean;
     stock: boolean;
@@ -105,8 +105,8 @@ export function getTimelineSegments(req: SimulationRequest): ScenarioTimelineSeg
 
 export function summarizePhase(phase: PhaseRequest, index: number, taxExemptionConfig?: any): PhaseSummary {
   const taxRules = phase.taxRules ?? [];
-  const cardActive = taxRules.includes('EXEMPTIONCARD');
-  const stockActive = taxRules.includes('STOCKEXEMPTION');
+  const cardActive = taxRules.includes('exemptioncard');
+  const stockActive = taxRules.includes('stockexemption');
 
   const summary: PhaseSummary = {
     index,

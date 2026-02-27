@@ -412,14 +412,14 @@ const RunChipsRow: React.FC<{ computed: RunComputed }> = ({ computed }) => {
   })();
 
   const cardExLabel = (() => {
-    if (!computed.usedTaxRules?.has('EXEMPTIONCARD')) return null;
+    if (!computed.usedTaxRules?.has('exemptioncard') && !computed.usedTaxRules?.has('EXEMPTIONCARD')) return null;
     const limit = computed.cardExemption?.limit ?? null;
     const inc = computed.cardExemption?.yearlyIncrease ?? null;
     return `${moneyCompact(limit)}${typeof inc === 'number' ? ` @ 0% +${moneyCompact(inc)}/y` : ''}`;
   })();
 
   const stockExLabel = (() => {
-    if (!computed.usedTaxRules?.has('STOCKEXEMPTION')) return null;
+    if (!computed.usedTaxRules?.has('stockexemption') && !computed.usedTaxRules?.has('STOCKEXEMPTION')) return null;
     const tax = computed.stockExemption?.taxRate ?? null;
     const limit = computed.stockExemption?.limit ?? null;
     const inc = computed.stockExemption?.yearlyIncrease ?? null;

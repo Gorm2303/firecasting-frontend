@@ -5,7 +5,7 @@ import { SIMULATION_TIMING_CONVENTIONS } from '../../config/simulationConvention
 import InfoTooltip from '../InfoTooltip';
 import { isValidDecimalDraft, isValidIntegerDraft } from '../../utils/numberInput';
 
-type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
+type ExemptionRule = NonNullable<PhaseRequest['taxRules']>[number];
 
 interface PhaseListProps {
   phases: PhaseRequest[];
@@ -549,8 +549,11 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     <input
                       type="checkbox"
                       data-tour={`phase-${idx}-tax-exemptioncard`}
-                      checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
-                      onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
+                      checked={
+                        ((p.taxRules ?? []) as unknown as string[]).includes('exemptioncard') ||
+                        ((p.taxRules ?? []) as unknown as string[]).includes('EXEMPTIONCARD')
+                      }
+                      onChange={() => onToggleTaxRule(idx, 'exemptioncard')}
                       style={{ marginRight: '0.3rem' }}
                     />
                     Exemption Card
@@ -559,8 +562,11 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     <input
                       type="checkbox"
                       data-tour={`phase-${idx}-tax-stockexemption`}
-                      checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
-                      onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
+                      checked={
+                        ((p.taxRules ?? []) as unknown as string[]).includes('stockexemption') ||
+                        ((p.taxRules ?? []) as unknown as string[]).includes('STOCKEXEMPTION')
+                      }
+                      onChange={() => onToggleTaxRule(idx, 'stockexemption')}
                       style={{ marginRight: '0.3rem' }}
                     />
                     Stock Exemption

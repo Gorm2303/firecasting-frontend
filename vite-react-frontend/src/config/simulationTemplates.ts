@@ -108,7 +108,7 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
             withdrawAmount: 10000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
-            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+          taxRules: ['exemptioncard', 'stockexemption']
 
         }
       ],
@@ -166,7 +166,7 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
             withdrawAmount: 123000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
-            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+            taxRules: ['exemptioncard', 'stockexemption']
 
         }
       ],

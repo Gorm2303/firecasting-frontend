@@ -106,7 +106,7 @@ describe('NormalInputForm scenarios', () => {
           initialDeposit: 500,
           monthlyDeposit: 50,
           yearlyIncreaseInPercentage: 3,
-          taxRules: ['EXEMPTIONCARD'] as const,
+          taxRules: ['exemptioncard'] as const,
         },
         {
           phaseType: 'WITHDRAW' as const,
@@ -115,7 +115,7 @@ describe('NormalInputForm scenarios', () => {
           withdrawAmount: 1234,
           lowerVariationPercentage: 2,
           upperVariationPercentage: 3,
-          taxRules: ['STOCKEXEMPTION'] as const,
+          taxRules: ['stockexemption'] as const,
         },
         {
           phaseType: 'PASSIVE' as const,

@@ -1,6 +1,10 @@
 export interface PhaseRequest {
   phaseType: 'DEPOSIT' | 'PASSIVE' | 'WITHDRAW';
-  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  /**
+   * Tax exemption rule keys (wire format) understood by the backend.
+   * Keep these in sync with backend `TaxExemptionRule` JSON values.
+   */
+  taxRules?: ('exemptioncard' | 'stockexemption')[];
   durationInMonths: number;
   initialDeposit?: number;
   monthlyDeposit?: number;
