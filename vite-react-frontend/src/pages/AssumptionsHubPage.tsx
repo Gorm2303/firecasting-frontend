@@ -36,10 +36,21 @@ const cardStyle: React.CSSProperties = {
   padding: 14,
 };
 
-type HubTabId = 'baseline' | 'execution' | 'conventions' | 'preview';
+type HubTabId =
+  | 'overview'
+  | 'income'
+  | 'deposit'
+  | 'passive'
+  | 'withdrawal'
+  | 'policy'
+  | 'milestones'
+  | 'goals'
+  | 'execution'
+  | 'conventions'
+  | 'preview';
 
 const AssumptionsHubPage: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<HubTabId>('baseline');
+  const [activeTab, setActiveTab] = React.useState<HubTabId>('overview');
   const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = React.useState(false);
   const [importStatus, setImportStatus] = React.useState<string>('');
   const [selectedSnapshotId, setSelectedSnapshotId] = React.useState<string>('');
@@ -75,18 +86,49 @@ const AssumptionsHubPage: React.FC = () => {
   const timingConventions = useMemo(() => listConventionsByGroup('timing'), []);
   const executionRegistryItems = useMemo(() => listRegistryByTab('execution'), []);
   const worldModelRegistryItems = useMemo(() => listRegistryByTab('worldModel'), []);
+  const incomeSetupRegistryItems = useMemo(() => listRegistryByTab('incomeSetup'), []);
+  const depositStrategyRegistryItems = useMemo(() => listRegistryByTab('depositStrategy'), []);
   const simulatorTaxRegistryItems = useMemo(() => listRegistryByTab('simulatorTax'), []);
+  const withdrawalStrategyRegistryItems = useMemo(() => listRegistryByTab('withdrawalStrategy'), []);
+  const policyBuilderRegistryItems = useMemo(() => listRegistryByTab('policyBuilder'), []);
+  const milestonesRegistryItems = useMemo(() => listRegistryByTab('milestones'), []);
+  const goalPlannerRegistryItems = useMemo(() => listRegistryByTab('goalPlanner'), []);
   const salaryTaxatorRegistryItems = useMemo(() => listRegistryByTab('salaryTaxator'), []);
   const moneyPerspectiveRegistryItems = useMemo(() => listRegistryByTab('moneyPerspective'), []);
+
+  const passiveStrategyRegistryItems = useMemo(() => {
+    return worldModelRegistryItems.filter((x) => x.keyPath.startsWith('passiveStrategyDefaults.'));
+  }, [worldModelRegistryItems]);
+
+  const coreWorldModelRegistryItems = useMemo(() => {
+    return worldModelRegistryItems.filter((x) => !x.keyPath.startsWith('passiveStrategyDefaults.'));
+  }, [worldModelRegistryItems]);
 
   const previewRegistryItems = useMemo(
     () => [
       ...worldModelRegistryItems,
+      ...incomeSetupRegistryItems,
+      ...depositStrategyRegistryItems,
       ...simulatorTaxRegistryItems,
+      ...withdrawalStrategyRegistryItems,
+      ...policyBuilderRegistryItems,
+      ...milestonesRegistryItems,
+      ...goalPlannerRegistryItems,
       ...salaryTaxatorRegistryItems,
       ...moneyPerspectiveRegistryItems,
     ],
-    [moneyPerspectiveRegistryItems, salaryTaxatorRegistryItems, simulatorTaxRegistryItems, worldModelRegistryItems]
+    [
+      depositStrategyRegistryItems,
+      goalPlannerRegistryItems,
+      incomeSetupRegistryItems,
+      milestonesRegistryItems,
+      moneyPerspectiveRegistryItems,
+      policyBuilderRegistryItems,
+      salaryTaxatorRegistryItems,
+      simulatorTaxRegistryItems,
+      withdrawalStrategyRegistryItems,
+      worldModelRegistryItems,
+    ]
   );
 
   const jsonPreview = useMemo(() => JSON.stringify(draftAssumptions, null, 2), [draftAssumptions]);
@@ -114,10 +156,15 @@ const AssumptionsHubPage: React.FC = () => {
   }, [showAssumptionsChangeLog, historyRefresh]);
 
   const assumptionsProfiles = useMemo(() => {
-    if (activeTab !== 'baseline') return [];
+    if (activeTab !== 'overview') return [];
     void profilesRefresh;
     return listAssumptionsProfiles();
   }, [activeTab, profilesRefresh]);
+
+  const isBaselineCategoryTab = useMemo(() => {
+    const baselineTabs: HubTabId[] = ['overview', 'income', 'deposit', 'passive', 'withdrawal', 'policy', 'milestones', 'goals'];
+    return baselineTabs.includes(activeTab);
+  }, [activeTab]);
 
   const exportAssumptionsJson = useMemo(() => {
     return () => {
@@ -361,6 +408,38 @@ const AssumptionsHubPage: React.FC = () => {
       );
     };
 
+    const enumOptionsForKeyPath = (keyPath: string): string[] | null => {
+      const optionsByKeyPath: Record<string, string[]> = {
+        'incomeSetupDefaults.incomeModelType': ['grossFirst', 'netFirst'],
+        'incomeSetupDefaults.payCadence': ['monthly', 'biweekly', 'yearly'],
+        'incomeSetupDefaults.salaryGrowthRule': ['fixedPct', 'inflationLinked'],
+        'incomeSetupDefaults.bonusFrequency': ['none', 'yearly', 'monthly'],
+        'incomeSetupDefaults.taxRegime': ['DK', 'none'],
+
+        'depositStrategyDefaults.depositTiming': ['startOfMonth', 'endOfMonth'],
+        'depositStrategyDefaults.contributionCadence': ['monthly', 'yearly'],
+        'depositStrategyDefaults.escalationMode': ['none', 'pctYearly', 'fixedDkkYearly'],
+        'depositStrategyDefaults.routingPriority': ['buffer>debt>wrappers>taxable', 'buffer>goals>debt>wrappers>taxable'],
+
+        'passiveStrategyDefaults.returnModel': ['fixed', 'normal', 'historical'],
+        'passiveStrategyDefaults.rebalancing': ['none', 'annual', 'threshold'],
+
+        'withdrawalStrategyDefaults.withdrawalRule': ['fixedPct', 'fixedReal', 'guardrails'],
+
+        'policyBuilderDefaults.evaluationFrequency': ['monthly', 'quarterly', 'yearly'],
+        'policyBuilderDefaults.conflictResolution': ['priority', 'mostConservative', 'firstMatch'],
+
+        'fireMilestonesDefaults.confidenceTarget': ['P50', 'P90', 'P95'],
+        'fireMilestonesDefaults.milestoneStability': ['instant', 'sustained'],
+
+        'goalPlannerDefaults.fundingOrder': ['buffer>debt>goals>fi', 'buffer>goals>debt>fi'],
+        'goalPlannerDefaults.goalInflationHandling': ['nominal', 'real'],
+        'goalPlannerDefaults.goalRiskHandling': ['default', 'highCertainty'],
+      };
+
+      return optionsByKeyPath[keyPath] ?? null;
+    };
+
     return (item: { keyPath: string; label: string; unit: string; usedBy: string[] }) => {
       const inputId = `assumptions-${item.keyPath.replace(/\./g, '-')}`;
       const value = getValueAtKeyPath(draftAssumptions, item.keyPath);
@@ -433,6 +512,33 @@ const AssumptionsHubPage: React.FC = () => {
             />
           </div>
         );
+      }
+
+      if (item.unit === 'enum') {
+        const options = enumOptionsForKeyPath(item.keyPath);
+        if (options && options.length > 0) {
+          const selectedValue = typeof value === 'string' ? value : String(value ?? '');
+          return (
+            <div key={item.keyPath} style={fieldRowStyle}>
+              <label htmlFor={inputId} style={{ fontWeight: 700 }}>
+                {labelNode}
+              </label>
+              <select
+                id={inputId}
+                value={options.includes(selectedValue) ? selectedValue : options[0]}
+                disabled={disabled}
+                onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.value)}
+                style={inputStyle}
+              >
+                {options.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
       }
 
       // Fallback: render as text.
@@ -541,7 +647,14 @@ const AssumptionsHubPage: React.FC = () => {
         <div role="tablist" aria-label="Assumptions Hub sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(
             [
-              { id: 'baseline' as const, label: 'Baseline' },
+              { id: 'overview' as const, label: 'Overview' },
+              { id: 'income' as const, label: 'Income' },
+              { id: 'deposit' as const, label: 'Deposit' },
+              { id: 'passive' as const, label: 'Passive' },
+              { id: 'withdrawal' as const, label: 'Withdrawal' },
+              { id: 'policy' as const, label: 'Policy' },
+              { id: 'milestones' as const, label: 'Milestones' },
+              { id: 'goals' as const, label: 'Goals' },
               { id: 'execution' as const, label: 'Execution' },
               { id: 'conventions' as const, label: 'Conventions' },
               { id: 'preview' as const, label: 'Preview' },
@@ -567,83 +680,117 @@ const AssumptionsHubPage: React.FC = () => {
           })}
         </div>
 
-        {activeTab === 'baseline' && (
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ fontWeight: 850, fontSize: 18 }}>Baseline assumptions</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={saveDraft} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
-                Save
-              </button>
-              <button type="button" onClick={resetDraftToCurrent} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
-                Cancel
-              </button>
-              <button type="button" onClick={resetDraftToDefaults} disabled={baselineLocked} style={{ padding: '8px 10px' }}>
-                Reset to defaults
-              </button>
+        {isBaselineCategoryTab && (
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontWeight: 850, fontSize: 18 }}>Baseline assumptions</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={saveDraft} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
+                  Save
+                </button>
+                <button type="button" onClick={resetDraftToCurrent} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
+                  Cancel
+                </button>
+                <button type="button" onClick={resetDraftToDefaults} disabled={baselineLocked} style={{ padding: '8px 10px' }}>
+                  Reset to defaults
+                </button>
+              </div>
             </div>
+
+            {baselineLocked && (
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+                Baseline edits are disabled while locked.
+              </div>
+            )}
+
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+              Current (saved): {currentAssumptions.currency} · Inflation {currentAssumptions.inflationPct}% · Fee {currentAssumptions.yearlyFeePct}% · Return{' '}
+              {currentAssumptions.expectedReturnPct}% · SWR {currentAssumptions.safeWithdrawalPct}%
+            </div>
+
+            {activeTab === 'overview' && (
+              <>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 750 }}>
+                    <input
+                      type="checkbox"
+                      checked={uiPrefs.showAssumptionsBar}
+                      onChange={(e) => updateUiPrefs({ showAssumptionsBar: e.target.checked })}
+                    />
+                    Show assumptions bar at top
+                  </label>
+                  <div style={{ opacity: 0.75, fontSize: 13, textAlign: 'right' }}>Default is hidden.</div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                  {coreWorldModelRegistryItems.map(renderAssumptionRegistryField)}
+
+                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Simulator tax exemption defaults</div>
+                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
+                    Defaults used when tax exemption rules are enabled in simulator phases.
+                  </div>
+
+                  {simulatorTaxRegistryItems.map(renderAssumptionRegistryField)}
+
+                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Salary Taxator defaults</div>
+                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Salary Taxator.</div>
+
+                  {salaryTaxatorRegistryItems.map(renderAssumptionRegistryField)}
+
+                  <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>Money Perspectivator defaults</div>
+                  <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>Baseline inputs used to prefill Money Perspectivator.</div>
+
+                  {moneyPerspectiveRegistryItems.map(renderAssumptionRegistryField)}
+                </div>
+
+                <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
+                  This page is intentionally “offline-first”: assumptions are stored in your browser for now.
+                </div>
+              </>
+            )}
+
+            {activeTab === 'income' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {incomeSetupRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'deposit' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {depositStrategyRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'passive' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {passiveStrategyRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'withdrawal' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {withdrawalStrategyRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'policy' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {policyBuilderRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'milestones' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {milestonesRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
+
+            {activeTab === 'goals' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {goalPlannerRegistryItems.map(renderAssumptionRegistryField)}
+              </div>
+            )}
           </div>
-
-          {baselineLocked && (
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-              Baseline edits are disabled while locked.
-            </div>
-          )}
-
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
-            Current (saved): {currentAssumptions.currency} · Inflation {currentAssumptions.inflationPct}% · Fee {currentAssumptions.yearlyFeePct}% · Return {currentAssumptions.expectedReturnPct}% · SWR {currentAssumptions.safeWithdrawalPct}%
-          </div>
-
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 750 }}>
-              <input
-                type="checkbox"
-                checked={uiPrefs.showAssumptionsBar}
-                onChange={(e) => updateUiPrefs({ showAssumptionsBar: e.target.checked })}
-              />
-              Show assumptions bar at top
-            </label>
-            <div style={{ opacity: 0.75, fontSize: 13, textAlign: 'right' }}>
-              Default is hidden.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-            {worldModelRegistryItems.map(renderAssumptionRegistryField)}
-
-            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
-              Simulator tax exemption defaults
-            </div>
-            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
-              Defaults used when tax exemption rules are enabled in simulator phases.
-            </div>
-
-            {simulatorTaxRegistryItems.map(renderAssumptionRegistryField)}
-
-            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
-              Salary Taxator defaults
-            </div>
-            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
-              Baseline inputs used to prefill Salary Taxator.
-            </div>
-
-            {salaryTaxatorRegistryItems.map(renderAssumptionRegistryField)}
-
-            <div style={{ marginTop: 6, fontWeight: 850, fontSize: 16 }}>
-              Money Perspectivator defaults
-            </div>
-            <div style={{ marginTop: -2, fontSize: 13, opacity: 0.78 }}>
-              Baseline inputs used to prefill Money Perspectivator.
-            </div>
-
-            {moneyPerspectiveRegistryItems.map(renderAssumptionRegistryField)}
-          </div>
-
-          <div style={{ marginTop: 14, opacity: 0.78, fontSize: 13 }}>
-            This page is intentionally “offline-first”: assumptions are stored in your browser for now.
-          </div>
-        </div>
-
         )}
 
         {activeTab === 'execution' && (
@@ -665,7 +812,7 @@ const AssumptionsHubPage: React.FC = () => {
 
         )}
 
-        {activeTab === 'baseline' && (
+        {activeTab === 'overview' && (
           <div style={cardStyle}>
             <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles</div>
             <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13 }}>
@@ -778,7 +925,7 @@ const AssumptionsHubPage: React.FC = () => {
 
         )}
 
-        {activeTab === 'baseline' && (
+        {activeTab === 'overview' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & guardrails</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -908,7 +1055,7 @@ const AssumptionsHubPage: React.FC = () => {
 
         )}
 
-        {activeTab === 'baseline' && (
+        {activeTab === 'overview' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Impact preview</div>
           <div style={{ opacity: 0.8, marginBottom: 10 }}>
@@ -1110,19 +1257,19 @@ const AssumptionsHubPage: React.FC = () => {
                       return (
                         <div
                           key={r.keyPath}
-                          style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}
-                        >
-                          <div style={{ fontWeight: 800 }}>{r.label}</div>
-                          <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
-                            {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
-                          </div>
-                          {usedBy.length > 0 && (
-                            <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {usedBy.join(', ')}</div>
-                          )}
-                          <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                {snapshotAdvancedRequestDiffRows.length === 0 ? (
+                  <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No re-run request changes.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {snapshotAdvancedRequestDiffRows.map((r) => (
+                      <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                        <div style={{ fontWeight: 800 }}>{r.label}</div>
+                        <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                          {formatValue('', r.from)} → {formatValue('', r.to)}
                         </div>
-                      );
-                    })}
+                        <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
@@ -1189,7 +1336,7 @@ const AssumptionsHubPage: React.FC = () => {
                         disabled={baselineLocked}
                         onClick={() => {
                           setDraftAssumptions(normalizeAssumptions(s.assumptions));
-                          setActiveTab('baseline');
+                          setActiveTab('overview');
                         }}
                       >
                         Use snapshot assumptions as draft
