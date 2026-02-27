@@ -38,5 +38,21 @@ export type AssumptionRegistryItem = {
 
 export const ASSUMPTIONS_REGISTRY: AssumptionRegistryItem[] = rawRegistry as AssumptionRegistryItem[];
 
+const normalizeLabel = (label: string): string => String(label).replace(/\s+/g, '').toLowerCase();
+
+export const normalizeUsedByLabels = (usedBy: string[]): string[] => {
+  const cleaned = usedBy.map((x) => String(x).trim()).filter(Boolean);
+  return Array.from(new Set(cleaned));
+};
+
+export const filterUsedByForAssumptionsHub = (usedBy: string[]): string[] => {
+  const isHubInternal = (label: string): boolean => {
+    const normalized = normalizeLabel(label);
+    return normalized.includes('assumptionshub') || normalized.includes('assumptionssummarybar');
+  };
+
+  return normalizeUsedByLabels(usedBy).filter((x) => !isHubInternal(x));
+};
+
 export const listRegistryByTab = (tab: AssumptionsTabId): AssumptionRegistryItem[] =>
   ASSUMPTIONS_REGISTRY.filter((x) => x.tab === tab);

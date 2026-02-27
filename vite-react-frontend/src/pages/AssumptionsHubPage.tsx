@@ -3,13 +3,13 @@ import PageLayout from '../components/PageLayout';
 import { normalizeAssumptions, useAssumptions } from '../state/assumptions';
 import { useUiPreferences } from '../state/uiPreferences';
 import { getDefaultExecutionDefaults, type ExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
-import { listRegistryByTab } from '../state/assumptionsRegistry';
+import { filterUsedByForAssumptionsHub, listRegistryByTab } from '../state/assumptionsRegistry';
 import { listConventionsByGroup } from '../state/conventionsRegistry';
 import { clearAssumptionsHistory, listAssumptionsHistory } from '../state/assumptionsHistory';
 import { deleteAssumptionsProfile, listAssumptionsProfiles, saveAssumptionsProfile } from '../state/assumptionsProfiles';
 import { loadAssumptionsGovernance, saveAssumptionsGovernance, type AssumptionsGovernance } from '../state/assumptionsGovernance';
 import { listSimulationSnapshots } from '../state/simulationSnapshots';
-import { SkeletonWidgets, type SkeletonWidget } from './skeleton/SkeletonWidgets';
+import { computeAssumptionsImpact } from '../utils/assumptionsImpact';
 
 const fieldRowStyle: React.CSSProperties = {
   display: 'grid',
@@ -38,20 +38,6 @@ const cardStyle: React.CSSProperties = {
 
 type HubTabId = 'baseline' | 'execution' | 'conventions' | 'preview';
 
-const filterUsedByForAssumptionsHub = (usedBy: string[]): string[] => {
-  const isHubInternal = (label: string): boolean => {
-    const normalized = String(label).replace(/\s+/g, '').toLowerCase();
-    return normalized.includes('assumptionshub') || normalized.includes('assumptionssummarybar');
-  };
-
-  const cleaned = usedBy
-    .map((x) => String(x).trim())
-    .filter(Boolean)
-    .filter((x) => !isHubInternal(x));
-
-  return Array.from(new Set(cleaned));
-};
-
 const AssumptionsHubPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<HubTabId>('baseline');
   const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = React.useState(false);
@@ -76,7 +62,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const baselineLocked = governance.lockBaseline;
 
-  const persistGovernance = (patch: Partial<AssumptionsGovernance>) => {
+  const persistGovernance = React.useCallback((patch: Partial<AssumptionsGovernance>) => {
     const next: AssumptionsGovernance = {
       ...governance,
       ...patch,
@@ -84,7 +70,7 @@ const AssumptionsHubPage: React.FC = () => {
     };
     setGovernance(next);
     saveAssumptionsGovernance(next);
-  };
+  }, [governance]);
 
   const timingConventions = useMemo(() => listConventionsByGroup('timing'), []);
   const executionRegistryItems = useMemo(() => listRegistryByTab('execution'), []);
@@ -123,6 +109,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const assumptionsHistory = useMemo(() => {
     if (!showAssumptionsChangeLog) return [];
+    void historyRefresh;
     return listAssumptionsHistory();
   }, [showAssumptionsChangeLog, historyRefresh]);
 
@@ -183,7 +170,7 @@ const AssumptionsHubPage: React.FC = () => {
         setImportStatus('Import failed: invalid JSON.');
       }
     };
-  }, [baselineLocked, governance.lockBaseline, governance.sourceNote, setDraftAssumptions]);
+  }, [baselineLocked, governance.lockBaseline, governance.sourceNote, persistGovernance, setDraftAssumptions]);
 
   const formatValue = useMemo(() => {
     const stringify = (v: unknown): string => {
@@ -252,6 +239,9 @@ const AssumptionsHubPage: React.FC = () => {
     rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
     return rows;
   }, [currentAssumptions, draftAssumptions, getValueAtKeyPath, previewRegistryItems]);
+
+  const currentImpact = useMemo(() => computeAssumptionsImpact(currentAssumptions), [currentAssumptions]);
+  const draftImpact = useMemo(() => computeAssumptionsImpact(draftAssumptions), [draftAssumptions]);
 
   const snapshotDiffRows = useMemo(() => {
     if (!selectedSnapshotAssumptions) return [];
@@ -919,24 +909,103 @@ const AssumptionsHubPage: React.FC = () => {
 
         {activeTab === 'baseline' && (
         <div style={cardStyle}>
-          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Impact preview (placeholder)</div>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Impact preview</div>
           <div style={{ opacity: 0.8, marginBottom: 10 }}>
-            Later: show how changes to inflation/return/SWR shift FI date range and safe spending.
+            Quick derived metrics for current vs draft. This is intentionally approximate (no sequence-of-returns effects).
           </div>
-          <SkeletonWidgets
-            widgets={
-              [
-                { kind: 'chart', title: 'FI date range sensitivity', subtitle: 'Chart placeholder: sliders → range shifts.' },
-                { kind: 'chart', title: 'Safe monthly spending sensitivity', subtitle: 'Chart placeholder: SWR changes.' },
-                {
-                  kind: 'table',
-                  title: 'Sensitivity table',
-                  columns: ['Change', 'FI date shift', 'Safe spend shift', 'Risk note'],
-                  rows: 5,
-                },
-              ] satisfies SkeletonWidget[]
-            }
-          />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr)', gap: 10 }}>
+            <div style={{ fontWeight: 800, opacity: 0.9 }}>Metric</div>
+            <div style={{ fontWeight: 800, opacity: 0.9 }}>Current</div>
+            <div style={{ fontWeight: 800, opacity: 0.9 }}>Draft</div>
+            <div style={{ fontWeight: 800, opacity: 0.9 }}>Δ</div>
+
+            {(
+              () => {
+                const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+                const nf2 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+
+                const fmtMoney = (v: number | null): string => (v === null ? '—' : nf0.format(v));
+                const fmtPct = (v: number): string => `${nf2.format(v)}%`;
+                const fmtX = (v: number): string => `${nf2.format(v)}×`;
+                const fmtCount = (v: number): string => nf0.format(v);
+
+                const rows: Array<{
+                  label: string;
+                  cur: string;
+                  draft: string;
+                  delta: string;
+                }> = [
+                  {
+                    label: 'Net nominal return (return − fee)',
+                    cur: fmtPct(currentImpact.nominalNetReturnPct),
+                    draft: fmtPct(draftImpact.nominalNetReturnPct),
+                    delta: fmtPct(draftImpact.nominalNetReturnPct - currentImpact.nominalNetReturnPct),
+                  },
+                  {
+                    label: 'Approx real return (net / inflation)',
+                    cur: fmtPct(currentImpact.approxRealReturnPct),
+                    draft: fmtPct(draftImpact.approxRealReturnPct),
+                    delta: fmtPct(draftImpact.approxRealReturnPct - currentImpact.approxRealReturnPct),
+                  },
+                  {
+                    label: 'Horizon (years)',
+                    cur: fmtCount(currentImpact.horizonYears),
+                    draft: fmtCount(draftImpact.horizonYears),
+                    delta: fmtCount(draftImpact.horizonYears - currentImpact.horizonYears),
+                  },
+                  {
+                    label: 'Inflation multiplier over horizon',
+                    cur: fmtX(currentImpact.inflationFactorOverHorizon),
+                    draft: fmtX(draftImpact.inflationFactorOverHorizon),
+                    delta: '—',
+                  },
+                  {
+                    label: 'Real growth multiplier over horizon',
+                    cur: fmtX(currentImpact.realGrowthFactorOverHorizon),
+                    draft: fmtX(draftImpact.realGrowthFactorOverHorizon),
+                    delta: '—',
+                  },
+                  {
+                    label: 'Core expense (monthly, today)',
+                    cur: fmtMoney(currentImpact.coreExpenseMonthlyDkk),
+                    draft: fmtMoney(draftImpact.coreExpenseMonthlyDkk),
+                    delta: fmtMoney(draftImpact.coreExpenseMonthlyDkk - currentImpact.coreExpenseMonthlyDkk),
+                  },
+                  {
+                    label: 'Core expense (monthly, nominal at horizon)',
+                    cur: fmtMoney(currentImpact.coreExpenseMonthlyNominalAtHorizonDkk),
+                    draft: fmtMoney(draftImpact.coreExpenseMonthlyNominalAtHorizonDkk),
+                    delta: '—',
+                  },
+                  {
+                    label: 'Safe monthly spend per 1,000,000 (SWR)',
+                    cur: fmtMoney(currentImpact.safeMonthlySpendPer1MDkk),
+                    draft: fmtMoney(draftImpact.safeMonthlySpendPer1MDkk),
+                    delta: fmtMoney(draftImpact.safeMonthlySpendPer1MDkk - currentImpact.safeMonthlySpendPer1MDkk),
+                  },
+                  {
+                    label: 'FI number (core expense / SWR)',
+                    cur: fmtMoney(currentImpact.fiNumberDkk),
+                    draft: fmtMoney(draftImpact.fiNumberDkk),
+                    delta:
+                      currentImpact.fiNumberDkk !== null && draftImpact.fiNumberDkk !== null
+                        ? fmtMoney(draftImpact.fiNumberDkk - currentImpact.fiNumberDkk)
+                        : '—',
+                  },
+                ];
+
+                return rows.map((r) => (
+                  <React.Fragment key={r.label}>
+                    <div style={{ opacity: 0.92 }}>{r.label}</div>
+                    <div style={{ fontWeight: 750 }}>{r.cur}</div>
+                    <div style={{ fontWeight: 750 }}>{r.draft}</div>
+                    <div style={{ opacity: 0.85 }}>{r.delta}</div>
+                  </React.Fragment>
+                ));
+              }
+            )()}
+          </div>
         </div>
 
         )}
