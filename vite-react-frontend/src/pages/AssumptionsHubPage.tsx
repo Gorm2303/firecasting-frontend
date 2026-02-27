@@ -2,10 +2,13 @@ import React, { useMemo } from 'react';
 import PageLayout from '../components/PageLayout';
 import { normalizeAssumptions, useAssumptions } from '../state/assumptions';
 import { useUiPreferences } from '../state/uiPreferences';
-import { getDefaultExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
+import { getDefaultExecutionDefaults, type ExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
 import { listRegistryByTab } from '../state/assumptionsRegistry';
 import { listConventionsByGroup } from '../state/conventionsRegistry';
 import { listAssumptionsHistory } from '../state/assumptionsHistory';
+import { deleteAssumptionsProfile, listAssumptionsProfiles, saveAssumptionsProfile } from '../state/assumptionsProfiles';
+import { loadAssumptionsGovernance, saveAssumptionsGovernance, type AssumptionsGovernance } from '../state/assumptionsGovernance';
+import { listSimulationSnapshots } from '../state/simulationSnapshots';
 import { SkeletonWidgets, type SkeletonWidget } from './skeleton/SkeletonWidgets';
 
 const fieldRowStyle: React.CSSProperties = {
@@ -35,10 +38,28 @@ const cardStyle: React.CSSProperties = {
 
 type HubTabId = 'baseline' | 'execution' | 'conventions' | 'preview';
 
+const filterUsedByForAssumptionsHub = (usedBy: string[]): string[] => {
+  const isHubInternal = (label: string): boolean => {
+    const normalized = String(label).replace(/\s+/g, '').toLowerCase();
+    return normalized.includes('assumptionshub') || normalized.includes('assumptionssummarybar');
+  };
+
+  const cleaned = usedBy
+    .map((x) => String(x).trim())
+    .filter(Boolean)
+    .filter((x) => !isHubInternal(x));
+
+  return Array.from(new Set(cleaned));
+};
+
 const AssumptionsHubPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<HubTabId>('baseline');
   const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = React.useState(false);
   const [importStatus, setImportStatus] = React.useState<string>('');
+  const [selectedSnapshotId, setSelectedSnapshotId] = React.useState<string>('');
+  const [profilesRefresh, setProfilesRefresh] = React.useState(0);
+  const [profileName, setProfileName] = React.useState('');
+  const [governance, setGovernance] = React.useState<AssumptionsGovernance>(() => loadAssumptionsGovernance());
   const {
     currentAssumptions,
     draftAssumptions,
@@ -51,6 +72,18 @@ const AssumptionsHubPage: React.FC = () => {
   } = useAssumptions();
   const { uiPrefs, updateUiPrefs } = useUiPreferences();
   const { executionDefaults, updateExecutionDefaults, resetExecutionDefaults } = useExecutionDefaults();
+
+  const baselineLocked = governance.lockBaseline;
+
+  const persistGovernance = (patch: Partial<AssumptionsGovernance>) => {
+    const next: AssumptionsGovernance = {
+      ...governance,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    setGovernance(next);
+    saveAssumptionsGovernance(next);
+  };
 
   const timingConventions = useMemo(() => listConventionsByGroup('timing'), []);
   const executionRegistryItems = useMemo(() => listRegistryByTab('execution'), []);
@@ -71,10 +104,32 @@ const AssumptionsHubPage: React.FC = () => {
 
   const jsonPreview = useMemo(() => JSON.stringify(draftAssumptions, null, 2), [draftAssumptions]);
 
+  const simulationSnapshots = useMemo(() => {
+    if (activeTab !== 'preview') return [];
+    return listSimulationSnapshots();
+  }, [activeTab]);
+
+  const selectedSnapshot = useMemo(() => {
+    if (activeTab !== 'preview') return null;
+    if (!selectedSnapshotId) return null;
+    return simulationSnapshots.find((s) => s.id === selectedSnapshotId) ?? null;
+  }, [activeTab, selectedSnapshotId, simulationSnapshots]);
+
+  const selectedSnapshotAssumptions = useMemo(() => {
+    if (!selectedSnapshot) return null;
+    return normalizeAssumptions(selectedSnapshot.assumptions);
+  }, [selectedSnapshot]);
+
   const assumptionsHistory = useMemo(() => {
     if (!showAssumptionsChangeLog) return [];
     return listAssumptionsHistory();
   }, [showAssumptionsChangeLog]);
+
+  const assumptionsProfiles = useMemo(() => {
+    if (activeTab !== 'baseline') return [];
+    void profilesRefresh;
+    return listAssumptionsProfiles();
+  }, [activeTab, profilesRefresh]);
 
   const exportAssumptionsJson = useMemo(() => {
     return () => {
@@ -98,6 +153,11 @@ const AssumptionsHubPage: React.FC = () => {
       setImportStatus('');
       if (!file) return;
 
+      if (baselineLocked) {
+        setImportStatus('Baseline is locked. Unlock baseline to import into draft.');
+        return;
+      }
+
       try {
         const text = await file.text();
         const raw = JSON.parse(text);
@@ -111,7 +171,7 @@ const AssumptionsHubPage: React.FC = () => {
         setImportStatus('Import failed: invalid JSON.');
       }
     };
-  }, [setDraftAssumptions]);
+  }, [baselineLocked, setDraftAssumptions]);
 
   const formatValue = useMemo(() => {
     const stringify = (v: unknown): string => {
@@ -181,6 +241,37 @@ const AssumptionsHubPage: React.FC = () => {
     return rows;
   }, [currentAssumptions, draftAssumptions, getValueAtKeyPath, previewRegistryItems]);
 
+  const snapshotDiffRows = useMemo(() => {
+    if (!selectedSnapshotAssumptions) return [];
+
+    const rows = previewRegistryItems
+      .map((item) => {
+        const from = getValueAtKeyPath(selectedSnapshotAssumptions, item.keyPath);
+        const to = getValueAtKeyPath(draftAssumptions, item.keyPath);
+        const same = Object.is(from, to) || JSON.stringify(from) === JSON.stringify(to);
+        if (same) return null;
+        return {
+          keyPath: item.keyPath,
+          label: item.label,
+          unit: item.unit,
+          usedBy: item.usedBy,
+          from,
+          to,
+        };
+      })
+      .filter(Boolean) as Array<{
+      keyPath: string;
+      label: string;
+      unit: string;
+      usedBy: string[];
+      from: unknown;
+      to: unknown;
+    }>;
+
+    rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
+    return rows;
+  }, [draftAssumptions, getValueAtKeyPath, previewRegistryItems, selectedSnapshotAssumptions]);
+
   const executionOverridesRows = useMemo(() => {
     const defaults = getDefaultExecutionDefaults();
 
@@ -231,6 +322,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const updateDraftValueAtKeyPath = useMemo(() => {
     return (keyPath: string, nextValue: unknown) => {
+      if (baselineLocked) return;
       const parts = keyPath.split('.').filter(Boolean);
       if (parts.length === 0) return;
 
@@ -243,7 +335,7 @@ const AssumptionsHubPage: React.FC = () => {
       const nextTop = setObjectValueAtPath((draftAssumptions as Record<string, unknown>)[top], rest, nextValue);
       updateDraftAssumptions({ [top]: nextTop } as Partial<typeof draftAssumptions>);
     };
-  }, [draftAssumptions, setObjectValueAtPath, updateDraftAssumptions]);
+  }, [baselineLocked, draftAssumptions, setObjectValueAtPath, updateDraftAssumptions]);
 
   const getStepForUnit = useMemo(() => {
     return (unit: string): number => {
@@ -269,11 +361,13 @@ const AssumptionsHubPage: React.FC = () => {
     return (item: { keyPath: string; label: string; unit: string; usedBy: string[] }) => {
       const inputId = `assumptions-${item.keyPath.replace(/\./g, '-')}`;
       const value = getValueAtKeyPath(draftAssumptions, item.keyPath);
+      const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
+      const disabled = baselineLocked;
 
       const labelNode = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div>{item.label}</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {item.usedBy.join(', ')}</div>
+          {usedBy.length > 0 && <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>}
         </div>
       );
 
@@ -287,6 +381,7 @@ const AssumptionsHubPage: React.FC = () => {
               id={inputId}
               type="checkbox"
               checked={Boolean(value)}
+              disabled={disabled}
               onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.checked)}
             />
           </div>
@@ -309,6 +404,7 @@ const AssumptionsHubPage: React.FC = () => {
             <input
               id={inputId}
               value={typeof value === 'string' ? value : value == null ? '' : String(value)}
+              disabled={disabled}
               onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.value)}
               style={inputStyle}
               placeholder={placeholder}
@@ -328,6 +424,7 @@ const AssumptionsHubPage: React.FC = () => {
               type="number"
               step={getStepForUnit(item.unit)}
               value={typeof value === 'number' ? value : value == null ? '' : Number(value)}
+              disabled={disabled}
               onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, Number(e.target.value))}
               style={inputStyle}
             />
@@ -344,13 +441,14 @@ const AssumptionsHubPage: React.FC = () => {
           <input
             id={inputId}
             value={value == null ? '' : String(value)}
+            disabled={disabled}
             onChange={(e) => updateDraftValueAtKeyPath(item.keyPath, e.target.value)}
             style={inputStyle}
           />
         </div>
       );
     };
-  }, [draftAssumptions, getStepForUnit, getValueAtKeyPath, updateDraftValueAtKeyPath]);
+  }, [baselineLocked, draftAssumptions, getStepForUnit, getValueAtKeyPath, updateDraftValueAtKeyPath]);
 
   const updateExecutionValueAtKeyPath = useMemo(() => {
     return (keyPath: string, nextValue: unknown) => {
@@ -359,15 +457,15 @@ const AssumptionsHubPage: React.FC = () => {
       const prop = keyPath.slice(prefix.length);
       if (!prop) return;
 
-      updateExecutionDefaults({ [prop]: nextValue } as Partial<typeof executionDefaults>);
+      updateExecutionDefaults({ [prop]: nextValue } as Partial<ExecutionDefaults>);
     };
-  }, [executionDefaults, updateExecutionDefaults]);
+  }, [updateExecutionDefaults]);
 
   const renderExecutionRegistryField = useMemo(() => {
     const labelNode = (label: string, usedBy: string[]) => (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div>{label}</div>
-        <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>
+        {usedBy.length > 0 && <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>}
       </div>
     );
 
@@ -375,12 +473,13 @@ const AssumptionsHubPage: React.FC = () => {
       const inputId = `execution-${item.keyPath.replace(/\./g, '-')}`;
       const prop = item.keyPath.replace('executionDefaults.', '');
       const value = (executionDefaults as Record<string, unknown>)[prop];
+      const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
 
       if (item.unit === 'enum' && item.keyPath === 'executionDefaults.seedMode') {
         return (
           <div key={item.keyPath} style={fieldRowStyle}>
             <label htmlFor={inputId} style={{ fontWeight: 700 }}>
-              {labelNode(item.label, item.usedBy)}
+              {labelNode(item.label, usedBy)}
             </label>
             <select
               id={inputId}
@@ -400,7 +499,7 @@ const AssumptionsHubPage: React.FC = () => {
       return (
         <div key={item.keyPath} style={fieldRowStyle}>
           <label htmlFor={inputId} style={{ fontWeight: 700 }}>
-            {labelNode(item.label, item.usedBy)}
+            {labelNode(item.label, usedBy)}
           </label>
           <input
             id={inputId}
@@ -427,6 +526,11 @@ const AssumptionsHubPage: React.FC = () => {
           {isDraftDirty && (
             <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
               You have unsaved draft changes.
+            </div>
+          )}
+          {baselineLocked && (
+            <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
+              Baseline is locked.
             </div>
           )}
         </div>
@@ -465,17 +569,23 @@ const AssumptionsHubPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ fontWeight: 850, fontSize: 18 }}>Baseline assumptions</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={saveDraft} disabled={!isDraftDirty} style={{ padding: '8px 10px' }}>
+              <button type="button" onClick={saveDraft} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
                 Save
               </button>
-              <button type="button" onClick={resetDraftToCurrent} disabled={!isDraftDirty} style={{ padding: '8px 10px' }}>
+              <button type="button" onClick={resetDraftToCurrent} disabled={baselineLocked || !isDraftDirty} style={{ padding: '8px 10px' }}>
                 Cancel
               </button>
-              <button type="button" onClick={resetDraftToDefaults} style={{ padding: '8px 10px' }}>
+              <button type="button" onClick={resetDraftToDefaults} disabled={baselineLocked} style={{ padding: '8px 10px' }}>
                 Reset to defaults
               </button>
             </div>
           </div>
+
+          {baselineLocked && (
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+              Baseline edits are disabled while locked.
+            </div>
+          )}
 
           <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
             Current (saved): {currentAssumptions.currency} · Inflation {currentAssumptions.inflationPct}% · Fee {currentAssumptions.yearlyFeePct}% · Return {currentAssumptions.expectedReturnPct}% · SWR {currentAssumptions.safeWithdrawalPct}%
@@ -553,34 +663,90 @@ const AssumptionsHubPage: React.FC = () => {
         )}
 
         {activeTab === 'baseline' && (
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles (placeholder)</div>
-          <div style={{ opacity: 0.8, marginBottom: 10 }}>
-            Later: switch between sets like “Baseline”, “Conservative”, “Aggressive”, “Partner view”.
-          </div>
-          <SkeletonWidgets
-            widgets={
-              [
-                {
-                  kind: 'table',
-                  title: 'Profiles',
-                  columns: ['Profile', 'Inflation', 'Return', 'SWR', 'Notes'],
-                  rows: 4,
-                },
-                {
-                  kind: 'cards',
-                  title: 'Quick picks',
-                  cards: [
-                    { title: 'Baseline', body: 'Your default set for most pages and reports.' },
-                    { title: 'Conservative', body: 'Lower return / lower SWR. Stress-test friendly.' },
-                    { title: 'Aggressive', body: 'Higher return assumptions; used for upside exploration.' },
-                  ],
-                },
-              ] satisfies SkeletonWidget[]
-            }
-          />
-        </div>
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles</div>
+            <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13 }}>
+              Save named baseline assumption sets locally. Load copies into draft.
+            </div>
 
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={fieldRowStyle}>
+                <label htmlFor="assumptions-profile-name" style={{ fontWeight: 700 }}>
+                  Profile name
+                </label>
+                <input
+                  id="assumptions-profile-name"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="e.g. Baseline, Conservative"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={!profileName.trim()}
+                  onClick={() => {
+                    saveAssumptionsProfile(profileName, normalizeAssumptions(draftAssumptions));
+                    setProfileName('');
+                    setProfilesRefresh((v) => v + 1);
+                  }}
+                >
+                  Save draft as profile
+                </button>
+              </div>
+
+              {assumptionsProfiles.length === 0 ? (
+                <div style={{ opacity: 0.8, fontSize: 13 }}>No profiles yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {assumptionsProfiles.slice(0, 20).map((p) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        padding: '10px 12px',
+                        border: '1px solid var(--fc-card-border)',
+                        borderRadius: 12,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 800 }}>{p.name}</div>
+                        <div style={{ opacity: 0.75, fontSize: 12 }}>{new Date(p.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                        {p.assumptions.currency} · Inflation {p.assumptions.inflationPct}% · Fee {p.assumptions.yearlyFeePct}% · Return{' '}
+                        {p.assumptions.expectedReturnPct}% · SWR {p.assumptions.safeWithdrawalPct}%
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          disabled={baselineLocked}
+                          onClick={() => {
+                            setDraftAssumptions(normalizeAssumptions(p.assumptions));
+                          }}
+                        >
+                          Load into draft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            deleteAssumptionsProfile(p.id);
+                            setProfilesRefresh((v) => v + 1);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {activeTab === 'conventions' && (
@@ -597,7 +763,11 @@ const AssumptionsHubPage: React.FC = () => {
                 <div style={{ opacity: 0.85, fontSize: 13 }}>
                   {c.description} <span style={{ opacity: 0.85 }}>(Token: {c.token})</span>
                 </div>
-                <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {c.usedBy.join(', ')}</div>
+                {filterUsedByForAssumptionsHub(c.usedBy).length > 0 && (
+                  <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>
+                    Used by: {filterUsedByForAssumptionsHub(c.usedBy).join(', ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -607,7 +777,7 @@ const AssumptionsHubPage: React.FC = () => {
 
         {activeTab === 'baseline' && (
         <div style={cardStyle}>
-          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & guardrails (placeholder)</div>
+          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & guardrails</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={fieldRowStyle}>
               <label htmlFor="assumptions-source" style={{ fontWeight: 700 }}>
@@ -615,8 +785,8 @@ const AssumptionsHubPage: React.FC = () => {
               </label>
               <textarea
                 id="assumptions-source"
-                value={''}
-                readOnly
+                value={governance.sourceNote}
+                onChange={(e) => persistGovernance({ sourceNote: e.target.value })}
                 placeholder="Where did these assumptions come from? (links, rationale, date…)"
                 rows={3}
                 style={{ ...inputStyle, resize: 'vertical' }}
@@ -628,9 +798,14 @@ const AssumptionsHubPage: React.FC = () => {
                 Lock baseline
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input id="assumptions-lock" type="checkbox" checked={false} disabled />
+                <input
+                  id="assumptions-lock"
+                  type="checkbox"
+                  checked={governance.lockBaseline}
+                  onChange={(e) => persistGovernance({ lockBaseline: e.target.checked })}
+                />
                 <div style={{ opacity: 0.8, fontSize: 13 }}>
-                  Placeholder: prevents accidental edits when generating reports.
+                  Prevents accidental edits/imports into draft.
                 </div>
               </div>
             </div>
@@ -649,14 +824,16 @@ const AssumptionsHubPage: React.FC = () => {
                     void importAssumptionsJson(file);
                     e.target.value = '';
                   }}
+                  disabled={baselineLocked}
                 />
                 <span
                   style={{
                     padding: '8px 10px',
                     borderRadius: 10,
                     border: '1px solid var(--fc-card-border)',
-                    cursor: 'pointer',
+                    cursor: baselineLocked ? 'not-allowed' : 'pointer',
                     userSelect: 'none',
+                    opacity: baselineLocked ? 0.55 : 1,
                   }}
                 >
                   Import JSON
@@ -738,17 +915,58 @@ const AssumptionsHubPage: React.FC = () => {
               <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No baseline changes.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                {assumptionsDiffRows.map((r) => (
-                  <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                    <div style={{ fontWeight: 800 }}>{r.label}</div>
-                    <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
-                      {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                {assumptionsDiffRows.map((r) => {
+                  const usedBy = filterUsedByForAssumptionsHub(r.usedBy);
+                  return (
+                    <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                      <div style={{ fontWeight: 800 }}>{r.label}</div>
+                      <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                        {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                      </div>
+                      {usedBy.length > 0 && <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {usedBy.join(', ')}</div>}
+                      <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
                     </div>
-                    <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {r.usedBy.join(', ')}</div>
-                    <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+            )}
+
+            {selectedSnapshot && selectedSnapshotAssumptions && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Selected snapshot → draft changes</div>
+                  <button type="button" onClick={() => setSelectedSnapshotId('')}>
+                    Clear snapshot compare
+                  </button>
+                </div>
+                <div style={{ opacity: 0.82, fontSize: 13, marginBottom: 10 }}>
+                  Snapshot run <span style={{ fontWeight: 800 }}>{selectedSnapshot.runId}</span> ({new Date(selectedSnapshot.createdAt).toLocaleString()}) → current draft.
+                </div>
+                {snapshotDiffRows.length === 0 ? (
+                  <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No changes vs selected snapshot.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {snapshotDiffRows.map((r) => {
+                      const usedBy = filterUsedByForAssumptionsHub(r.usedBy);
+                      return (
+                        <div
+                          key={r.keyPath}
+                          style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}
+                        >
+                          <div style={{ fontWeight: 800 }}>{r.label}</div>
+                          <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                            {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                          </div>
+                          {usedBy.length > 0 && (
+                            <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {usedBy.join(', ')}</div>
+                          )}
+                          <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
 
             <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Execution overrides</div>
@@ -756,21 +974,72 @@ const AssumptionsHubPage: React.FC = () => {
               <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No execution overrides.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                {executionOverridesRows.map((r) => (
-                  <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                    <div style={{ fontWeight: 800 }}>{r.label}</div>
-                    <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
-                      {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                {executionOverridesRows.map((r) => {
+                  const usedBy = filterUsedByForAssumptionsHub(r.usedBy);
+                  return (
+                    <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                      <div style={{ fontWeight: 800 }}>{r.label}</div>
+                      <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                        {formatValue(r.unit, r.from)} → {formatValue(r.unit, r.to)}
+                      </div>
+                      {usedBy.length > 0 && <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {usedBy.join(', ')}</div>}
+                      <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
                     </div>
-                    <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>Used by: {r.usedBy.join(', ')}</div>
-                    <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Raw draft JSON</div>
             <pre style={{ margin: 0, overflow: 'auto', opacity: 0.92 }}>{jsonPreview}</pre>
+
+            <div style={{ fontWeight: 850, fontSize: 16, marginTop: 14, marginBottom: 6 }}>Recent simulation snapshots</div>
+            <div style={{ opacity: 0.82, fontSize: 13, marginBottom: 10 }}>
+              Saved automatically when you start a simulation.
+            </div>
+            {simulationSnapshots.length === 0 ? (
+              <div style={{ opacity: 0.8, fontSize: 13 }}>No snapshots yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {simulationSnapshots.slice(0, 10).map((s) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      padding: '10px 12px',
+                      border: '1px solid var(--fc-card-border)',
+                      borderRadius: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 800 }}>Run: {s.runId}</div>
+                      <div style={{ opacity: 0.75, fontSize: 12 }}>{new Date(s.createdAt).toLocaleString()}</div>
+                    </div>
+                    <div style={{ opacity: 0.85, fontSize: 13 }}>
+                      Assumptions: {s.assumptions.currency} · Inflation {s.assumptions.inflationPct}% · Fee {s.assumptions.yearlyFeePct}% · Return{' '}
+                      {s.assumptions.expectedReturnPct}% · SWR {s.assumptions.safeWithdrawalPct}%
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => setSelectedSnapshotId(s.id)}>
+                        Compare snapshot → draft
+                      </button>
+                      <button
+                        type="button"
+                        disabled={baselineLocked}
+                        onClick={() => {
+                          setDraftAssumptions(normalizeAssumptions(s.assumptions));
+                          setActiveTab('baseline');
+                        }}
+                      >
+                        Use snapshot assumptions as draft
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
