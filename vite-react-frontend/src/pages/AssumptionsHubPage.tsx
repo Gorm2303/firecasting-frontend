@@ -10,6 +10,7 @@ import { deleteAssumptionsProfile, listAssumptionsProfiles, saveAssumptionsProfi
 import { loadAssumptionsGovernance, saveAssumptionsGovernance, type AssumptionsGovernance } from '../state/assumptionsGovernance';
 import { listSimulationSnapshots } from '../state/simulationSnapshots';
 import { computeAssumptionsImpact, computeAssumptionsImpactSensitivity } from '../utils/assumptionsImpact';
+import { seedForMode } from '../models/advancedSimulation';
 
 const fieldRowStyle: React.CSSProperties = {
   display: 'grid',
@@ -321,6 +322,63 @@ const AssumptionsHubPage: React.FC = () => {
     rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
     return rows;
   }, [draftAssumptions, getValueAtKeyPath, previewRegistryItems, selectedSnapshotAssumptions]);
+
+  const selectedSnapshotRerunRequest = useMemo(() => {
+    if (!selectedSnapshot?.advancedRequest) return null;
+
+    const base = selectedSnapshot.advancedRequest;
+
+    const snapshotSeed = typeof base.seed === 'number' && Number.isFinite(base.seed) ? Math.trunc(base.seed) : 1;
+    const snapshotSeedForCustom = snapshotSeed > 0 ? snapshotSeed : 1;
+    const seed = seedForMode(executionDefaults.seedMode, snapshotSeedForCustom);
+
+    const next: any = { ...base, seed };
+
+    if (base.returnerConfig && typeof base.returnerConfig === 'object') {
+      next.returnerConfig = { ...base.returnerConfig, seed };
+    }
+
+    // Preserve feature-flag semantics from the snapshot: only mutate fields that were present.
+    if (base.paths !== undefined) next.paths = executionDefaults.paths;
+    if (base.batchSize !== undefined) next.batchSize = executionDefaults.batchSize;
+
+    if (base.inflationFactor !== undefined) {
+      next.inflationFactor = 1 + (Number(draftAssumptions.inflationPct) || 0) / 100;
+    }
+
+    if (base.yearlyFeePercentage !== undefined) {
+      next.yearlyFeePercentage = Number(draftAssumptions.yearlyFeePct) || 0;
+    }
+
+    return next;
+  }, [draftAssumptions.inflationPct, draftAssumptions.yearlyFeePct, executionDefaults.batchSize, executionDefaults.paths, executionDefaults.seedMode, selectedSnapshot]);
+
+  const snapshotAdvancedRequestDiffRows = useMemo(() => {
+    if (!selectedSnapshot?.advancedRequest) return [];
+    if (!selectedSnapshotRerunRequest) return [];
+
+    const fields: Array<{ keyPath: string; label: string }> = [
+      { keyPath: 'paths', label: 'Paths' },
+      { keyPath: 'batchSize', label: 'Batch size' },
+      { keyPath: 'seed', label: 'Master seed' },
+      { keyPath: 'returnerConfig.seed', label: 'Returner seed' },
+      { keyPath: 'inflationFactor', label: 'Inflation factor' },
+      { keyPath: 'yearlyFeePercentage', label: 'Yearly fee (%)' },
+    ];
+
+    const rows = fields
+      .map((f) => {
+        const from = getValueAtKeyPath(selectedSnapshot.advancedRequest, f.keyPath);
+        const to = getValueAtKeyPath(selectedSnapshotRerunRequest, f.keyPath);
+        const same = Object.is(from, to) || JSON.stringify(from) === JSON.stringify(to);
+        if (same) return null;
+        return { ...f, from, to };
+      })
+      .filter(Boolean) as Array<{ keyPath: string; label: string; from: unknown; to: unknown }>;
+
+    rows.sort((a, b) => a.keyPath.localeCompare(b.keyPath));
+    return rows;
+  }, [getValueAtKeyPath, selectedSnapshot, selectedSnapshotRerunRequest]);
 
   const executionOverridesRows = useMemo(() => {
     const defaults = getDefaultExecutionDefaults();
@@ -1257,6 +1315,26 @@ const AssumptionsHubPage: React.FC = () => {
                       return (
                         <div
                           key={r.keyPath}
+                {snapshotAdvancedRequestDiffRows.length === 0 ? (
+                  <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No re-run request changes.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {snapshotAdvancedRequestDiffRows.map((r) => (
+                      <div key={r.keyPath} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
+                        <div style={{ fontWeight: 800 }}>{r.label}</div>
+                        <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
+                          {formatValue('', r.from)} → {formatValue('', r.to)}
+                        </div>
+                        <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>{r.keyPath}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ fontWeight: 850, fontSize: 16, marginBottom: 6 }}>Selected snapshot → re-run request changes</div>
+                <div style={{ opacity: 0.82, fontSize: 13, marginBottom: 10 }}>
+                  Applies your current Hub baseline + execution defaults to the snapshot’s scenario request (without changing phases).
+                </div>
                 {snapshotAdvancedRequestDiffRows.length === 0 ? (
                   <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 12 }}>No re-run request changes.</div>
                 ) : (
