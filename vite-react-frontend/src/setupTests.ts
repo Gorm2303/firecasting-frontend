@@ -33,14 +33,17 @@ if (typeof (globalThis as any).EventSource === 'undefined') {
 		}
 
 		addEventListener(_type: string, _listener: any) {
-			// no-op
+			void _type;
+			void _listener;
 		}
 
 		removeEventListener(_type: string, _listener: any) {
-			// no-op
+			void _type;
+			void _listener;
 		}
 
 		dispatchEvent(_event: Event) {
+			void _event;
 			return false;
 		}
 	}

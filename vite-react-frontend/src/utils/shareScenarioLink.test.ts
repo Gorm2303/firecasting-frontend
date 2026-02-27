@@ -23,7 +23,7 @@ describe('shareScenarioLink', () => {
           initialDeposit: 100,
           monthlyDeposit: 10,
           yearlyIncreaseInPercentage: 1,
-          taxRules: ['EXEMPTIONCARD'],
+          taxRules: ['exemptioncard'],
         },
         {
           ...createDefaultPhase('WITHDRAW'),
@@ -32,7 +32,7 @@ describe('shareScenarioLink', () => {
           withdrawAmount: 1234,
           lowerVariationPercentage: 2,
           upperVariationPercentage: 3,
-          taxRules: ['STOCKEXEMPTION'],
+          taxRules: ['stockexemption'],
         },
         {
           ...createDefaultPhase('PASSIVE'),
@@ -46,6 +46,30 @@ describe('shareScenarioLink', () => {
     const decoded = decodeScenarioFromShareParam(param);
 
     expect(decoded).toEqual(request);
+  });
+
+  it('normalizes legacy tax rule spellings when encoding/decoding', () => {
+    const legacy = {
+      startDate: { date: '2040-01-01' },
+      overallTaxRule: 'CAPITAL' as const,
+      taxPercentage: 42,
+      phases: [
+        {
+          ...createDefaultPhase('WITHDRAW'),
+          durationInMonths: 1,
+          taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION'],
+        },
+      ],
+    };
+
+    const expected = {
+      ...legacy,
+      phases: [{ ...legacy.phases[0], taxRules: ['exemptioncard', 'stockexemption'] }],
+    };
+
+    const param = encodeScenarioToShareParam(legacy as any);
+    const decoded = decodeScenarioFromShareParam(param);
+    expect(decoded).toEqual(expected);
   });
 
   it('decodes legacy base64url payloads (backward compatibility)', () => {

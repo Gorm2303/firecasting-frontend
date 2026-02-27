@@ -1,10 +1,11 @@
 import React from 'react';
 import { PhaseRequest } from '../../models/types';
 import { createDefaultPhase } from '../../config/simulationDefaults';
+import { SIMULATION_TIMING_CONVENTIONS } from '../../config/simulationConventions';
 import InfoTooltip from '../InfoTooltip';
 import { isValidDecimalDraft, isValidIntegerDraft } from '../../utils/numberInput';
 
-type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
+type ExemptionRule = NonNullable<PhaseRequest['taxRules']>[number];
 
 interface PhaseListProps {
   phases: PhaseRequest[];
@@ -336,7 +337,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     </div>
                   </div>
                     <InfoTooltip label="Info: Phase duration">
-                      How long this phase lasts. The simulation advances month-by-month.
+                      How long this phase lasts. The simulation advances {SIMULATION_TIMING_CONVENTIONS.simulationStep}.
                     </InfoTooltip>
                   </div>
 
@@ -359,7 +360,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           }}
                         />
                         <InfoTooltip label="Info: Initial deposit">
-                          A one-time deposit at the beginning of this phase.
+                          A one-time deposit at the {SIMULATION_TIMING_CONVENTIONS.initialDeposit}.
                         </InfoTooltip>
                       </div>
 
@@ -380,7 +381,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           }}
                         />
                         <InfoTooltip label="Info: Monthly deposit">
-                          Added at each month-end during this phase.
+                          Added at each {SIMULATION_TIMING_CONVENTIONS.monthlyDeposit} during this phase.
                         </InfoTooltip>
                       </div>
 
@@ -401,7 +402,7 @@ const PhaseList: React.FC<PhaseListProps> = ({
                           }}
                         />
                         <InfoTooltip label="Info: Yearly deposit increase">
-                          Increases the monthly deposit once per year by this percentage.
+                          Increases the monthly deposit {SIMULATION_TIMING_CONVENTIONS.yearlyDepositIncrease} by this percentage.
                         </InfoTooltip>
                       </div>
                     </>
@@ -548,8 +549,11 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     <input
                       type="checkbox"
                       data-tour={`phase-${idx}-tax-exemptioncard`}
-                      checked={p.taxRules?.includes('EXEMPTIONCARD') ?? false}
-                      onChange={() => onToggleTaxRule(idx, 'EXEMPTIONCARD')}
+                      checked={
+                        ((p.taxRules ?? []) as unknown as string[]).includes('exemptioncard') ||
+                        ((p.taxRules ?? []) as unknown as string[]).includes('EXEMPTIONCARD')
+                      }
+                      onChange={() => onToggleTaxRule(idx, 'exemptioncard')}
                       style={{ marginRight: '0.3rem' }}
                     />
                     Exemption Card
@@ -558,8 +562,11 @@ const PhaseList: React.FC<PhaseListProps> = ({
                     <input
                       type="checkbox"
                       data-tour={`phase-${idx}-tax-stockexemption`}
-                      checked={p.taxRules?.includes('STOCKEXEMPTION') ?? false}
-                      onChange={() => onToggleTaxRule(idx, 'STOCKEXEMPTION')}
+                      checked={
+                        ((p.taxRules ?? []) as unknown as string[]).includes('stockexemption') ||
+                        ((p.taxRules ?? []) as unknown as string[]).includes('STOCKEXEMPTION')
+                      }
+                      onChange={() => onToggleTaxRule(idx, 'stockexemption')}
                       style={{ marginRight: '0.3rem' }}
                     />
                     Stock Exemption

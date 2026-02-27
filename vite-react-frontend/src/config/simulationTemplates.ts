@@ -14,11 +14,6 @@ export type TemplateAdvancedDefaults = Partial<{
   seedMode: MasterSeedMode;
   seed: number;
 
-  exemptionCardLimit: number;
-  exemptionCardYearlyIncrease: number;
-  stockExemptionTaxRate: number;
-  stockExemptionLimit: number;
-  stockExemptionYearlyIncrease: number;
 }>;
 
 export type SimulationTemplate = {
@@ -32,46 +27,16 @@ export type SimulationTemplate = {
   };
 };
 
-const DEFAULT_ADVANCED: Required<Pick<TemplateAdvancedDefaults,
-  | 'paths'
-  | 'batchSize'
-  | 'inflationAveragePct'
-  | 'yearlyFeePercentage'
-  | 'returnType'
-  | 'seedMode'
-  | 'seed'
-  | 'exemptionCardLimit'
-  | 'exemptionCardYearlyIncrease'
-  | 'stockExemptionTaxRate'
-  | 'stockExemptionLimit'
-  | 'stockExemptionYearlyIncrease'
->> = {
-  paths: 10000,
-  batchSize: 10000,
-  inflationAveragePct: 2,
-  yearlyFeePercentage: 0.5,
-  returnType: 'dataDrivenReturn',
-  seedMode: 'default',
-  seed: 1,
-  exemptionCardLimit: 51600,
-  exemptionCardYearlyIncrease: 1000,
-  stockExemptionTaxRate: 27,
-  stockExemptionLimit: 67500,
-  stockExemptionYearlyIncrease: 1000,
-};
-
 export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
   {
     id: 'custom',
     label: 'Custom',
     description: 'Use your own inputs (no preset applied).',
-    advanced: { ...DEFAULT_ADVANCED },
   },
   {
     id: 'starter',
     label: 'Starter',
     description: 'A simple simulation with a 15-year deposit phase.',
-    advanced: { ...DEFAULT_ADVANCED },
     patch: {
       startDate: { date: '2026-01-01' },
       phases: [
@@ -90,7 +55,6 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
     id: 'aktiesparekonto',
     label: 'Aktiesparekonto',
     description: 'Simulation using the Danish "Aktiesparekonto" tax rules.',
-    advanced: { ...DEFAULT_ADVANCED },
     patch: {
       startDate: { date: '2026-01-01' },
       overallTaxRule: 'NOTIONAL',
@@ -122,7 +86,6 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
     id: 'aktiedepot',
     label: 'Aktiedepot',
     description: 'Simulation using the Danish "Aktiedepot" tax rules for capital gains.',
-    advanced: { ...DEFAULT_ADVANCED },
     patch: {
       startDate: { date: '2026-01-01' },
       overallTaxRule: 'CAPITAL',
@@ -145,7 +108,7 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
             withdrawAmount: 10000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
-            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+          taxRules: ['exemptioncard', 'stockexemption']
 
         }
       ],
@@ -155,7 +118,6 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
     id: 'pension',
     label: 'Pension (Aldersopsparing)',
     description: 'Simulation using the Danish "Pension (Aldersopsparing)" tax rules.',
-    advanced: { ...DEFAULT_ADVANCED },
     patch: {
       startDate: { date: '2026-01-01' },
       overallTaxRule: 'NOTIONAL',
@@ -186,7 +148,6 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
     id: 'childSavings',
     label: 'Child Savings (Aktiedepot)',
     description: 'Simulation using the Danish "Aktiedepot" tax rules for capital gains.',
-    advanced: { ...DEFAULT_ADVANCED },
     patch: {
       startDate: { date: '2026-01-01' },
       overallTaxRule: 'CAPITAL',
@@ -205,7 +166,7 @@ export const SIMULATION_TEMPLATES: SimulationTemplate[] = [
             withdrawAmount: 123000,
             lowerVariationPercentage: 0,
             upperVariationPercentage: 0,
-            taxRules: ['EXEMPTIONCARD', 'STOCKEXEMPTION']
+            taxRules: ['exemptioncard', 'stockexemption']
 
         }
       ],

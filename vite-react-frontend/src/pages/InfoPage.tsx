@@ -693,8 +693,8 @@ const InfoPage: React.FC = () => {
           <details>
             <summary><strong>Inflation</strong></summary>
             <p>
-              Normal mode currently assumes a fixed yearly inflation factor of <strong>1.02</strong> (≈ 2%/year). Inflation compounds
-              at year-end inside the simulation.
+              Normal mode uses the inflation rate from <strong>Assumptions</strong> (default: ≈ 2%/year). Inflation compounds at
+              year-end inside the simulation.
             </p>
             <p>
               Withdrawals are inflation-adjusted over time, meaning “10,000/month” is treated like a real-spending target that

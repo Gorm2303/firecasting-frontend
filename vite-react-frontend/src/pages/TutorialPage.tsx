@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import NormalInputForm, { TutorialStep } from '../components/normalMode/NormalInputForm';
+import { useAssumptions } from '../state/assumptions';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { YearlySummary } from '../models/YearlySummary';
 import { SimulationTimelineContext } from '../models/types';
@@ -13,6 +14,16 @@ const TutorialPage: React.FC = () => {
   const navigate = useNavigate();
   const { mode } = useParams<{ mode: string }>();
 
+  const { currentAssumptions } = useAssumptions();
+
+  const inflationPct = currentAssumptions.inflationPct;
+  const yearlyFeePct = currentAssumptions.yearlyFeePct;
+
+  const exCardLimit = currentAssumptions.taxExemptionDefaults.exemptionCardLimit;
+  const exCardIncrease = currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease;
+  const stockRate = currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate;
+  const stockLimit = currentAssumptions.taxExemptionDefaults.stockExemptionLimit;
+  const stockIncrease = currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease;
   const tutorialMode: TutorialMode | null = mode === 'normal' ? 'normal' : mode === 'advanced' ? 'advanced' : null;
   const [stats, setStats] = useState<YearlySummary[] | null>(null);
   const [timeline, setTimeline] = useState<SimulationTimelineContext | null>(null);
@@ -48,21 +59,33 @@ const TutorialPage: React.FC = () => {
         {
           id: 'inflation',
           title: 'Inflation (avg %/year)',
-          body: 'Set inflation to 2. This enables real (inflation-adjusted) views.',
+          body: `Set inflation to ${inflationPct}. This enables real (inflation-adjusted) views.`,
           selector: '[data-tour="inflation"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="inflation"] input', value: 2, tolerance: 1e-9, message: 'Set inflation to 2.' },
+            {
+              kind: 'numberEquals',
+              selector: '[data-tour="inflation"] input',
+              value: inflationPct,
+              tolerance: 1e-9,
+              message: `Set inflation to ${inflationPct}.`,
+            },
           ],
         },
         {
           id: 'fee',
           title: 'Fee (avg %/year)',
-          body: 'Set fee to 0.5 (meaning 0.5% per year).',
+          body: `Set fee to ${yearlyFeePct} (meaning ${yearlyFeePct}% per year).`,
           selector: '[data-tour="fee"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="fee"] input', value: 0.5, tolerance: 1e-9, message: 'Set fee to 0.5.' },
+            {
+              kind: 'numberEquals',
+              selector: '[data-tour="fee"] input',
+              value: yearlyFeePct,
+              tolerance: 1e-9,
+              message: `Set fee to ${yearlyFeePct}.`,
+            },
           ],
         },
 
@@ -77,51 +100,51 @@ const TutorialPage: React.FC = () => {
         {
           id: 'exemption-card-limit',
           title: 'Exemption card: limit',
-          body: 'Set Exemption card Limit to 51600.',
+          body: `Set Exemption card Limit to ${exCardLimit}.`,
           selector: '[data-tour="exemption-card-limit"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="exemption-card-limit"]', value: 51600, tolerance: 1e-9, message: 'Set Exemption card Limit to 51600.' },
+            { kind: 'numberEquals', selector: '[data-tour="exemption-card-limit"]', value: exCardLimit, tolerance: 1e-9, message: `Set Exemption card Limit to ${exCardLimit}.` },
           ],
         },
         {
           id: 'exemption-card-increase',
           title: 'Exemption card: yearly increase',
-          body: 'Set Exemption card Yearly increase to 1000.',
+          body: `Set Exemption card Yearly increase to ${exCardIncrease}.`,
           selector: '[data-tour="exemption-card-yearly-increase"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="exemption-card-yearly-increase"]', value: 1000, tolerance: 1e-9, message: 'Set Exemption card Yearly increase to 1000.' },
+            { kind: 'numberEquals', selector: '[data-tour="exemption-card-yearly-increase"]', value: exCardIncrease, tolerance: 1e-9, message: `Set Exemption card Yearly increase to ${exCardIncrease}.` },
           ],
         },
         {
           id: 'stock-tax-rate',
           title: 'Stock exemption: tax rate',
-          body: 'Set Stock exemption Tax rate to 27.',
+          body: `Set Stock exemption Tax rate to ${stockRate}.`,
           selector: '[data-tour="stock-exemption-tax-rate"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-tax-rate"]', value: 27, tolerance: 1e-9, message: 'Set Stock exemption Tax rate to 27.' },
+            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-tax-rate"]', value: stockRate, tolerance: 1e-9, message: `Set Stock exemption Tax rate to ${stockRate}.` },
           ],
         },
         {
           id: 'stock-limit',
           title: 'Stock exemption: limit',
-          body: 'Set Stock exemption Limit to 67500.',
+          body: `Set Stock exemption Limit to ${stockLimit}.`,
           selector: '[data-tour="stock-exemption-limit"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-limit"]', value: 67500, tolerance: 1e-9, message: 'Set Stock exemption Limit to 67500.' },
+            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-limit"]', value: stockLimit, tolerance: 1e-9, message: `Set Stock exemption Limit to ${stockLimit}.` },
           ],
         },
         {
           id: 'stock-increase',
           title: 'Stock exemption: yearly increase',
-          body: 'Set Stock exemption Yearly increase to 1000.',
+          body: `Set Stock exemption Yearly increase to ${stockIncrease}.`,
           selector: '[data-tour="stock-exemption-yearly-increase"]',
           placement: 'bottom',
           requires: [
-            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-yearly-increase"]', value: 1000, tolerance: 1e-9, message: 'Set Stock exemption Yearly increase to 1000.' },
+            { kind: 'numberEquals', selector: '[data-tour="stock-exemption-yearly-increase"]', value: stockIncrease, tolerance: 1e-9, message: `Set Stock exemption Yearly increase to ${stockIncrease}.` },
           ],
         },
 
@@ -614,7 +637,16 @@ const TutorialPage: React.FC = () => {
           'You now have the Aktiedepot phase structure (DEPOSIT → PASSIVE → WITHDRAW). Try tweaking withdraw amount/duration/variation and see how the failure rate changes.',
       },
     ];
-  }, [tutorialMode]);
+  }, [
+    exCardIncrease,
+    exCardLimit,
+    inflationPct,
+    stockIncrease,
+    stockLimit,
+    stockRate,
+    tutorialMode,
+    yearlyFeePct,
+  ]);
 
   if (!tutorialMode) return <Navigate to="/simulation/tutorial" replace />;
 

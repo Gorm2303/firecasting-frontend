@@ -1,10 +1,11 @@
 import type { PhaseRequest, SimulationRequest } from '../models/types';
+import type { Assumptions } from '../state/assumptions';
 
 export type PhaseSummary = {
   index: number;
   phaseType: PhaseRequest['phaseType'];
   durationInMonths: number;
-  taxRules?: ('EXEMPTIONCARD' | 'STOCKEXEMPTION')[];
+  taxRules?: PhaseRequest['taxRules'];
   taxExemptionsActive?: {
     card: boolean;
     stock: boolean;
@@ -80,11 +81,19 @@ function toNum(v: unknown): number {
 }
 
 // Frontend fallback defaults for tax exemptions when not provided by backend
-function getDefaultTaxExemptionConfig() {
+function resolveTaxExemptionConfig(assumptions: Assumptions): AdvancedModeSummary['taxExemptionConfig'] {
+  const a = assumptions;
   return {
-    exemptionCard: { limit: 51600, yearlyIncrease: 1000 },
-    stockExemption: { taxRate: 27, limit: 67500, yearlyIncrease: 1000 },
-  } as AdvancedModeSummary['taxExemptionConfig'];
+    exemptionCard: {
+      limit: a.taxExemptionDefaults.exemptionCardLimit,
+      yearlyIncrease: a.taxExemptionDefaults.exemptionCardYearlyIncrease,
+    },
+    stockExemption: {
+      taxRate: a.taxExemptionDefaults.stockExemptionTaxRate,
+      limit: a.taxExemptionDefaults.stockExemptionLimit,
+      yearlyIncrease: a.taxExemptionDefaults.stockExemptionYearlyIncrease,
+    },
+  };
 }
 
 export function getTimelineSegments(req: SimulationRequest): ScenarioTimelineSegment[] {
@@ -96,8 +105,8 @@ export function getTimelineSegments(req: SimulationRequest): ScenarioTimelineSeg
 
 export function summarizePhase(phase: PhaseRequest, index: number, taxExemptionConfig?: any): PhaseSummary {
   const taxRules = phase.taxRules ?? [];
-  const cardActive = taxRules.includes('EXEMPTIONCARD');
-  const stockActive = taxRules.includes('STOCKEXEMPTION');
+  const cardActive = taxRules.includes('exemptioncard');
+  const stockActive = taxRules.includes('stockexemption');
 
   const summary: PhaseSummary = {
     index,
@@ -129,7 +138,7 @@ export function summarizePhase(phase: PhaseRequest, index: number, taxExemptionC
   return summary;
 }
 
-export function summarizeScenario(req: any): ScenarioSummary {
+export function summarizeScenario(req: any, assumptions: Assumptions): ScenarioSummary {
   const phases = req.phases ?? [];
   const startDate = resolveStartDate(req?.startDate);
   const paths = toNum(req?.paths) > 0 ? toNum(req?.paths) : undefined;
@@ -149,9 +158,9 @@ export function summarizeScenario(req: any): ScenarioSummary {
   const withdrawRatePhaseCount = phases.filter((p: any) => toNum(p.withdrawRate) > 0).length;
 
   // Extract advanced mode details (present for both normal and advanced requests)
-  const advancedMode = extractAdvancedModeDetails(req);
+  const advancedMode = extractAdvancedModeDetails(req, assumptions);
   // Ensure tax exemption defaults are present in per-phase details
-  const taxExemptionConfig = req.taxExemptionConfig ?? getDefaultTaxExemptionConfig();
+  const taxExemptionConfig = req.taxExemptionConfig ?? resolveTaxExemptionConfig(assumptions);
 
   return {
     paths,
@@ -185,10 +194,10 @@ function resolveStartDate(startDate: any): string {
   return '';
 }
 
-function extractAdvancedModeDetails(req: any): AdvancedModeSummary | null {
+function extractAdvancedModeDetails(req: any, assumptions: Assumptions): AdvancedModeSummary | null {
   const returnerConfig = req.returnerConfig;
   const distribution = returnerConfig?.distribution;
-  const taxCfg = req.taxExemptionConfig ?? getDefaultTaxExemptionConfig();
+  const taxCfg = req.taxExemptionConfig ?? resolveTaxExemptionConfig(assumptions);
 
   return {
     returnType: req.returnType,

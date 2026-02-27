@@ -12,6 +12,7 @@ import { deepEqual } from '../utils/deepEqual';
 import { toIsoDateString } from '../utils/backendDate';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
 import { metricColor, moneyStoryStepColor, type MoneyStoryStepKey } from '../utils/metricColors';
+import { useAssumptions, type Assumptions } from '../state/assumptions';
 
 const fmt = (v: any): string => {
   if (v === null || v === undefined) return '';
@@ -443,11 +444,11 @@ const formatTaxExemptionsActive = (phase?: ScenarioSummary['phases'][number]): s
   return parts.length ? parts.join(', ') : 'None';
 };
 
-const toScenarioSummary = (scenario: SavedScenario | null): ScenarioSummary | null => {
+const toScenarioSummary = (scenario: SavedScenario | null, assumptions: Assumptions): ScenarioSummary | null => {
   try {
     if (!scenario?.advancedRequest) return null;
     // Always summarize from advancedRequest so returnType/seed/inflation/yearlyFee/etc are present.
-    return summarizeScenario(scenario.advancedRequest);
+    return summarizeScenario(scenario.advancedRequest, assumptions);
   } catch {
     return null;
   }
@@ -603,6 +604,8 @@ const compareOutputs = (a: YearlySummary[], b: YearlySummary[]): { exactMatch: b
 const RunDiffPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const chartsSyncId = useId();
+
+  const { currentAssumptions } = useAssumptions();
 
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listSavedScenarios());
   const refreshSavedScenarios = useCallback(() => setSavedScenarios(listSavedScenarios()), []);
@@ -1045,7 +1048,7 @@ const RunDiffPage: React.FC = () => {
                   });
 
                   setRunSummariesA(ra.summaries);
-                  setInputSummaryA(toScenarioSummary(scenarioAStable));
+                  setInputSummaryA(toScenarioSummary(scenarioAStable, currentAssumptions));
 
                   try {
                     const idA = ra.runId ?? ra.simulationId;
@@ -1200,8 +1203,8 @@ const RunDiffPage: React.FC = () => {
                 }
 
                 // Inputs: always summarize from the saved advancedRequest so advanced parameters are present.
-                setInputSummaryA(toScenarioSummary(scenarioAStable));
-                setInputSummaryB(toScenarioSummary(scenarioBStable));
+                setInputSummaryA(toScenarioSummary(scenarioAStable, currentAssumptions));
+                setInputSummaryB(toScenarioSummary(scenarioBStable, currentAssumptions));
 
                 // Persist deterministic reruns back into local saved scenarios so future diffs are instant.
                 if (ra.runId && !scenarioAStable.runId) {
@@ -1362,7 +1365,7 @@ const RunDiffPage: React.FC = () => {
                   });
 
                   setRunSummariesB(rb.summaries);
-                  setInputSummaryB(toScenarioSummary(scenarioBStable));
+                  setInputSummaryB(toScenarioSummary(scenarioBStable, currentAssumptions));
 
                   try {
                     const idB = rb.runId ?? rb.simulationId;

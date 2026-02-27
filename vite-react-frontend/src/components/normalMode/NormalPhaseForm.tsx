@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PhaseRequest } from '../../models/types';
 
-type ExemptionRule = 'EXEMPTIONCARD' | 'STOCKEXEMPTION';
+type ExemptionRule = NonNullable<PhaseRequest['taxRules']>[number];
 
 interface PhaseFormProps {
   onAddPhase: (phase: PhaseRequest) => void;
@@ -339,8 +339,8 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
           <label style={{ display: 'block', fontSize: '0.95rem', marginBottom: '0.3rem' }}>
             <input
               type="checkbox"
-              checked={taxRules.includes('EXEMPTIONCARD')}
-              onChange={() => toggleRule('EXEMPTIONCARD')}
+              checked={taxRules.includes('exemptioncard')}
+              onChange={() => toggleRule('exemptioncard')}
               style={{ marginRight: '0.3rem' }}
             />
             Exemption Card
@@ -348,8 +348,8 @@ const PhaseForm: React.FC<PhaseFormProps> = ({ onAddPhase }) => {
           <label style={{ display: 'block', fontSize: '0.95rem' }}>
             <input
               type="checkbox"
-              checked={taxRules.includes('STOCKEXEMPTION')}
-              onChange={() => toggleRule('STOCKEXEMPTION')}
+              checked={taxRules.includes('stockexemption')}
+              onChange={() => toggleRule('stockexemption')}
               style={{ marginRight: '0.3rem' }}
             />
             Stock Exemption

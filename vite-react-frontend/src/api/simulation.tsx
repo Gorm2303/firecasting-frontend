@@ -4,6 +4,7 @@ import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
 import { normalToAdvancedWithDefaults } from '../models/advancedSimulation';
 import { YearlySummary } from '../models/YearlySummary';
 import { getApiBaseUrl } from '../config/runtimeEnv';
+import { loadCurrentAssumptionsFromStorage } from '../state/assumptions';
 
 const BASE_URL = getApiBaseUrl();
 
@@ -142,7 +143,18 @@ export async function getCompletedSummaries(simulationId: string): Promise<Yearl
 export async function startSimulation(req: SimulationRequest): Promise<string> {
   // For normal mode: convert to advanced request with defaults and
   // call the unified advanced endpoint. Keep legacy input for dedup/lookups.
-  const advanced = normalToAdvancedWithDefaults(req);
+  const assumptions = loadCurrentAssumptionsFromStorage();
+  const advanced = normalToAdvancedWithDefaults(req, {
+    inflationPct: assumptions.inflationPct,
+    yearlyFeePct: assumptions.yearlyFeePct,
+    taxExemptionDefaults: {
+      exemptionCardLimit: assumptions.taxExemptionDefaults.exemptionCardLimit,
+      exemptionCardYearlyIncrease: assumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+      stockExemptionTaxRate: assumptions.taxExemptionDefaults.stockExemptionTaxRate,
+      stockExemptionLimit: assumptions.taxExemptionDefaults.stockExemptionLimit,
+      stockExemptionYearlyIncrease: assumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+    },
+  });
   const res = await fetch(`${BASE_URL}/start-advanced`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -315,7 +327,7 @@ export const exportSimulationCsv = async (simulationId?: string | null): Promise
     throw new Error('Received an empty simulation CSV from the backend.');
   }
   const cd = res.headers.get('content-disposition') || '';
-  const m = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(cd);
+  const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cd);
   const filename = m ? decodeURIComponent(m[1]) : 'simulation.csv';
 
   const dl = URL.createObjectURL(blob);

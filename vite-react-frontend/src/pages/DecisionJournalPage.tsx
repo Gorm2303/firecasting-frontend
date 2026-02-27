@@ -15,7 +15,7 @@ type DecisionJournalEntry = {
   status: DecisionStatus;
 };
 
-const STORAGE_KEY = 'firecasting.decisionJournal.v1';
+const STORAGE_KEY = 'firecasting:decisionJournal:v1';
 
 function safeParseEntries(raw: string | null): DecisionJournalEntry[] {
   if (!raw) return [];
@@ -52,7 +52,13 @@ const tableCell: React.CSSProperties = {
 };
 
 const DecisionJournalPage: React.FC = () => {
-  const [entries, setEntries] = useState<DecisionJournalEntry[]>(() => safeParseEntries(localStorage.getItem(STORAGE_KEY)));
+  const [entries, setEntries] = useState<DecisionJournalEntry[]>(() => {
+    try {
+      return safeParseEntries(localStorage.getItem(STORAGE_KEY));
+    } catch {
+      return [];
+    }
+  });
 
   const [decision, setDecision] = useState('');
   const [thesis, setThesis] = useState('');
@@ -62,7 +68,11 @@ const DecisionJournalPage: React.FC = () => {
   const [expectedOutcome, setExpectedOutcome] = useState('');
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    } catch {
+      // storage unavailable or quota exceeded; UI continues without persistence
+    }
   }, [entries]);
 
   const sorted = useMemo(() => {

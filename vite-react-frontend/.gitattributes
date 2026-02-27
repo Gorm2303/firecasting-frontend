@@ -1,0 +1,3 @@
+# Keep generated documentation stable across OSes.
+# Prevent CRLF churn on Windows for generated markdown.
+docs/**/*.md text eol=lf

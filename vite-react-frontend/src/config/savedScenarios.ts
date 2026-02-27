@@ -1,6 +1,8 @@
 import type { SimulationRequest } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
 import { advancedToNormalRequest, normalToAdvancedWithDefaults } from '../models/advancedSimulation';
+import { loadCurrentAssumptionsFromStorage } from '../state/assumptions';
+import { normalizeTaxRules } from '../utils/taxRules';
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
@@ -93,15 +95,50 @@ function toArray(value: unknown): any[] {
   return Array.isArray(value) ? value : [];
 }
 
+function normalizeAdvancedRequestTaxRules(req: AdvancedSimulationRequest): AdvancedSimulationRequest {
+  const originalPhases: any[] = Array.isArray((req as any).phases) ? ((req as any).phases as any[]) : [];
+
+  let changed = false;
+  const phases = originalPhases.map((p: any) => {
+    const normalized = normalizeTaxRules(p?.taxRules);
+    const current = Array.isArray(p?.taxRules) ? (p.taxRules as any[]) : [];
+    const same = current.length === normalized.length && current.every((x, i) => x === normalized[i]);
+    if (same) return p;
+    changed = true;
+    return { ...p, taxRules: normalized };
+  });
+
+  if (!changed) return req;
+  return { ...req, phases };
+}
+
 export function listSavedScenarios(): SavedScenario[] {
   if (typeof window === 'undefined') return [];
   const raw = safeParse(window.localStorage.getItem(STORAGE_KEY));
 
-  const v2 = toArray(raw)
+  const v2Raw = toArray(raw)
     .map((x) => x as SavedScenario)
     .filter((x) => !!x && typeof x.id === 'string' && typeof x.name === 'string' && !!x.advancedRequest);
 
-  if (v2.length > 0) return v2;
+  if (v2Raw.length > 0) {
+    let changed = false;
+    const v2 = v2Raw.map((s) => {
+      const normalizedAdvanced = normalizeAdvancedRequestTaxRules(s.advancedRequest);
+      if (normalizedAdvanced !== s.advancedRequest) changed = true;
+      const normalizedRequest = advancedToNormalRequest(normalizedAdvanced);
+      return {
+        ...s,
+        advancedRequest: normalizedAdvanced,
+        request: normalizedRequest,
+      };
+    });
+
+    if (changed) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(v2));
+    }
+
+    return v2;
+  }
 
   // Backward-compat: migrate v1 entries stored under the old key.
   const rawV1 = safeParse(window.localStorage.getItem('firecasting:savedScenarios:v1'));
@@ -111,12 +148,23 @@ export function listSavedScenarios(): SavedScenario[] {
 
   const migrated: SavedScenario[] = v1.map((s) => {
     const normalReq = s.request as SimulationRequest;
-    const advancedRequest = normalToAdvancedWithDefaults(normalReq);
+    const assumptions = loadCurrentAssumptionsFromStorage();
+    const advancedRequest = normalToAdvancedWithDefaults(normalReq, {
+      inflationPct: assumptions.inflationPct,
+      yearlyFeePct: assumptions.yearlyFeePct,
+      taxExemptionDefaults: {
+        exemptionCardLimit: assumptions.taxExemptionDefaults.exemptionCardLimit,
+        exemptionCardYearlyIncrease: assumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        stockExemptionTaxRate: assumptions.taxExemptionDefaults.stockExemptionTaxRate,
+        stockExemptionLimit: assumptions.taxExemptionDefaults.stockExemptionLimit,
+        stockExemptionYearlyIncrease: assumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+      },
+    });
     return {
       id: String(s.id),
       name: String(s.name),
       savedAt: String(s.savedAt ?? new Date().toISOString()),
-      advancedRequest,
+      advancedRequest: normalizeAdvancedRequestTaxRules(advancedRequest),
       request: normalReq,
       runId: s.runId ?? undefined,
     };
@@ -144,12 +192,14 @@ export function saveScenario(
   const scenarios = listSavedScenarios();
   const now = new Date().toISOString();
 
+  const normalizedAdvanced = normalizeAdvancedRequestTaxRules(advancedRequest);
+
   const scenario: SavedScenario = {
     id: id ?? newId(),
     name: trimmed,
     savedAt: now,
-    advancedRequest,
-    request: advancedToNormalRequest(advancedRequest),
+    advancedRequest: normalizedAdvanced,
+    request: advancedToNormalRequest(normalizedAdvanced),
     runId: runId ?? undefined,
     ...(lastRunMeta ? { lastRunMeta } : {}),
   };

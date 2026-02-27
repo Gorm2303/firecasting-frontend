@@ -1,14 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import SimulationForm from './NormalInputForm';
 import { getTemplateById, resolveTemplateToRequest } from '../../config/simulationTemplates';
+import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
 describe('NormalInputForm templates', () => {
   it('previews Starter template and applies only after confirmation', async () => {
     const expected = resolveTemplateToRequest(getTemplateById('starter'));
 
-    render(<SimulationForm />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm />
+      </ExecutionDefaultsProvider>
+    );
 
     // Force a change so we become Custom.
     const startDate = screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement;
@@ -37,7 +42,11 @@ describe('NormalInputForm templates', () => {
   it('can cancel template preview without changing inputs', async () => {
     const expected = resolveTemplateToRequest(getTemplateById('starter'));
 
-    render(<SimulationForm />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm />
+      </ExecutionDefaultsProvider>
+    );
 
     const startDate = screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2030-01-01' } });
@@ -65,7 +74,11 @@ describe('NormalInputForm templates', () => {
   });
 
   it('switches template back to Custom when editing', async () => {
-    render(<SimulationForm />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm />
+      </ExecutionDefaultsProvider>
+    );
 
     const startDate = screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement;
     fireEvent.change(startDate, { target: { value: '2041-01-01' } });
@@ -76,7 +89,11 @@ describe('NormalInputForm templates', () => {
   });
 
   it('opens What changed? as read-only (no warning/apply)', () => {
-    render(<SimulationForm />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm />
+      </ExecutionDefaultsProvider>
+    );
 
     // Make a change so applying a template actually overwrites something,
     // then ensure What changed? shows those diffs.
@@ -101,7 +118,11 @@ describe('NormalInputForm templates', () => {
   });
 
   it('applying a template resets advanced defaults, and editing flips to Custom', async () => {
-    render(<SimulationForm mode="advanced" />);
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm mode="advanced" />
+      </ExecutionDefaultsProvider>
+    );
 
     const templateSelect = screen.getByRole('combobox', { name: /Template/i }) as HTMLSelectElement;
 

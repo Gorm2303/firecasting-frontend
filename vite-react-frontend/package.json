@@ -9,7 +9,13 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:assumptions-registry": "node scripts/generate-assumptions-registry.mjs",
+    "docs:assumptions-registry": "npm run gen:assumptions-registry",
+    "docs:check:assumptions-registry": "npm run docs:assumptions-registry && git diff --exit-code docs/assumptions-registry.md",
+    "test:assumptions-registry": "vitest run src/state/assumptionsRegistryCompleteness.test.ts",
+    "verify:assumptions-registry": "npm run test:assumptions-registry && npm run docs:check:assumptions-registry",
+    "verify": "npm run lint && npm run test && npm run verify:assumptions-registry"
   },
   "dependencies": {
     "lz-string": "^1.5.0",

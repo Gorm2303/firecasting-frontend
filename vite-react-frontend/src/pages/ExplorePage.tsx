@@ -11,6 +11,7 @@ import { saveScenario } from '../config/savedScenarios';
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { METRIC_COLORS, moneyStoryStepColor } from '../utils/metricColors';
 import { toIsoDateString } from '../utils/backendDate';
+import { useAssumptions } from '../state/assumptions';
 import {
   exportSimulationCsv,
   getRunInput,
@@ -218,7 +219,14 @@ type RunComputed = {
 
 const computeFromInputAndSummaries = (
   input: AdvancedSimulationRequest | null,
-  summaries: YearlySummary[] | null
+  summaries: YearlySummary[] | null,
+  taxExemptionDefaults: {
+    exemptionCardLimit: number;
+    exemptionCardYearlyIncrease: number;
+    stockExemptionTaxRate: number;
+    stockExemptionLimit: number;
+    stockExemptionYearlyIncrease: number;
+  }
 ): RunComputed => {
   const phases = Array.isArray((input as any)?.phases) ? (input as any).phases : [];
   const shape = phases
@@ -255,8 +263,16 @@ const computeFromInputAndSummaries = (
       .filter(Boolean)
   );
 
-  const defaultExemptionCard = { limit: 51600, yearlyIncrease: 1000 };
-  const defaultStockExemption = { taxRate: 27, limit: 67500, yearlyIncrease: 1000 };
+  const defaults = taxExemptionDefaults;
+  const defaultExemptionCard = {
+    limit: defaults.exemptionCardLimit,
+    yearlyIncrease: defaults.exemptionCardYearlyIncrease,
+  };
+  const defaultStockExemption = {
+    taxRate: defaults.stockExemptionTaxRate,
+    limit: defaults.stockExemptionLimit,
+    yearlyIncrease: defaults.stockExemptionYearlyIncrease,
+  };
   const cardCfgRaw = (input as any)?.taxExemptionConfig?.exemptionCard ?? {};
   const stockCfgRaw = (input as any)?.taxExemptionConfig?.stockExemption ?? {};
 
@@ -396,14 +412,14 @@ const RunChipsRow: React.FC<{ computed: RunComputed }> = ({ computed }) => {
   })();
 
   const cardExLabel = (() => {
-    if (!computed.usedTaxRules?.has('EXEMPTIONCARD')) return null;
+    if (!computed.usedTaxRules?.has('exemptioncard') && !computed.usedTaxRules?.has('EXEMPTIONCARD')) return null;
     const limit = computed.cardExemption?.limit ?? null;
     const inc = computed.cardExemption?.yearlyIncrease ?? null;
     return `${moneyCompact(limit)}${typeof inc === 'number' ? ` @ 0% +${moneyCompact(inc)}/y` : ''}`;
   })();
 
   const stockExLabel = (() => {
-    if (!computed.usedTaxRules?.has('STOCKEXEMPTION')) return null;
+    if (!computed.usedTaxRules?.has('stockexemption') && !computed.usedTaxRules?.has('STOCKEXEMPTION')) return null;
     const tax = computed.stockExemption?.taxRate ?? null;
     const limit = computed.stockExemption?.limit ?? null;
     const inc = computed.stockExemption?.yearlyIncrease ?? null;
@@ -746,7 +762,18 @@ const InputsSummary: React.FC<{ input: AdvancedSimulationRequest; showShape?: bo
   input,
   showShape = true,
 }) => {
-  const computed = useMemo(() => computeFromInputAndSummaries(input, null), [input]);
+  const { currentAssumptions } = useAssumptions();
+  const computed = useMemo(
+    () => computeFromInputAndSummaries(input, null, currentAssumptions.taxExemptionDefaults),
+    [
+      input,
+      currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+      currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+      currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+      currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+      currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+    ]
+  );
 
   return (
     <div>
@@ -838,6 +865,7 @@ const OutputsHero: React.FC<{ summaries: YearlySummary[]; metricSummaries?: Metr
 
 const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentAssumptions } = useAssumptions();
 
   const PAGE_SIZE = 20;
 
@@ -951,10 +979,23 @@ const ExplorePage: React.FC = () => {
   const computedByRunId = useMemo(() => {
     const out: Record<string, RunComputed> = {};
     runs.forEach((r) => {
-      out[r.id] = computeFromInputAndSummaries(inputByRunId[r.id] ?? null, summariesByRunId[r.id] ?? null);
+      out[r.id] = computeFromInputAndSummaries(
+        inputByRunId[r.id] ?? null,
+        summariesByRunId[r.id] ?? null,
+        currentAssumptions.taxExemptionDefaults
+      );
     });
     return out;
-  }, [inputByRunId, runs, summariesByRunId]);
+  }, [
+    currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
+    currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
+    currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
+    currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
+    currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+    inputByRunId,
+    runs,
+    summariesByRunId,
+  ]);
 
   const filteredAndSorted = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1599,7 +1640,15 @@ const ExplorePage: React.FC = () => {
                           background: 'rgba(255,255,255,0.02)',
                         }}
                       >
-                        <PhaseShapeRow shape={computeFromInputAndSummaries(selectedInput, null).shape} />
+                        <PhaseShapeRow
+                          shape={
+                            computeFromInputAndSummaries(
+                              selectedInput,
+                              null,
+                              currentAssumptions.taxExemptionDefaults
+                            ).shape
+                          }
+                        />
                       </div>
 
                       <SectionTitle>Outputs</SectionTitle>

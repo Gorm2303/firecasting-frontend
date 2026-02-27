@@ -9,6 +9,7 @@ import ExportStatisticsButton from '../components/ExportStatisticsButton';
 import { exportRunBundle, exportSimulationCsv, getCompletedSummaries, getReplayStatus, importRunBundle, ReplayStatusResponse } from '../api/simulation';
 import SimulationProgress from '../components/SimulationProgress';
 import PageLayout from '../components/PageLayout';
+import { normalizeTaxRules } from '../utils/taxRules';
 
 type BundleKind = 'normal' | 'advanced';
 const AUTO_EXPORT_SIM_CSV_KEY = 'firecasting:autoExportSimulationCsv';
@@ -162,7 +163,7 @@ const SimulationPage: React.FC = () => {
   const advancedPickerOverlayRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch {}
+    try { window.localStorage.setItem('firecasting:simulation:mode', mode); } catch { /* ignore localStorage failures */ }
   }, [mode]);
 
   useEffect(() => {
@@ -187,7 +188,7 @@ const SimulationPage: React.FC = () => {
   }, [advancedFeatureFlags]);
 
   useEffect(() => {
-    try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch {}
+    try { window.localStorage.setItem(AUTO_EXPORT_SIM_CSV_KEY, String(autoExportSimulationCsv)); } catch { /* ignore localStorage failures */ }
   }, [autoExportSimulationCsv]);
 
   useEffect(() => {
@@ -308,11 +309,13 @@ const SimulationPage: React.FC = () => {
                       withdrawAmount: p?.withdrawAmount,
                       lowerVariationPercentage: p?.lowerVariationPercentage,
                       upperVariationPercentage: p?.upperVariationPercentage,
-                      taxRules: Array.isArray(p?.taxRules)
-                        ? p.taxRules
-                        : Array.isArray(p?.taxExemptions)
-                          ? p.taxExemptions
-                          : [],
+                      taxRules: normalizeTaxRules(
+                        Array.isArray(p?.taxRules)
+                          ? p.taxRules
+                          : Array.isArray(p?.taxExemptions)
+                            ? p.taxExemptions
+                            : []
+                      ),
                     }))
                   : [],
               };

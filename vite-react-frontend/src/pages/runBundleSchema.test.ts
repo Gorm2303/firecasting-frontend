@@ -21,7 +21,7 @@ describe('run-bundle schema snapshot (inputs.raw)', () => {
           initialDeposit: 500,
           monthlyDeposit: 50,
           yearlyIncreaseInPercentage: 3,
-          taxRules: ['EXEMPTIONCARD'],
+          taxRules: ['exemptioncard'],
         },
         {
           phaseType: 'WITHDRAW',
@@ -30,7 +30,7 @@ describe('run-bundle schema snapshot (inputs.raw)', () => {
           withdrawAmount: 1234,
           lowerVariationPercentage: 2,
           upperVariationPercentage: 3,
-          taxRules: ['STOCKEXEMPTION'],
+          taxRules: ['stockexemption'],
         },
         {
           phaseType: 'PASSIVE',

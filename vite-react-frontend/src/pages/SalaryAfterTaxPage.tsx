@@ -4,6 +4,7 @@ import municipalTaxRates2026 from '../data/dk/municipalTaxRates2026.json';
 import { calculateSalaryAfterTax } from '../lib/dk/salaryAfterTaxCalculator';
 import { DK_TAX_YEAR_2026 } from '../lib/dk/taxYears';
 import type { DkMunicipalityTaxRate, GrossPeriod, SalaryAfterTaxInputs } from '../lib/dk/taxYearTypes';
+import { useAssumptions } from '../state/assumptions';
 
 type MunicipalityDataset = {
   year: number;
@@ -19,9 +20,6 @@ const formatPct = (value: number, digits = 1): string => {
   const safe = Number.isFinite(value) ? value : 0;
   return `${(safe * 100).toFixed(digits)}%`;
 };
-
-const ATP_MONTHLY_DKK = 99;
-const ATP_MONTHLY_GROSS_THRESHOLD_DKK = 2_340;
 
 const ANNUAL_BREAKDOWN_MILESTONE_LABELS = new Set<string>([
   'Gross salary (year)',
@@ -89,16 +87,25 @@ const toDisplayPeriod = (annualDkk: number, grossPeriod: GrossPeriod): number =>
 const SalaryAfterTaxPage: React.FC = () => {
   const taxYear = 2026 as const;
   const municipalDataset = municipalTaxRates2026 as MunicipalityDataset;
+  const { currentAssumptions } = useAssumptions();
 
   const [grossPeriod, setGrossPeriod] = useState<GrossPeriod>('monthly');
   const [grossAmount, setGrossAmount] = useState<number>(50_000);
 
-  const [employeePensionRatePct, setEmployeePensionRatePct] = useState<number>(0);
+  const [employeePensionRatePct, setEmployeePensionRatePct] = useState<number>(
+    () => currentAssumptions.salaryTaxatorDefaults.employeePensionRatePct
+  );
 
-  const [otherDeductionsAnnualDkk, setOtherDeductionsAnnualDkk] = useState<number>(0);
+  const [otherDeductionsAnnualDkk, setOtherDeductionsAnnualDkk] = useState<number>(
+    () => currentAssumptions.salaryTaxatorDefaults.otherDeductionsAnnualDkk
+  );
 
-  const [municipalityId, setMunicipalityId] = useState<string>('average');
-  const [churchMember, setChurchMember] = useState<boolean>(false);
+  const [municipalityId, setMunicipalityId] = useState<string>(
+    () => currentAssumptions.salaryTaxatorDefaults.municipalityId
+  );
+  const [churchMember, setChurchMember] = useState<boolean>(
+    () => currentAssumptions.salaryTaxatorDefaults.churchMember
+  );
 
   const [country] = useState<'DK'>('DK');
   const [optionalsOpen, setOptionalsOpen] = useState<boolean>(false);
@@ -125,7 +132,7 @@ const SalaryAfterTaxPage: React.FC = () => {
   const municipalTaxRate =
     selectedMunicipality != null
       ? selectedMunicipality.municipalTaxPct / 100
-      : DK_TAX_YEAR_2026.defaultMunicipalTaxRate;
+      : (Number(currentAssumptions.salaryTaxatorDefaults.defaultMunicipalTaxRatePct) || 0) / 100;
   const churchTaxRate = selectedMunicipality != null ? selectedMunicipality.churchTaxPct / 100 : 0;
 
   const grossMonthlyEquivalent = useMemo(() => {
@@ -136,8 +143,14 @@ const SalaryAfterTaxPage: React.FC = () => {
   // Assumption: ATP (employee share) is only deducted when working > 39 hours/month.
   // We don't model hours directly, so we approximate eligibility using gross monthly salary.
   const atpAnnualDkk = useMemo(() => {
-    return grossMonthlyEquivalent < ATP_MONTHLY_GROSS_THRESHOLD_DKK ? 0 : ATP_MONTHLY_DKK * 12;
-  }, [grossMonthlyEquivalent]);
+    const threshold = Number(currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk) || 0;
+    const monthly = Number(currentAssumptions.salaryTaxatorDefaults.atpMonthlyDkk) || 0;
+    return grossMonthlyEquivalent < threshold ? 0 : monthly * 12;
+  }, [
+    currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk,
+    currentAssumptions.salaryTaxatorDefaults.atpMonthlyDkk,
+    grossMonthlyEquivalent,
+  ]);
 
   const usingDefaultMunicipal = selectedMunicipality == null;
 
@@ -183,8 +196,8 @@ const SalaryAfterTaxPage: React.FC = () => {
       value: -breakdown.atpAnnualDkk,
       note:
         breakdown.atpAnnualDkk === 0
-          ? `0 DKK (gross/mo < ${ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')})`
-          : `${ATP_MONTHLY_DKK} DKK/mo (fixed; gross/mo ≥ ${ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')})`,
+          ? `0 DKK (gross/mo < ${(Number(currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk) || 0).toLocaleString('da-DK')})`
+          : `${Number(currentAssumptions.salaryTaxatorDefaults.atpMonthlyDkk) || 0} DKK/mo (fixed; gross/mo ≥ ${(Number(currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk) || 0).toLocaleString('da-DK')})`,
     },
     { label: 'AM base', value: breakdown.amBaseAnnualDkk, note: 'gross - pension - ATP' },
     { label: 'AM-bidrag (8%)', value: -breakdown.amBidragAnnualDkk, note: '8% of AM base' },
@@ -205,7 +218,9 @@ const SalaryAfterTaxPage: React.FC = () => {
     {
       label: 'Municipal tax',
       value: -breakdown.municipalTaxAnnualDkk,
-      note: usingDefaultMunicipal ? 'rate: 25.0% average' : `rate: ${formatPct(municipalTaxRate, 2)}`,
+      note: usingDefaultMunicipal
+        ? `rate: ${(Number(currentAssumptions.salaryTaxatorDefaults.defaultMunicipalTaxRatePct) || 0).toFixed(1)}% fallback`
+        : `rate: ${formatPct(municipalTaxRate, 2)}`,
     },
     ...(breakdown.churchTaxAnnualDkk !== 0
       ? [
@@ -554,8 +569,9 @@ const SalaryAfterTaxPage: React.FC = () => {
               <div>
                 <div style={{ fontWeight: 800, marginBottom: 6 }}>Municipality/church assumption</div>
                 <div>
-                  If no municipality is selected, the municipal tax rate defaults to <strong>25.0%</strong>. Church tax is only applied when enabled
-                  and a municipality (and its church tax rate) is available.
+                  If no municipality is selected, the municipal tax rate defaults to{' '}
+                  <strong>{(Number(currentAssumptions.salaryTaxatorDefaults.defaultMunicipalTaxRatePct) || 0).toFixed(1)}%</strong>. Church tax is only
+                  applied when enabled and a municipality (and its church tax rate) is available.
                 </div>
               </div>
 
@@ -564,7 +580,7 @@ const SalaryAfterTaxPage: React.FC = () => {
                 <div>
                   ATP is only deducted when an employee works more than <strong>39 hours/month</strong>. Since this tool does not ask for hours, it
                   uses a simple proxy: <strong>no ATP deduction</strong> when gross monthly salary is under{' '}
-                  <strong>{ATP_MONTHLY_GROSS_THRESHOLD_DKK.toLocaleString('da-DK')} DKK</strong>.
+                  <strong>{(Number(currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk) || 0).toLocaleString('da-DK')} DKK</strong>.
                 </div>
 
                 <div style={{ marginTop: 10, fontWeight: 800 }}>ATP contribution rates (employee share)</div>

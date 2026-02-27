@@ -26,6 +26,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
+    "resolveJsonModule": true,
+
     // Path aliases (adjust if you use these)
     "baseUrl": ".",
     "paths": {

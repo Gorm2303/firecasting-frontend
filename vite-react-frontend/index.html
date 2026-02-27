@@ -9,6 +9,25 @@
   <body>
     <div id="root"></div>
     <script src="/env.js"></script>
+    <script>
+      // Some browser extensions inject a malformed React DevTools hook.
+      // React will attempt to talk to it during init and can crash the app.
+      // If the hook doesn't match the expected interface, disable it.
+      (function () {
+        try {
+          var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+          if (hook && (typeof hook.on !== 'function' || typeof hook.emit !== 'function')) {
+            try {
+              delete window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+            } catch (e) {
+              window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = undefined;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -3,6 +3,7 @@ import { createDefaultSimulationRequest, normalizePhase } from '../config/simula
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
 
 type PhaseType = PhaseRequest['phaseType'];
+type TaxRule = NonNullable<PhaseRequest['taxRules']>[number];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
@@ -16,10 +17,27 @@ const toNumberOrUndefined = (v: unknown): number | undefined => {
 
 const toStringOrUndefined = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 
-const toTaxRules = (v: unknown): PhaseRequest['taxRules'] => {
+const toTaxRules = (v: unknown): NonNullable<PhaseRequest['taxRules']> => {
   if (!Array.isArray(v)) return [];
-  const allowed = new Set(['EXEMPTIONCARD', 'STOCKEXEMPTION']);
-  return v.filter((r) => typeof r === 'string' && allowed.has(r)) as PhaseRequest['taxRules'];
+
+  // Accept both legacy spellings (old frontend) and the backend wire keys.
+  const normalize = (raw: unknown): TaxRule | null => {
+    if (typeof raw !== 'string') return null;
+    const s = raw.trim();
+    if (!s) return null;
+    const u = s.toUpperCase();
+
+    if (u === 'EXEMPTIONCARD' || u === 'EXEMPTION_CARD' || s.toLowerCase() === 'exemptioncard') return 'exemptioncard';
+    if (u === 'STOCKEXEMPTION' || u === 'STOCK_EXEMPTION' || s.toLowerCase() === 'stockexemption') return 'stockexemption';
+    return null;
+  };
+
+  const out: Array<TaxRule> = [];
+  for (const r of v) {
+    const norm = normalize(r);
+    if (norm) out.push(norm);
+  }
+  return out;
 };
 
 const base64Decode = (b64: string): string => {
@@ -30,7 +48,6 @@ const base64Decode = (b64: string): string => {
     return new TextDecoder().decode(bytes);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const BufferAny = (globalThis as any).Buffer as any;
   if (BufferAny) return BufferAny.from(b64, 'base64').toString('utf-8');
 
@@ -44,7 +61,12 @@ const fromBase64Url = (b64url: string): string => {
 };
 
 export function encodeScenarioToShareParam(request: SimulationRequest): string {
-  const json = JSON.stringify(request);
+  // Normalize before encoding so the share format stays stable.
+  const normalized: SimulationRequest = {
+    ...request,
+    phases: (request.phases ?? []).map((p) => ({ ...p, taxRules: toTaxRules((p as any).taxRules) })),
+  };
+  const json = JSON.stringify(normalized);
   // Prefix so we can decode unambiguously and keep backward compat.
   return `z:${compressToEncodedURIComponent(json)}`;
 }

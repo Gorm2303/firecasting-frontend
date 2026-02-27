@@ -1,0 +1,599 @@
+[
+  {
+    "keyPath": "currency",
+    "tab": "worldModel",
+    "label": "Currency",
+    "unit": "string",
+    "default": "DKK",
+    "usedBy": ["AssumptionsHub", "AssumptionsSummaryBar", "MoneyPerspective"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "inflationPct",
+    "tab": "worldModel",
+    "label": "Inflation (%/year)",
+    "unit": "pct",
+    "default": 2,
+    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Explore", "Tutorial"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "yearlyFeePct",
+    "tab": "worldModel",
+    "label": "Yearly fee (%/year)",
+    "unit": "pct",
+    "default": 0.5,
+    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Tutorial"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "expectedReturnPct",
+    "tab": "worldModel",
+    "label": "Expected return (%/year)",
+    "unit": "pct",
+    "default": 5,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": false
+  },
+  {
+    "keyPath": "safeWithdrawalPct",
+    "tab": "worldModel",
+    "label": "Safe withdrawal rate (%/year)",
+    "unit": "pct",
+    "default": 4,
+    "usedBy": ["AssumptionsHub", "AssumptionsSummaryBar"],
+    "overrideableByStrategy": false
+  },
+
+  {
+    "keyPath": "executionDefaults.paths",
+    "tab": "execution",
+    "label": "Paths (runs)",
+    "unit": "count",
+    "default": 10000,
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "executionDefaults.batchSize",
+    "tab": "execution",
+    "label": "Batch size",
+    "unit": "count",
+    "default": 10000,
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "executionDefaults.seedMode",
+    "tab": "execution",
+    "label": "Master seed mode",
+    "unit": "enum",
+    "default": "default",
+    "usedBy": ["AssumptionsHub", "Simulation"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "incomeSetupDefaults.incomeModelType",
+    "tab": "incomeSetup",
+    "label": "Income model type",
+    "unit": "enum",
+    "default": "grossFirst",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.payCadence",
+    "tab": "incomeSetup",
+    "label": "Pay cadence",
+    "unit": "enum",
+    "default": "monthly",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.salaryGrowthRule",
+    "tab": "incomeSetup",
+    "label": "Salary growth rule",
+    "unit": "enum",
+    "default": "fixedPct",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.bonusFrequency",
+    "tab": "incomeSetup",
+    "label": "Bonus frequency",
+    "unit": "enum",
+    "default": "none",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.bonusPct",
+    "tab": "incomeSetup",
+    "label": "Bonus (% of salary)",
+    "unit": "pct",
+    "default": 0,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.taxEnabled",
+    "tab": "incomeSetup",
+    "label": "Tax enabled",
+    "unit": "boolean",
+    "default": true,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.taxRegime",
+    "tab": "incomeSetup",
+    "label": "Tax regime",
+    "unit": "enum",
+    "default": "DK",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "depositStrategyDefaults.depositTiming",
+    "tab": "depositStrategy",
+    "label": "Deposit timing",
+    "unit": "enum",
+    "default": "endOfMonth",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.contributionCadence",
+    "tab": "depositStrategy",
+    "label": "Contribution cadence",
+    "unit": "enum",
+    "default": "monthly",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.escalationMode",
+    "tab": "depositStrategy",
+    "label": "Escalation mode",
+    "unit": "enum",
+    "default": "none",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.escalationPct",
+    "tab": "depositStrategy",
+    "label": "Escalation (%/year)",
+    "unit": "pct",
+    "default": 0,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.escalationDkkPerYear",
+    "tab": "depositStrategy",
+    "label": "Escalation (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 0,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.inflationAdjustContributions",
+    "tab": "depositStrategy",
+    "label": "Inflation-adjust contributions",
+    "unit": "boolean",
+    "default": false,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.emergencyBufferTargetMonths",
+    "tab": "depositStrategy",
+    "label": "Emergency buffer target (months)",
+    "unit": "months",
+    "default": 6,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "depositStrategyDefaults.routingPriority",
+    "tab": "depositStrategy",
+    "label": "Default routing priority",
+    "unit": "enum",
+    "default": "buffer>debt>wrappers>taxable",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "passiveStrategyDefaults.returnModel",
+    "tab": "passiveStrategy",
+    "label": "Return model",
+    "unit": "enum",
+    "default": "fixed",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "passiveStrategyDefaults.volatilityPct",
+    "tab": "passiveStrategy",
+    "label": "Volatility (%/year)",
+    "unit": "pct",
+    "default": 15,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "passiveStrategyDefaults.rebalancing",
+    "tab": "passiveStrategy",
+    "label": "Rebalancing convention",
+    "unit": "enum",
+    "default": "none",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "passiveStrategyDefaults.cashDragPct",
+    "tab": "passiveStrategy",
+    "label": "Cash drag (%/year)",
+    "unit": "pct",
+    "default": 0,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "taxExemptionDefaults.exemptionCardLimit",
+    "tab": "simulatorTax",
+    "label": "Exemption card limit (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 51600,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.exemptionCardYearlyIncrease",
+    "tab": "simulatorTax",
+    "label": "Exemption card yearly increase (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 1000,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionTaxRate",
+    "tab": "simulatorTax",
+    "label": "Stock exemption tax rate (%/year)",
+    "unit": "pct",
+    "default": 27,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionLimit",
+    "tab": "simulatorTax",
+    "label": "Stock exemption limit (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 67500,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "taxExemptionDefaults.stockExemptionYearlyIncrease",
+    "tab": "simulatorTax",
+    "label": "Stock exemption yearly increase (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 1000,
+    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "salaryTaxatorDefaults.municipalityId",
+    "tab": "salaryTaxator",
+    "label": "Default municipality id",
+    "unit": "string",
+    "default": "average",
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.defaultMunicipalTaxRatePct",
+    "tab": "salaryTaxator",
+    "label": "Fallback municipal tax rate (%)",
+    "unit": "pct",
+    "default": 25,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.churchMember",
+    "tab": "salaryTaxator",
+    "label": "Church member",
+    "unit": "boolean",
+    "default": false,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.employeePensionRatePct",
+    "tab": "salaryTaxator",
+    "label": "Employee pension rate (%)",
+    "unit": "pct",
+    "default": 0,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.otherDeductionsAnnualDkk",
+    "tab": "salaryTaxator",
+    "label": "Other deductions (DKK/year)",
+    "unit": "dkkPerYear",
+    "default": 0,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.atpMonthlyDkk",
+    "tab": "salaryTaxator",
+    "label": "ATP employee share (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 99,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk",
+    "tab": "salaryTaxator",
+    "label": "ATP eligibility proxy (gross monthly threshold DKK)",
+    "unit": "dkkPerMonth",
+    "default": 2340,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "moneyPerspectiveDefaults.workingHoursPerMonth",
+    "tab": "moneyPerspective",
+    "label": "Working hours per month",
+    "unit": "hoursPerMonth",
+    "default": 160,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.payRaisePct",
+    "tab": "moneyPerspective",
+    "label": "Pay raise (%/year)",
+    "unit": "pct",
+    "default": 2,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.timeHorizonYears",
+    "tab": "moneyPerspective",
+    "label": "Time horizon (years)",
+    "unit": "years",
+    "default": 10,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "moneyPerspectiveDefaults.coreExpenseMonthlyDkk",
+    "tab": "moneyPerspective",
+    "label": "Core expense (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 12000,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  }
+
+  ,
+  {
+    "keyPath": "withdrawalStrategyDefaults.withdrawalRule",
+    "tab": "withdrawalStrategy",
+    "label": "Default withdrawal rule",
+    "unit": "enum",
+    "default": "fixedPct",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "withdrawalStrategyDefaults.inflationAdjustSpending",
+    "tab": "withdrawalStrategy",
+    "label": "Inflation-adjust spending",
+    "unit": "boolean",
+    "default": true,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "withdrawalStrategyDefaults.guardrailFloorPct",
+    "tab": "withdrawalStrategy",
+    "label": "Guardrail floor (%/year)",
+    "unit": "pct",
+    "default": 3,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "withdrawalStrategyDefaults.guardrailCeilingPct",
+    "tab": "withdrawalStrategy",
+    "label": "Guardrail ceiling (%/year)",
+    "unit": "pct",
+    "default": 5,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "withdrawalStrategyDefaults.maxCutPctPerYear",
+    "tab": "withdrawalStrategy",
+    "label": "Max spending cut (%/year)",
+    "unit": "pct",
+    "default": 10,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "withdrawalStrategyDefaults.cashBufferTargetMonths",
+    "tab": "withdrawalStrategy",
+    "label": "Cash buffer target (months)",
+    "unit": "months",
+    "default": 6,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "policyBuilderDefaults.evaluationFrequency",
+    "tab": "policyBuilder",
+    "label": "Evaluation frequency",
+    "unit": "enum",
+    "default": "monthly",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.conflictResolution",
+    "tab": "policyBuilder",
+    "label": "Conflict resolution",
+    "unit": "enum",
+    "default": "priority",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.cooldownMonths",
+    "tab": "policyBuilder",
+    "label": "Cooldown (months)",
+    "unit": "months",
+    "default": 3,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.maxSpendingCutPctPerYear",
+    "tab": "policyBuilder",
+    "label": "Max spending cut (%/year)",
+    "unit": "pct",
+    "default": 10,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.maxDepositIncreasePctPerYear",
+    "tab": "policyBuilder",
+    "label": "Max deposit increase (%/year)",
+    "unit": "pct",
+    "default": 10,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.warnFailureRiskPct",
+    "tab": "policyBuilder",
+    "label": "Warn threshold (failure risk %)",
+    "unit": "pct",
+    "default": 10,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "policyBuilderDefaults.criticalFailureRiskPct",
+    "tab": "policyBuilder",
+    "label": "Critical threshold (failure risk %)",
+    "unit": "pct",
+    "default": 20,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "fireMilestonesDefaults.confidenceTarget",
+    "tab": "milestones",
+    "label": "Confidence target",
+    "unit": "enum",
+    "default": "P90",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireMilestonesDefaults.milestoneStability",
+    "tab": "milestones",
+    "label": "Milestone stability",
+    "unit": "enum",
+    "default": "instant",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireMilestonesDefaults.sustainedMonths",
+    "tab": "milestones",
+    "label": "Sustained months",
+    "unit": "months",
+    "default": 12,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireMilestonesDefaults.baristaFireRequiredMonthlyIncomeDkk",
+    "tab": "milestones",
+    "label": "Barista FIRE: required monthly income (DKK)",
+    "unit": "dkkPerMonth",
+    "default": 0,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireMilestonesDefaults.leanSpendingMonthlyDkk",
+    "tab": "milestones",
+    "label": "Lean spending threshold (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 12000,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireMilestonesDefaults.fatSpendingMonthlyDkk",
+    "tab": "milestones",
+    "label": "Fat spending threshold (DKK/month)",
+    "unit": "dkkPerMonth",
+    "default": 30000,
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "goalPlannerDefaults.fundingOrder",
+    "tab": "goalPlanner",
+    "label": "Funding order",
+    "unit": "enum",
+    "default": "buffer>debt>goals>fi",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "goalPlannerDefaults.goalInflationHandling",
+    "tab": "goalPlanner",
+    "label": "Goal inflation handling",
+    "unit": "enum",
+    "default": "real",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "goalPlannerDefaults.goalRiskHandling",
+    "tab": "goalPlanner",
+    "label": "Goal risk handling",
+    "unit": "enum",
+    "default": "default",
+    "usedBy": ["AssumptionsHub"],
+    "overrideableByStrategy": true
+  }
+]

@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import PageLayout from "../components/PageLayout";
 import {
   defaultMoneyPerspectiveSettings,
@@ -41,6 +41,7 @@ import {
   monthlyBenefitMoneyFromHours,
   workHours,
 } from "../lib/moneyPerspective/calculations";
+import { useAssumptions } from "../state/assumptions";
 
 const controlStyle: React.CSSProperties = {
   height: 44,
@@ -692,6 +693,8 @@ function setCoreExpenseForSource(
 
 const MoneyPerspectivePage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { currentAssumptions } = useAssumptions();
 
   const [settings, setSettings] = useState<MoneyPerspectiveSettingsV3>(() =>
     loadMoneyPerspectiveSettings(),
@@ -973,6 +976,60 @@ const MoneyPerspectivePage: React.FC = () => {
     toDraft(settings.investing.feeDragPct),
   );
 
+  // Assumptions Hub is the authority for baseline economics + profile defaults.
+  useEffect(() => {
+    const mp = currentAssumptions.moneyPerspectiveDefaults;
+    const next = {
+      currency: currentAssumptions.currency,
+      payRaisePct: mp.payRaisePct,
+      coreExpenseMonthlyDkk: mp.coreExpenseMonthlyDkk,
+      annualReturnPct: currentAssumptions.expectedReturnPct,
+      inflationPct: currentAssumptions.inflationPct,
+      feeDragPct: currentAssumptions.yearlyFeePct,
+    };
+
+    setPayRaiseDraft(toDraft(next.payRaisePct));
+    setCoreExpensesDraft(toDraft(next.coreExpenseMonthlyDkk));
+    setAnnualReturnDraft(toDraft(next.annualReturnPct));
+    setInflationDraft(toDraft(next.inflationPct));
+    setFeeDragDraft(toDraft(next.feeDragPct));
+
+    setSettings((prev) => {
+      const nextCore = setCoreExpenseForSource(prev.coreExpenses, "monthly", next.coreExpenseMonthlyDkk);
+      const nextSettings: MoneyPerspectiveSettingsV3 = {
+        ...prev,
+        currency: next.currency,
+        compensation: {
+          ...prev.compensation,
+          workingHoursPerMonth: mp.workingHoursPerMonth,
+          payRaisePct: next.payRaisePct,
+        },
+        coreExpenses: nextCore,
+        investing: {
+          ...prev.investing,
+          annualReturnPct: next.annualReturnPct,
+          inflationPct: next.inflationPct,
+          feeDragPct: next.feeDragPct,
+          timeHorizonYears: mp.timeHorizonYears,
+          compoundsPerYear: 12,
+        },
+      };
+
+      const unchanged =
+        prev.currency === nextSettings.currency &&
+        prev.compensation.workingHoursPerMonth === nextSettings.compensation.workingHoursPerMonth &&
+        prev.compensation.payRaisePct === nextSettings.compensation.payRaisePct &&
+        prev.investing.annualReturnPct === nextSettings.investing.annualReturnPct &&
+        prev.investing.inflationPct === nextSettings.investing.inflationPct &&
+        prev.investing.feeDragPct === nextSettings.investing.feeDragPct &&
+        prev.investing.timeHorizonYears === nextSettings.investing.timeHorizonYears &&
+        prev.coreExpenses.source === nextSettings.coreExpenses.source &&
+        prev.coreExpenses.monthlyCoreExpense === nextSettings.coreExpenses.monthlyCoreExpense;
+
+      return unchanged ? prev : nextSettings;
+    });
+  }, [currentAssumptions]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const draft: PageDraftV3 = {
@@ -995,11 +1052,6 @@ const MoneyPerspectivePage: React.FC = () => {
   useEffect(() => {
     saveMoneyPerspectiveSettings(settings);
   }, [settings]);
-
-  useEffect(() => {
-    const normalized = normalizeCurrencyDraft(newItemCurrency);
-    setSettings((s) => ({ ...s, currency: normalized }));
-  }, [newItemCurrency]);
 
   const effectiveHourlyRate = useMemo(() => {
     return effectiveHourlyFromSalarySettings(settings.compensation);
@@ -4767,16 +4819,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 >
                   <input
                     value={payRaiseDraft}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!isValidDecimalDraft(v)) return;
-                      setPayRaiseDraft(v);
-                      const n = roundTo1Decimal(draftToNumberOrZero(v));
-                      setSettings((s) => ({
-                        ...s,
-                        compensation: { ...s.compensation, payRaisePct: n },
-                      }));
-                    }}
+                    disabled
                     inputMode="decimal"
                     style={inputGroupInputStyle}
                     aria-label="Pay raise (yearly)"
@@ -4790,20 +4833,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ ...inputGroupStyle, width: "100%" }}>
                   <input
                     value={coreExpensesDraft}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!isValidDecimalDraft(v)) return;
-                      setCoreExpensesDraft(v);
-                      const n = roundTo1Decimal(draftToNumberOrZero(v));
-                      setSettings((s) => ({
-                        ...s,
-                        coreExpenses: setCoreExpenseForSource(
-                          s.coreExpenses,
-                          s.coreExpenses.source,
-                          n,
-                        ),
-                      }));
-                    }}
+                    disabled
                     inputMode="decimal"
                     style={inputGroupInputStyle}
                     aria-label="Core expenses amount"
@@ -4815,21 +4845,7 @@ const MoneyPerspectivePage: React.FC = () => {
 
                 <select
                   value={settings.coreExpenses.source}
-                  onChange={(e) => {
-                    const next = e.target
-                      .value as MoneyPerspectiveSettingsV3["coreExpenses"]["source"];
-                    const current = settings.coreExpenses;
-                    const daily = dailyCoreExpenseFromSettings(current);
-                    const nextCore =
-                      daily == null
-                        ? { ...current, source: next }
-                        : setCoreExpenseFromDaily(current, next, daily);
-
-                    setSettings((s) => ({ ...s, coreExpenses: nextCore }));
-                    setCoreExpensesDraft(
-                      toDraft(coreExpenseValueForSource(nextCore)),
-                    );
-                  }}
+                  disabled
                   style={{ ...controlStyle, width: "100%", minWidth: 0 }}
                   aria-label="Core expenses period"
                 >
@@ -4843,18 +4859,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
                   <input
                     value={annualReturnDraft}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!isValidDecimalDraft(v)) return;
-                      setAnnualReturnDraft(v);
-                      setSettings((s) => ({
-                        ...s,
-                        investing: {
-                          ...s.investing,
-                          annualReturnPct: draftToNumberOrZero(v),
-                        },
-                      }));
-                    }}
+                    disabled
                     inputMode="decimal"
                     style={inputGroupInputStyle}
                     aria-label="Expected annual return percent"
@@ -4868,18 +4873,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
                   <input
                     value={inflationDraft}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!isValidDecimalDraft(v)) return;
-                      setInflationDraft(v);
-                      setSettings((s) => ({
-                        ...s,
-                        investing: {
-                          ...s.investing,
-                          inflationPct: draftToNumberOrZero(v),
-                        },
-                      }));
-                    }}
+                    disabled
                     inputMode="decimal"
                     style={inputGroupInputStyle}
                     aria-label="Inflation percent"
@@ -4893,18 +4887,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 <div style={{ ...inputGroupStyle, gridColumn: "2 / span 2" }}>
                   <input
                     value={feeDragDraft}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!isValidDecimalDraft(v)) return;
-                      setFeeDragDraft(v);
-                      setSettings((s) => ({
-                        ...s,
-                        investing: {
-                          ...s.investing,
-                          feeDragPct: draftToNumberOrZero(v),
-                        },
-                      }));
-                    }}
+                    disabled
                     inputMode="decimal"
                     style={inputGroupInputStyle}
                     aria-label="Fee drag percent"
@@ -4922,6 +4905,12 @@ const MoneyPerspectivePage: React.FC = () => {
                   }}
                 >
                   Net annual return: {formatNumber(netAnnualReturnPct, 2)}%
+                </div>
+
+                <div style={{ gridColumn: "1 / span 3" }}>
+                  <button type="button" style={btn()} onClick={() => navigate("/assumptions")}>
+                    Edit assumptions in Assumptions Hub
+                  </button>
                 </div>
                 <div
                   style={{
