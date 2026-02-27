@@ -5,7 +5,7 @@ import { useUiPreferences } from '../state/uiPreferences';
 import { getDefaultExecutionDefaults, type ExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
 import { listRegistryByTab } from '../state/assumptionsRegistry';
 import { listConventionsByGroup } from '../state/conventionsRegistry';
-import { listAssumptionsHistory } from '../state/assumptionsHistory';
+import { clearAssumptionsHistory, listAssumptionsHistory } from '../state/assumptionsHistory';
 import { deleteAssumptionsProfile, listAssumptionsProfiles, saveAssumptionsProfile } from '../state/assumptionsProfiles';
 import { loadAssumptionsGovernance, saveAssumptionsGovernance, type AssumptionsGovernance } from '../state/assumptionsGovernance';
 import { listSimulationSnapshots } from '../state/simulationSnapshots';
@@ -58,6 +58,7 @@ const AssumptionsHubPage: React.FC = () => {
   const [importStatus, setImportStatus] = React.useState<string>('');
   const [selectedSnapshotId, setSelectedSnapshotId] = React.useState<string>('');
   const [profilesRefresh, setProfilesRefresh] = React.useState(0);
+  const [historyRefresh, setHistoryRefresh] = React.useState(0);
   const [profileName, setProfileName] = React.useState('');
   const [governance, setGovernance] = React.useState<AssumptionsGovernance>(() => loadAssumptionsGovernance());
   const {
@@ -123,7 +124,7 @@ const AssumptionsHubPage: React.FC = () => {
   const assumptionsHistory = useMemo(() => {
     if (!showAssumptionsChangeLog) return [];
     return listAssumptionsHistory();
-  }, [showAssumptionsChangeLog]);
+  }, [showAssumptionsChangeLog, historyRefresh]);
 
   const assumptionsProfiles = useMemo(() => {
     if (activeTab !== 'baseline') return [];
@@ -134,6 +135,7 @@ const AssumptionsHubPage: React.FC = () => {
   const exportAssumptionsJson = useMemo(() => {
     return () => {
       const payload = {
+        governance,
         current: currentAssumptions,
         draft: draftAssumptions,
       };
@@ -146,7 +148,7 @@ const AssumptionsHubPage: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
     };
-  }, [currentAssumptions, draftAssumptions]);
+  }, [currentAssumptions, draftAssumptions, governance]);
 
   const importAssumptionsJson = useMemo(() => {
     return async (file: File | null) => {
@@ -162,8 +164,18 @@ const AssumptionsHubPage: React.FC = () => {
         const text = await file.text();
         const raw = JSON.parse(text);
 
-        const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-        const imported = (candidate.draft ?? candidate.current ?? raw) as unknown;
+        const root = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+        const maybeGov = root.governance;
+        if (maybeGov && typeof maybeGov === 'object') {
+          const g = maybeGov as Record<string, unknown>;
+          persistGovernance({
+            sourceNote: typeof g.sourceNote === 'string' ? g.sourceNote : governance.sourceNote,
+            lockBaseline: typeof g.lockBaseline === 'boolean' ? g.lockBaseline : governance.lockBaseline,
+          });
+        }
+
+        const imported = (root.draft ?? root.current ?? raw) as unknown;
 
         setDraftAssumptions(normalizeAssumptions(imported));
         setImportStatus('Imported into draft. Review and click Save to apply.');
@@ -171,7 +183,7 @@ const AssumptionsHubPage: React.FC = () => {
         setImportStatus('Import failed: invalid JSON.');
       }
     };
-  }, [baselineLocked, setDraftAssumptions]);
+  }, [baselineLocked, governance.lockBaseline, governance.sourceNote, setDraftAssumptions]);
 
   const formatValue = useMemo(() => {
     const stringify = (v: unknown): string => {
@@ -842,6 +854,17 @@ const AssumptionsHubPage: React.FC = () => {
               <button type="button" onClick={() => setShowAssumptionsChangeLog((v) => !v)}>
                 {showAssumptionsChangeLog ? 'Hide change log' : 'View change log'}
               </button>
+              {showAssumptionsChangeLog && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearAssumptionsHistory();
+                    setHistoryRefresh((v) => v + 1);
+                  }}
+                >
+                  Clear change log
+                </button>
+              )}
             </div>
 
             {importStatus && <div style={{ fontSize: 13, opacity: 0.85 }}>{importStatus}</div>}
@@ -862,7 +885,20 @@ const AssumptionsHubPage: React.FC = () => {
                           borderRadius: 12,
                         }}
                       >
-                        <div style={{ fontWeight: 800 }}>{new Date(e.createdAt).toLocaleString()}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 800 }}>{new Date(e.createdAt).toLocaleString()}</div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              disabled={baselineLocked}
+                              onClick={() => {
+                                setDraftAssumptions(normalizeAssumptions(e.assumptions));
+                              }}
+                            >
+                              Use as draft
+                            </button>
+                          </div>
+                        </div>
                         <div style={{ opacity: 0.82, fontSize: 13, marginTop: 2 }}>
                           {e.assumptions.currency} · Inflation {e.assumptions.inflationPct}% · Fee {e.assumptions.yearlyFeePct}% · Return{' '}
                           {e.assumptions.expectedReturnPct}% · SWR {e.assumptions.safeWithdrawalPct}%
