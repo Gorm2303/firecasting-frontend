@@ -57,6 +57,11 @@ const chipStyle: React.CSSProperties = {
   opacity: 0.9,
 };
 
+const provenanceChipStyle: React.CSSProperties = {
+  ...chipStyle,
+  opacity: 1,
+};
+
 const panelStyle: React.CSSProperties = {
   border: '1px solid #252525',
   borderRadius: 12,
@@ -227,18 +232,18 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
         <div>
           <div style={{ fontWeight: 700 }}>Scenario assumptions</div>
           <div style={{ fontSize: 12, opacity: 0.78 }}>
-            This editor is registry-driven and can override baseline assumptions across the full authority layer.
+            This editor is registry-driven and can override shared baseline assumptions for the current scenario without changing the Assumptions Hub baseline.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span
             style={{
-              ...chipStyle,
+              ...provenanceChipStyle,
               borderColor: hasOverride ? '#d39b2a' : '#3a8f5d',
               color: hasOverride ? '#f0c96b' : '#8ce0a8',
             }}
           >
-            {hasOverride ? 'Overridden' : 'Baseline'}
+            {hasOverride ? 'Scenario override active' : 'Inherited from shared baseline'}
           </span>
           <button type="button" onClick={onOpenAssumptionsHub} style={{ padding: '6px 10px', borderRadius: 8 }}>
             Open Assumptions Hub
@@ -275,7 +280,7 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
           <div>
             <div style={{ fontWeight: 700 }}>{ASSUMPTIONS_TAB_LABELS[activeTab]}</div>
             <div style={{ fontSize: 12, opacity: 0.72 }}>
-              Override only the fields this scenario genuinely needs. Everything else continues to inherit the baseline.
+              Override only the fields this scenario genuinely needs. Everything else continues to inherit the shared baseline.
             </div>
           </div>
           <div style={{ ...chipStyle, borderColor: '#555' }}>{activeItems.length} registry fields</div>
@@ -297,14 +302,14 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <span
                       style={{
-                        ...chipStyle,
+                        ...provenanceChipStyle,
                         borderColor: isOverridden ? '#d39b2a' : '#3a8f5d',
                         color: isOverridden ? '#f0c96b' : '#8ce0a8',
                       }}
                     >
-                      {isOverridden ? 'Overridden' : 'Baseline'}
+                      {isOverridden ? 'Scenario override' : 'Using shared baseline'}
                     </span>
-                    <span style={chipStyle}>{item.overrideableByStrategy ? 'Strategy can override' : 'Strategy-locked'}</span>
+                    <span style={provenanceChipStyle}>{item.overrideableByStrategy ? 'Strategy can override' : 'Strategy-locked'}</span>
                   </div>
                 </div>
 
@@ -336,11 +341,11 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
                 ) : item.unit === 'enum' && enumOptions && enumOptions.length > 0 ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Baseline</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Shared baseline</span>
                       <input disabled value={formatValue(baselineValue)} style={{ padding: '8px 10px', borderRadius: 8 }} readOnly />
                     </label>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Override</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Scenario override</span>
                       <select
                         aria-label={`${item.label} override`}
                         disabled={disabled}
@@ -367,11 +372,11 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
                 ) : isNumericRegistryUnit(item.unit) ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Baseline</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Shared baseline</span>
                       <input disabled value={formatValue(baselineValue)} style={{ padding: '8px 10px', borderRadius: 8 }} readOnly />
                     </label>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Override</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Scenario override</span>
                       <input
                         aria-label={`${item.label} override`}
                         type="number"
@@ -398,11 +403,11 @@ const ScenarioOverrideEditor: React.FC<Props> = ({
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Baseline</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Shared baseline</span>
                       <input disabled value={formatValue(baselineValue)} style={{ padding: '8px 10px', borderRadius: 8 }} readOnly />
                     </label>
                     <label style={{ display: 'grid', gap: 4 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>Override</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>Scenario override</span>
                       <input
                         aria-label={`${item.label} override`}
                         disabled={disabled}
