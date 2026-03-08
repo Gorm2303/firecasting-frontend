@@ -56,8 +56,7 @@ export const ASSUMPTIONS_TAB_LABELS: Record<AssumptionsTabId, string> = {
 
 const REGISTRY_ENUM_OPTIONS: Record<string, string[]> = {
   'incomeSetupDefaults.incomeModelType': ['grossFirst', 'netFirst'],
-  'incomeSetupDefaults.payCadence': ['monthly', 'biweekly', 'yearly'],
-  'incomeSetupDefaults.salaryGrowthRule': ['fixedPct', 'inflationLinked'],
+  'incomeSetupDefaults.referenceSalaryPeriod': ['hourly', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'],
   'incomeSetupDefaults.bonusFrequency': ['none', 'yearly', 'monthly'],
   'incomeSetupDefaults.taxRegime': ['DK', 'none'],
 
@@ -125,4 +124,18 @@ export const listScenarioOverrideRegistryItems = (): AssumptionRegistryItem[] =>
 
 export const listStrategyRegistryItems = (tab: AssumptionsTabId): AssumptionRegistryItem[] => {
   return listRegistryByTab(tab).filter((item) => item.keyPath !== 'currency');
+};
+
+export const listRegistryItemsByUsedBy = (
+  usedByLabel: string,
+  options?: { tabs?: AssumptionsTabId[]; excludeCurrency?: boolean }
+): AssumptionRegistryItem[] => {
+  const target = normalizeLabel(usedByLabel);
+  const tabs = options?.tabs;
+
+  return ASSUMPTIONS_REGISTRY.filter((item) => {
+    if (options?.excludeCurrency && item.keyPath === 'currency') return false;
+    if (tabs && tabs.length > 0 && !tabs.includes(item.tab)) return false;
+    return item.usedBy.some((label) => normalizeLabel(label) === target);
+  });
 };

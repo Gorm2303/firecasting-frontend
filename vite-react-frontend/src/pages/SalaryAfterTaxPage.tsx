@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PageLayout from '../components/PageLayout';
 import municipalTaxRates2026 from '../data/dk/municipalTaxRates2026.json';
+import { monthlyEquivalentFromSalaryAmount } from '../lib/income/sharedSalary';
 import { calculateSalaryAfterTax } from '../lib/dk/salaryAfterTaxCalculator';
 import { DK_TAX_YEAR_2026 } from '../lib/dk/taxYears';
 import type { DkMunicipalityTaxRate, GrossPeriod, SalaryAfterTaxInputs } from '../lib/dk/taxYearTypes';
@@ -84,13 +85,51 @@ const toDisplayPeriod = (annualDkk: number, grossPeriod: GrossPeriod): number =>
   return grossPeriod === 'monthly' ? Math.round(safe / 12) : Math.round(safe);
 };
 
+const toSalaryTaxatorReference = (
+  referenceGrossSalaryAmount: number,
+  referenceSalaryPeriod: ReturnType<typeof useAssumptions>['currentAssumptions']['incomeSetupDefaults']['referenceSalaryPeriod'],
+  workingHoursPerMonth: number,
+): { amount: number; period: GrossPeriod } => {
+  if (referenceSalaryPeriod === 'yearly') {
+    return {
+      amount: Math.round(Number(referenceGrossSalaryAmount) || 0),
+      period: 'annual',
+    };
+  }
+
+  return {
+    amount: Math.round(
+      monthlyEquivalentFromSalaryAmount(
+        Number(referenceGrossSalaryAmount) || 0,
+        referenceSalaryPeriod,
+        workingHoursPerMonth,
+      ),
+    ),
+    period: 'monthly',
+  };
+};
+
 const SalaryAfterTaxPage: React.FC = () => {
   const taxYear = 2026 as const;
   const municipalDataset = municipalTaxRates2026 as MunicipalityDataset;
   const { currentAssumptions } = useAssumptions();
 
-  const [grossPeriod, setGrossPeriod] = useState<GrossPeriod>('monthly');
-  const [grossAmount, setGrossAmount] = useState<number>(50_000);
+  const referenceSalary = useMemo(
+    () =>
+      toSalaryTaxatorReference(
+        currentAssumptions.incomeSetupDefaults.referenceGrossSalaryAmount,
+        currentAssumptions.incomeSetupDefaults.referenceSalaryPeriod,
+        currentAssumptions.incomeSetupDefaults.workingHoursPerMonth,
+      ),
+    [
+      currentAssumptions.incomeSetupDefaults.referenceGrossSalaryAmount,
+      currentAssumptions.incomeSetupDefaults.referenceSalaryPeriod,
+      currentAssumptions.incomeSetupDefaults.workingHoursPerMonth,
+    ],
+  );
+
+  const [grossPeriod, setGrossPeriod] = useState<GrossPeriod>(() => referenceSalary.period);
+  const [grossAmount, setGrossAmount] = useState<number>(() => referenceSalary.amount);
 
   const [employeePensionRatePct, setEmployeePensionRatePct] = useState<number>(
     () => currentAssumptions.salaryTaxatorDefaults.employeePensionRatePct
@@ -109,6 +148,22 @@ const SalaryAfterTaxPage: React.FC = () => {
 
   const [country] = useState<'DK'>('DK');
   const [optionalsOpen, setOptionalsOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    setGrossPeriod(referenceSalary.period);
+    setGrossAmount(referenceSalary.amount);
+    setEmployeePensionRatePct(currentAssumptions.salaryTaxatorDefaults.employeePensionRatePct);
+    setOtherDeductionsAnnualDkk(currentAssumptions.salaryTaxatorDefaults.otherDeductionsAnnualDkk);
+    setMunicipalityId(currentAssumptions.salaryTaxatorDefaults.municipalityId);
+    setChurchMember(currentAssumptions.salaryTaxatorDefaults.churchMember);
+  }, [
+    currentAssumptions.salaryTaxatorDefaults.churchMember,
+    currentAssumptions.salaryTaxatorDefaults.employeePensionRatePct,
+    currentAssumptions.salaryTaxatorDefaults.municipalityId,
+    currentAssumptions.salaryTaxatorDefaults.otherDeductionsAnnualDkk,
+    referenceSalary.amount,
+    referenceSalary.period,
+  ]);
 
   const onChangeGrossPeriod = (next: GrossPeriod) => {
     setGrossAmount((current) => {

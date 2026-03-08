@@ -83,21 +83,57 @@
     "overrideableByStrategy": true
   },
   {
-    "keyPath": "incomeSetupDefaults.payCadence",
+    "keyPath": "incomeSetupDefaults.referenceSalaryPeriod",
     "tab": "incomeSetup",
-    "label": "Pay cadence",
+    "label": "Salary reference period",
     "unit": "enum",
     "default": "monthly",
-    "usedBy": ["AssumptionsHub"],
+    "usedBy": ["AssumptionsHub", "SalaryTaxator", "MoneyPerspective"],
     "overrideableByStrategy": true
   },
   {
-    "keyPath": "incomeSetupDefaults.salaryGrowthRule",
+    "keyPath": "incomeSetupDefaults.referenceGrossSalaryAmount",
     "tab": "incomeSetup",
-    "label": "Salary growth rule",
-    "unit": "enum",
-    "default": "fixedPct",
-    "usedBy": ["AssumptionsHub"],
+    "label": "Reference gross salary",
+    "unit": "dkk",
+    "default": 50000,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.autoDeriveReferenceNetSalary",
+    "tab": "incomeSetup",
+    "label": "Auto-calculate reference net salary",
+    "unit": "boolean",
+    "default": true,
+    "usedBy": ["AssumptionsHub", "SalaryTaxator", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.referenceNetSalaryAmount",
+    "tab": "incomeSetup",
+    "label": "Reference net salary",
+    "unit": "dkk",
+    "default": 32500,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.salaryGrowthPct",
+    "tab": "incomeSetup",
+    "label": "Salary growth (%/year)",
+    "unit": "pct",
+    "default": 2,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "incomeSetupDefaults.workingHoursPerMonth",
+    "tab": "incomeSetup",
+    "label": "Working hours per month",
+    "unit": "hoursPerMonth",
+    "default": 160,
+    "usedBy": ["AssumptionsHub", "MoneyPerspective", "SalaryTaxator"],
     "overrideableByStrategy": true
   },
   {
@@ -115,15 +151,6 @@
     "label": "Bonus (% of salary)",
     "unit": "pct",
     "default": 0,
-    "usedBy": ["AssumptionsHub"],
-    "overrideableByStrategy": true
-  },
-  {
-    "keyPath": "incomeSetupDefaults.taxEnabled",
-    "tab": "incomeSetup",
-    "label": "Tax enabled",
-    "unit": "boolean",
-    "default": true,
     "usedBy": ["AssumptionsHub"],
     "overrideableByStrategy": true
   },
@@ -234,15 +261,6 @@
     "label": "Rebalancing convention",
     "unit": "enum",
     "default": "none",
-    "usedBy": ["AssumptionsHub"],
-    "overrideableByStrategy": true
-  },
-  {
-    "keyPath": "passiveStrategyDefaults.cashDragPct",
-    "tab": "passiveStrategy",
-    "label": "Cash drag (%/year)",
-    "unit": "pct",
-    "default": 0,
     "usedBy": ["AssumptionsHub"],
     "overrideableByStrategy": true
   },
@@ -357,24 +375,6 @@
     "overrideableByStrategy": true
   },
 
-  {
-    "keyPath": "moneyPerspectiveDefaults.workingHoursPerMonth",
-    "tab": "moneyPerspective",
-    "label": "Working hours per month",
-    "unit": "hoursPerMonth",
-    "default": 160,
-    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
-    "overrideableByStrategy": true
-  },
-  {
-    "keyPath": "moneyPerspectiveDefaults.payRaisePct",
-    "tab": "moneyPerspective",
-    "label": "Pay raise (%/year)",
-    "unit": "pct",
-    "default": 2,
-    "usedBy": ["AssumptionsHub", "MoneyPerspective"],
-    "overrideableByStrategy": true
-  },
   {
     "keyPath": "moneyPerspectiveDefaults.timeHorizonYears",
     "tab": "moneyPerspective",

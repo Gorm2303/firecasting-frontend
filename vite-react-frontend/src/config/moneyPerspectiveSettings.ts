@@ -1,4 +1,4 @@
-export type MoneyPerspectiveSalaryPeriod = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type MoneyPerspectiveSalaryPeriod = 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
 
 export type MoneyPerspectiveCompensationSettings = {
   /** Net salary/wage amount for the selected period. */
@@ -76,7 +76,9 @@ function asString(v: unknown, fallback: string): string {
 }
 
 function normalizeSalaryPeriod(v: unknown, fallback: MoneyPerspectiveSalaryPeriod): MoneyPerspectiveSalaryPeriod {
-  return v === 'hourly' || v === 'daily' || v === 'weekly' || v === 'monthly' || v === 'yearly' ? v : fallback;
+  return v === 'hourly' || v === 'daily' || v === 'weekly' || v === 'biweekly' || v === 'monthly' || v === 'yearly'
+    ? v
+    : fallback;
 }
 
 function normalizeCoreSource(v: unknown, fallback: MoneyPerspectiveCoreExpenseSettings['source']): MoneyPerspectiveCoreExpenseSettings['source'] {

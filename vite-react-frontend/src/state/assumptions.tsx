@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { deriveReferenceNetSalary } from '../lib/income/referenceNetSalary';
 import { appendAssumptionsHistory } from './assumptionsHistory';
 import { loadAssumptionsGovernance } from './assumptionsGovernance';
 
@@ -12,11 +13,14 @@ export type Assumptions = {
   /** Income assumptions and conventions shared across cashflow/tax/simulator views. */
   incomeSetupDefaults: {
     incomeModelType: 'grossFirst' | 'netFirst';
-    payCadence: 'monthly' | 'biweekly' | 'yearly';
-    salaryGrowthRule: 'fixedPct' | 'inflationLinked';
+    referenceSalaryPeriod: 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
+    referenceGrossSalaryAmount: number;
+    autoDeriveReferenceNetSalary: boolean;
+    referenceNetSalaryAmount: number;
+    salaryGrowthPct: number;
+    workingHoursPerMonth: number;
     bonusFrequency: 'none' | 'yearly' | 'monthly';
     bonusPct: number;
-    taxEnabled: boolean;
     taxRegime: 'DK' | 'none';
   };
 
@@ -37,7 +41,6 @@ export type Assumptions = {
     returnModel: 'fixed' | 'normal' | 'historical';
     volatilityPct: number;
     rebalancing: 'none' | 'annual' | 'threshold';
-    cashDragPct: number;
   };
 
   /** Withdrawal conventions (templates/philosophy defaults, not a full strategy editor). */
@@ -102,8 +105,6 @@ export type Assumptions = {
 
   /** Defaults for Money Perspectivator (analysis-only). */
   moneyPerspectiveDefaults: {
-    workingHoursPerMonth: number;
-    payRaisePct: number;
     timeHorizonYears: number;
     coreExpenseMonthlyDkk: number;
   };
@@ -132,11 +133,14 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 
   incomeSetupDefaults: {
     incomeModelType: 'grossFirst',
-    payCadence: 'monthly',
-    salaryGrowthRule: 'fixedPct',
+    referenceSalaryPeriod: 'monthly',
+    referenceGrossSalaryAmount: 50_000,
+    autoDeriveReferenceNetSalary: true,
+    referenceNetSalaryAmount: 32_500,
+    salaryGrowthPct: 2,
+    workingHoursPerMonth: 160,
     bonusFrequency: 'none',
     bonusPct: 0,
-    taxEnabled: true,
     taxRegime: 'DK',
   },
 
@@ -155,7 +159,6 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
     returnModel: 'fixed',
     volatilityPct: 15,
     rebalancing: 'none',
-    cashDragPct: 0,
   },
 
   withdrawalStrategyDefaults: {
@@ -211,8 +214,6 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
   },
 
   moneyPerspectiveDefaults: {
-    workingHoursPerMonth: 160,
-    payRaisePct: 2,
     timeHorizonYears: 10,
     coreExpenseMonthlyDkk: 12_000,
   },
@@ -357,6 +358,66 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
     ? (r.moneyPerspectiveDefaults as Record<string, unknown>)
     : {}) as Record<string, unknown>;
 
+  const normalizedIncomeSetupDefaults: Assumptions['incomeSetupDefaults'] = {
+    incomeModelType: asEnum(incomeDefaults.incomeModelType, ['grossFirst', 'netFirst'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.incomeModelType),
+    referenceSalaryPeriod: asEnum(
+      incomeDefaults.referenceSalaryPeriod,
+      ['hourly', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'] as const,
+      DEFAULT_ASSUMPTIONS.incomeSetupDefaults.referenceSalaryPeriod
+    ),
+    referenceGrossSalaryAmount: asNumber(
+      incomeDefaults.referenceGrossSalaryAmount,
+      DEFAULT_ASSUMPTIONS.incomeSetupDefaults.referenceGrossSalaryAmount
+    ),
+    autoDeriveReferenceNetSalary: incomeDefaults.autoDeriveReferenceNetSalary !== false,
+    referenceNetSalaryAmount: asNumber(
+      incomeDefaults.referenceNetSalaryAmount,
+      DEFAULT_ASSUMPTIONS.incomeSetupDefaults.referenceNetSalaryAmount
+    ),
+    salaryGrowthPct: asNumber(
+      incomeDefaults.salaryGrowthPct,
+      asNumber(moneyDefaults.payRaisePct, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.salaryGrowthPct)
+    ),
+    workingHoursPerMonth: asNumber(
+      incomeDefaults.workingHoursPerMonth,
+      asNumber(moneyDefaults.workingHoursPerMonth, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.workingHoursPerMonth)
+    ),
+    bonusFrequency: asEnum(incomeDefaults.bonusFrequency, ['none', 'yearly', 'monthly'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusFrequency),
+    bonusPct: asNumber(incomeDefaults.bonusPct, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusPct),
+    taxRegime: asEnum(incomeDefaults.taxRegime, ['DK', 'none'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.taxRegime),
+  };
+
+  const normalizedSalaryTaxatorDefaults: Assumptions['salaryTaxatorDefaults'] = {
+    municipalityId: asString(salaryDefaults.municipalityId, DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.municipalityId),
+    defaultMunicipalTaxRatePct: asNumber(
+      salaryDefaults.defaultMunicipalTaxRatePct,
+      DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.defaultMunicipalTaxRatePct
+    ),
+    churchMember: salaryDefaults.churchMember === true,
+    employeePensionRatePct: asNumber(
+      salaryDefaults.employeePensionRatePct,
+      DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.employeePensionRatePct
+    ),
+    otherDeductionsAnnualDkk: asNumber(
+      salaryDefaults.otherDeductionsAnnualDkk,
+      DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.otherDeductionsAnnualDkk
+    ),
+    atpMonthlyDkk: asNumber(salaryDefaults.atpMonthlyDkk, DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.atpMonthlyDkk),
+    atpEligibilityGrossMonthlyThresholdDkk: asNumber(
+      salaryDefaults.atpEligibilityGrossMonthlyThresholdDkk,
+      DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk
+    ),
+  };
+
+  const materializedReferenceNetSalaryAmount = normalizedIncomeSetupDefaults.autoDeriveReferenceNetSalary
+    ? deriveReferenceNetSalary({
+        referenceSalaryPeriod: normalizedIncomeSetupDefaults.referenceSalaryPeriod,
+        referenceGrossSalaryAmount: normalizedIncomeSetupDefaults.referenceGrossSalaryAmount,
+        workingHoursPerMonth: normalizedIncomeSetupDefaults.workingHoursPerMonth,
+        salaryTaxatorDefaults: normalizedSalaryTaxatorDefaults,
+      }).value
+    : normalizedIncomeSetupDefaults.referenceNetSalaryAmount;
+
   return {
     currency: asString(r.currency, DEFAULT_ASSUMPTIONS.currency),
     inflationPct: asNumber(r.inflationPct, DEFAULT_ASSUMPTIONS.inflationPct),
@@ -365,13 +426,8 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
     safeWithdrawalPct: asNumber(r.safeWithdrawalPct, DEFAULT_ASSUMPTIONS.safeWithdrawalPct),
 
     incomeSetupDefaults: {
-      incomeModelType: asEnum(incomeDefaults.incomeModelType, ['grossFirst', 'netFirst'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.incomeModelType),
-      payCadence: asEnum(incomeDefaults.payCadence, ['monthly', 'biweekly', 'yearly'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.payCadence),
-      salaryGrowthRule: asEnum(incomeDefaults.salaryGrowthRule, ['fixedPct', 'inflationLinked'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.salaryGrowthRule),
-      bonusFrequency: asEnum(incomeDefaults.bonusFrequency, ['none', 'yearly', 'monthly'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusFrequency),
-      bonusPct: asNumber(incomeDefaults.bonusPct, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.bonusPct),
-      taxEnabled: incomeDefaults.taxEnabled === true,
-      taxRegime: asEnum(incomeDefaults.taxRegime, ['DK', 'none'] as const, DEFAULT_ASSUMPTIONS.incomeSetupDefaults.taxRegime),
+      ...normalizedIncomeSetupDefaults,
+      referenceNetSalaryAmount: materializedReferenceNetSalaryAmount,
     },
 
     depositStrategyDefaults: {
@@ -389,7 +445,6 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
       returnModel: asEnum(passiveDefaults.returnModel, ['fixed', 'normal', 'historical'] as const, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.returnModel),
       volatilityPct: asNumber(passiveDefaults.volatilityPct, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.volatilityPct),
       rebalancing: asEnum(passiveDefaults.rebalancing, ['none', 'annual', 'threshold'] as const, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.rebalancing),
-      cashDragPct: asNumber(passiveDefaults.cashDragPct, DEFAULT_ASSUMPTIONS.passiveStrategyDefaults.cashDragPct),
     },
 
     withdrawalStrategyDefaults: {
@@ -449,34 +504,9 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
       ),
     },
 
-    salaryTaxatorDefaults: {
-      municipalityId: asString(salaryDefaults.municipalityId, DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.municipalityId),
-      defaultMunicipalTaxRatePct: asNumber(
-        salaryDefaults.defaultMunicipalTaxRatePct,
-        DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.defaultMunicipalTaxRatePct
-      ),
-      churchMember: salaryDefaults.churchMember === true,
-      employeePensionRatePct: asNumber(
-        salaryDefaults.employeePensionRatePct,
-        DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.employeePensionRatePct
-      ),
-      otherDeductionsAnnualDkk: asNumber(
-        salaryDefaults.otherDeductionsAnnualDkk,
-        DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.otherDeductionsAnnualDkk
-      ),
-      atpMonthlyDkk: asNumber(salaryDefaults.atpMonthlyDkk, DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.atpMonthlyDkk),
-      atpEligibilityGrossMonthlyThresholdDkk: asNumber(
-        salaryDefaults.atpEligibilityGrossMonthlyThresholdDkk,
-        DEFAULT_ASSUMPTIONS.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk
-      ),
-    },
+    salaryTaxatorDefaults: normalizedSalaryTaxatorDefaults,
 
     moneyPerspectiveDefaults: {
-      workingHoursPerMonth: asNumber(
-        moneyDefaults.workingHoursPerMonth,
-        DEFAULT_ASSUMPTIONS.moneyPerspectiveDefaults.workingHoursPerMonth
-      ),
-      payRaisePct: asNumber(moneyDefaults.payRaisePct, DEFAULT_ASSUMPTIONS.moneyPerspectiveDefaults.payRaisePct),
       timeHorizonYears: Math.max(
         0,
         Math.trunc(asNumber(moneyDefaults.timeHorizonYears, DEFAULT_ASSUMPTIONS.moneyPerspectiveDefaults.timeHorizonYears))
@@ -580,13 +610,14 @@ export const AssumptionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   );
   const saveDraft = useCallback(() => {
     setStore((prev) => {
+      const nextDraft = normalizeAssumptions(prev.draft);
       try {
         const g = loadAssumptionsGovernance();
-        appendAssumptionsHistory(prev.draft, { sourceNote: g.sourceNote });
+        appendAssumptionsHistory(nextDraft, { sourceNote: g.sourceNote });
       } catch {
         /* ignore */
       }
-      return { current: prev.draft, draft: prev.draft };
+      return { current: nextDraft, draft: nextDraft };
     });
   }, []);
   const discardDraft = resetDraftToCurrent;

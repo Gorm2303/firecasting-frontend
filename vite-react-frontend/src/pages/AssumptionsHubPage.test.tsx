@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import AssumptionsHubPage from './AssumptionsHubPage';
+import { convertSalaryAmountBetweenPeriods } from '../lib/income/sharedSalary';
+import { deriveReferenceNetSalary } from '../lib/income/referenceNetSalary';
 import { AssumptionsProvider, getDefaultAssumptions } from '../state/assumptions';
 import { ExecutionDefaultsProvider } from '../state/executionDefaults';
 import { UiPreferencesProvider } from '../state/uiPreferences';
@@ -31,16 +33,17 @@ describe('AssumptionsHubPage', () => {
   it('switches between tabs and view modes', () => {
     renderHub();
 
-    expect(screen.getByRole('button', { name: /basic view/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /advanced view/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Currency')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reference gross salary')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /deposit/i }));
     expect(screen.getByLabelText('Deposit timing')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Emergency buffer target (months)')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /advanced view/i }));
-    expect(screen.getByRole('button', { name: /advanced view/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Emergency buffer target (months)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /basic view/i }));
+    expect(screen.getByRole('button', { name: /basic view/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText('Emergency buffer target (months)')).not.toBeInTheDocument();
   });
 
   it('supports edit, cancel, reset, and save flows', () => {
@@ -83,31 +86,109 @@ describe('AssumptionsHubPage', () => {
     expect(screen.getByLabelText('Currency')).toBeDisabled();
   });
 
-  it('shows deterministic diagnostics warnings from the draft assumptions', () => {
-    const assumptions = getDefaultAssumptions();
-    const draft = {
-      ...assumptions,
-      expectedReturnPct: 2,
-      inflationPct: 3,
-      withdrawalStrategyDefaults: {
-        ...assumptions.withdrawalStrategyDefaults,
-        guardrailFloorPct: 6,
-        guardrailCeilingPct: 4,
-      },
-    };
-
-    window.localStorage.setItem(
-      ASSUMPTIONS_STORAGE_KEY,
-      JSON.stringify({ current: assumptions, draft })
-    );
-
+  it('routes assumptions into income, invest, expense, and withdrawal tabs', () => {
     renderHub();
 
-    fireEvent.click(screen.getByRole('button', { name: /diagnostics view/i }));
-    expect(screen.getByText(/non-positive real drift/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Inflation (%/year)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reference gross salary')).toBeInTheDocument();
+    expect(screen.getByLabelText('Working hours per month')).toBeInTheDocument();
+    expect(screen.getByLabelText('Salary growth (%/year)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /tax/i }));
+    expect(screen.getByLabelText('Tax regime')).toBeInTheDocument();
+    expect(screen.getByLabelText('Stock exemption tax rate (%/year)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /invest/i }));
+    expect(screen.getByLabelText('Expected return (%/year)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Return model')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /expense/i }));
+    expect(screen.getByLabelText('Core expense (DKK/month)')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Time horizon (years)')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /withdrawal/i }));
-    expect(screen.getByText(/withdrawal guardrails are inverted/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Safe withdrawal rate (%/year)')).toBeInTheDocument();
+  });
+
+  it('can auto-calculate reference net salary from Salary Taxator defaults or unlock it for manual editing', () => {
+    renderHub();
+
+    const autoCheckbox = screen.getByLabelText('Auto-calculate reference net salary') as HTMLInputElement;
+    const netSalaryInput = screen.getByLabelText('Reference net salary') as HTMLInputElement;
+    const grossSalaryInput = screen.getByLabelText('Reference gross salary') as HTMLInputElement;
+
+    expect(autoCheckbox.checked).toBe(true);
+    expect(netSalaryInput).toBeDisabled();
+
+    const expectedDefault = deriveReferenceNetSalary({
+      referenceSalaryPeriod: 'monthly',
+      referenceGrossSalaryAmount: 50_000,
+      workingHoursPerMonth: 160,
+      salaryTaxatorDefaults: getDefaultAssumptions().salaryTaxatorDefaults,
+    }).value;
+    expect(Number(netSalaryInput.value)).toBe(expectedDefault);
+
+    fireEvent.change(grossSalaryInput, { target: { value: '60000' } });
+
+    const expectedUpdated = deriveReferenceNetSalary({
+      referenceSalaryPeriod: 'monthly',
+      referenceGrossSalaryAmount: 60_000,
+      workingHoursPerMonth: 160,
+      salaryTaxatorDefaults: getDefaultAssumptions().salaryTaxatorDefaults,
+    }).value;
+    expect(Number((screen.getByLabelText('Reference net salary') as HTMLInputElement).value)).toBe(expectedUpdated);
+
+    fireEvent.click(autoCheckbox);
+    expect((screen.getByLabelText('Reference net salary') as HTMLInputElement)).not.toBeDisabled();
+  });
+
+  it('converts salary reference amounts when the reference period changes', () => {
+    renderHub();
+
+    const periodSelect = screen.getByLabelText('Salary reference period') as HTMLSelectElement;
+    const grossSalaryInput = screen.getByLabelText('Reference gross salary') as HTMLInputElement;
+
+    expect(grossSalaryInput.value).toBe('50000');
+
+    fireEvent.change(periodSelect, { target: { value: 'hourly' } });
+
+    expect((screen.getByLabelText('Reference gross salary') as HTMLInputElement).value).toBe(
+      String(convertSalaryAmountBetweenPeriods(50_000, 'monthly', 'hourly', 160))
+    );
+    expect((screen.getByLabelText('Reference net salary') as HTMLInputElement)).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText('Auto-calculate reference net salary'));
+    fireEvent.change(screen.getByLabelText('Reference net salary'), { target: { value: '210.4' } });
+    fireEvent.change(periodSelect, { target: { value: 'monthly' } });
+
+    expect((screen.getByLabelText('Reference net salary') as HTMLInputElement).value).toBe(
+      String(Number(convertSalaryAmountBetweenPeriods(210.4, 'hourly', 'monthly', 160).toFixed(2)))
+    );
+  });
+
+  it('shows aligned policy and milestone fields in basic view', () => {
+    renderHub();
+
+    fireEvent.click(screen.getByRole('button', { name: /basic view/i }));
+
+    fireEvent.click(screen.getByRole('tab', { name: /policy/i }));
+    expect(screen.getByLabelText('Max deposit increase (%/year)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Critical threshold (failure risk %)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /milestones/i }));
+    expect(screen.getByLabelText('Sustained months')).toBeInTheDocument();
+    expect(screen.getByLabelText('Barista FIRE: required monthly income (DKK)')).toBeInTheDocument();
+  });
+
+  it('moves hub-only fields into a bottom Placeholder section', () => {
+    renderHub();
+
+    fireEvent.click(screen.getByRole('tab', { name: /income/i }));
+
+    expect(screen.getByText(/^Placeholder$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Bonus frequency')).toBeInTheDocument();
+    expect(screen.getByLabelText('Bonus (% of salary)')).toBeInTheDocument();
+    expect(screen.queryByText('Income modeling')).not.toBeInTheDocument();
   });
 
   it('imports and exports assumptions through browser-style interactions', async () => {
@@ -130,6 +211,8 @@ describe('AssumptionsHubPage', () => {
     try {
       renderHub();
 
+      fireEvent.click(screen.getByRole('tab', { name: /overview/i }));
+
       fireEvent.click(screen.getByRole('button', { name: /export json/i }));
       expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
       expect(anchorClickSpy).toHaveBeenCalledTimes(1);
@@ -151,6 +234,7 @@ describe('AssumptionsHubPage', () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
 
       await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: /income/i }));
         expect((screen.getByLabelText('Inflation (%/year)') as HTMLInputElement).value).toBe('4.25');
       });
     } finally {
@@ -211,7 +295,7 @@ describe('AssumptionsHubPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /use snapshot assumptions as draft/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /overview/i })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: /income/i })).toHaveAttribute('aria-selected', 'true');
       expect((screen.getByLabelText('Inflation (%/year)') as HTMLInputElement).value).toBe('5');
     });
   });

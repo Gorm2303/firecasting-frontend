@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 
 import PageLayout from '../components/PageLayout';
+import { convertSalaryAmountBetweenPeriods } from '../lib/income/sharedSalary';
+import { deriveReferenceNetSalary } from '../lib/income/referenceNetSalary';
 import { seedForMode } from '../models/advancedSimulation';
 import { normalizeAssumptions, useAssumptions, type Assumptions } from '../state/assumptions';
 import { clearAssumptionsHistory, listAssumptionsHistory } from '../state/assumptionsHistory';
@@ -17,13 +19,15 @@ import { listConventionsByGroup } from '../state/conventionsRegistry';
 import { getDefaultExecutionDefaults, type ExecutionDefaults, useExecutionDefaults } from '../state/executionDefaults';
 import { listSimulationSnapshots } from '../state/simulationSnapshots';
 import { useUiPreferences } from '../state/uiPreferences';
-import { computeAssumptionsImpact, computeAssumptionsImpactSensitivity } from '../utils/assumptionsImpact';
+import { computeAssumptionsImpact } from '../utils/assumptionsImpact';
 
 type HubTabId =
   | 'overview'
+  | 'tax'
   | 'income'
+  | 'expense'
+  | 'invest'
   | 'deposit'
-  | 'passive'
   | 'withdrawal'
   | 'policy'
   | 'milestones'
@@ -32,7 +36,7 @@ type HubTabId =
   | 'conventions'
   | 'preview';
 
-type HubViewMode = 'basic' | 'advanced' | 'diagnostics';
+type HubViewMode = 'basic' | 'advanced';
 
 type DiffRow = {
   keyPath: string;
@@ -43,14 +47,10 @@ type DiffRow = {
   to: unknown;
 };
 
-type DiagnosticsTone = 'warning' | 'info';
-
-type DiagnosticsItem = {
-  id: string;
-  tone: DiagnosticsTone;
+type HubFieldSection = {
   title: string;
-  description: string;
-  tab: HubTabId | 'overview';
+  description?: string;
+  keyPaths: string[];
 };
 
 const cardStyle: React.CSSProperties = {
@@ -73,9 +73,14 @@ const inputStyle: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 10,
   border: '1px solid var(--fc-card-border)',
-  background: 'transparent',
+  background: 'var(--fc-card-bg)',
   color: 'inherit',
   boxSizing: 'border-box',
+};
+
+const selectStyle: React.CSSProperties = {
+  ...inputStyle,
+  colorScheme: 'light dark',
 };
 
 const chipStyle: React.CSSProperties = {
@@ -86,11 +91,20 @@ const chipStyle: React.CSSProperties = {
   color: 'inherit',
 };
 
+const consumerChipStyle: React.CSSProperties = {
+  ...chipStyle,
+  padding: '2px 8px',
+  fontSize: 11,
+  opacity: 0.85,
+};
+
 const HUB_TABS: Array<{ id: HubTabId; label: string; isBaseline?: boolean }> = [
-  { id: 'overview', label: 'Overview', isBaseline: true },
+  { id: 'overview', label: 'Overview' },
+  { id: 'tax', label: 'Tax', isBaseline: true },
   { id: 'income', label: 'Income', isBaseline: true },
+  { id: 'expense', label: 'Expense', isBaseline: true },
+  { id: 'invest', label: 'Invest', isBaseline: true },
   { id: 'deposit', label: 'Deposit', isBaseline: true },
-  { id: 'passive', label: 'Passive', isBaseline: true },
   { id: 'withdrawal', label: 'Withdrawal', isBaseline: true },
   { id: 'policy', label: 'Policy', isBaseline: true },
   { id: 'milestones', label: 'Milestones', isBaseline: true },
@@ -100,34 +114,52 @@ const HUB_TABS: Array<{ id: HubTabId; label: string; isBaseline?: boolean }> = [
   { id: 'preview', label: 'Preview' },
 ];
 
-const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'conventions' | 'preview'>, string[]> = {
-  overview: ['currency', 'inflationPct', 'yearlyFeePct', 'expectedReturnPct', 'safeWithdrawalPct'],
-  income: [
-    'incomeSetupDefaults.incomeModelType',
-    'incomeSetupDefaults.payCadence',
+const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'overview' | 'conventions' | 'preview'>, string[]> = {
+  tax: [
     'incomeSetupDefaults.taxRegime',
-    'incomeSetupDefaults.bonusFrequency',
+    'salaryTaxatorDefaults.municipalityId',
     'salaryTaxatorDefaults.defaultMunicipalTaxRatePct',
+    'salaryTaxatorDefaults.churchMember',
+    'salaryTaxatorDefaults.employeePensionRatePct',
+    'salaryTaxatorDefaults.otherDeductionsAnnualDkk',
+    'salaryTaxatorDefaults.atpMonthlyDkk',
+    'salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk',
+    'taxExemptionDefaults.exemptionCardLimit',
+    'taxExemptionDefaults.exemptionCardYearlyIncrease',
     'taxExemptionDefaults.stockExemptionTaxRate',
+    'taxExemptionDefaults.stockExemptionLimit',
+    'taxExemptionDefaults.stockExemptionYearlyIncrease',
+  ],
+  income: [
+    'currency',
+    'inflationPct',
+    'incomeSetupDefaults.referenceSalaryPeriod',
+    'incomeSetupDefaults.workingHoursPerMonth',
+    'incomeSetupDefaults.referenceGrossSalaryAmount',
+    'incomeSetupDefaults.autoDeriveReferenceNetSalary',
+    'incomeSetupDefaults.referenceNetSalaryAmount',
+    'incomeSetupDefaults.salaryGrowthPct',
+  ],
+  expense: [
+    'moneyPerspectiveDefaults.coreExpenseMonthlyDkk',
+  ],
+  invest: [
+    'expectedReturnPct',
+    'yearlyFeePct',
+    'passiveStrategyDefaults.returnModel',
+    'passiveStrategyDefaults.volatilityPct',
+    'passiveStrategyDefaults.rebalancing',
   ],
   deposit: [
     'depositStrategyDefaults.depositTiming',
     'depositStrategyDefaults.contributionCadence',
     'depositStrategyDefaults.escalationMode',
-    'depositStrategyDefaults.escalationPct',
     'depositStrategyDefaults.routingPriority',
   ],
-  passive: [
-    'passiveStrategyDefaults.returnModel',
-    'passiveStrategyDefaults.volatilityPct',
-    'passiveStrategyDefaults.rebalancing',
-    'passiveStrategyDefaults.cashDragPct',
-  ],
   withdrawal: [
+    'safeWithdrawalPct',
     'withdrawalStrategyDefaults.withdrawalRule',
     'withdrawalStrategyDefaults.inflationAdjustSpending',
-    'withdrawalStrategyDefaults.guardrailFloorPct',
-    'withdrawalStrategyDefaults.guardrailCeilingPct',
     'withdrawalStrategyDefaults.cashBufferTargetMonths',
   ],
   policy: [
@@ -135,12 +167,15 @@ const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'conventions' | 'preview'>, stri
     'policyBuilderDefaults.conflictResolution',
     'policyBuilderDefaults.cooldownMonths',
     'policyBuilderDefaults.maxSpendingCutPctPerYear',
+    'policyBuilderDefaults.maxDepositIncreasePctPerYear',
     'policyBuilderDefaults.warnFailureRiskPct',
+    'policyBuilderDefaults.criticalFailureRiskPct',
   ],
   milestones: [
     'fireMilestonesDefaults.confidenceTarget',
     'fireMilestonesDefaults.milestoneStability',
     'fireMilestonesDefaults.sustainedMonths',
+    'fireMilestonesDefaults.baristaFireRequiredMonthlyIncomeDkk',
     'fireMilestonesDefaults.leanSpendingMonthlyDkk',
     'fireMilestonesDefaults.fatSpendingMonthlyDkk',
   ],
@@ -150,6 +185,183 @@ const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'conventions' | 'preview'>, stri
     'goalPlannerDefaults.goalRiskHandling',
   ],
   execution: ['executionDefaults.paths', 'executionDefaults.batchSize', 'executionDefaults.seedMode'],
+};
+
+const HUB_FIELD_SECTIONS: Partial<Record<HubTabId, HubFieldSection[]>> = {
+  tax: [
+    {
+      title: 'Payroll and tax defaults',
+      description: 'Tax and payroll assumptions shared with salary and cashflow tools.',
+      keyPaths: [
+        'incomeSetupDefaults.taxRegime',
+        'salaryTaxatorDefaults.municipalityId',
+        'salaryTaxatorDefaults.defaultMunicipalTaxRatePct',
+        'salaryTaxatorDefaults.churchMember',
+        'salaryTaxatorDefaults.employeePensionRatePct',
+        'salaryTaxatorDefaults.otherDeductionsAnnualDkk',
+        'salaryTaxatorDefaults.atpMonthlyDkk',
+        'salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk',
+      ],
+    },
+    {
+      title: 'Investment tax defaults',
+      description: 'Tax exemptions and thresholds used by simulation and exploration tools.',
+      keyPaths: [
+        'taxExemptionDefaults.exemptionCardLimit',
+        'taxExemptionDefaults.exemptionCardYearlyIncrease',
+        'taxExemptionDefaults.stockExemptionTaxRate',
+        'taxExemptionDefaults.stockExemptionLimit',
+        'taxExemptionDefaults.stockExemptionYearlyIncrease',
+      ],
+    },
+  ],
+  income: [
+    {
+      title: 'Salary reference',
+      description: 'Shared income anchors and salary conversion conventions used across the app.',
+      keyPaths: [
+        'currency',
+        'inflationPct',
+        'incomeSetupDefaults.referenceSalaryPeriod',
+        'incomeSetupDefaults.workingHoursPerMonth',
+        'incomeSetupDefaults.referenceGrossSalaryAmount',
+        'incomeSetupDefaults.autoDeriveReferenceNetSalary',
+        'incomeSetupDefaults.referenceNetSalaryAmount',
+        'incomeSetupDefaults.salaryGrowthPct',
+      ],
+    },
+    {
+      title: 'Income modeling',
+      description: 'Additional shared income defaults that affect how the rest of the app interprets earnings.',
+      keyPaths: [
+        'incomeSetupDefaults.incomeModelType',
+        'incomeSetupDefaults.bonusFrequency',
+        'incomeSetupDefaults.bonusPct',
+      ],
+    },
+  ],
+  expense: [
+    {
+      title: 'Living costs',
+      description: 'Shared defaults for the baseline spending line used by expense-focused views.',
+      keyPaths: [
+        'moneyPerspectiveDefaults.coreExpenseMonthlyDkk',
+      ],
+    },
+  ],
+  invest: [
+    {
+      title: 'Return and fee baseline',
+      description: 'Core investing assumptions for return, fees, and capital growth.',
+      keyPaths: ['expectedReturnPct', 'yearlyFeePct'],
+    },
+    {
+      title: 'Portfolio behavior',
+      description: 'Portfolio return-model defaults and maintenance assumptions.',
+      keyPaths: [
+        'passiveStrategyDefaults.returnModel',
+        'passiveStrategyDefaults.volatilityPct',
+        'passiveStrategyDefaults.rebalancing',
+      ],
+    },
+  ],
+  deposit: [
+    {
+      title: 'Contribution schedule',
+      description: 'Recurring deposit timing and escalation defaults for savings plans.',
+      keyPaths: [
+        'depositStrategyDefaults.depositTiming',
+        'depositStrategyDefaults.contributionCadence',
+        'depositStrategyDefaults.escalationMode',
+        'depositStrategyDefaults.escalationPct',
+        'depositStrategyDefaults.escalationDkkPerYear',
+        'depositStrategyDefaults.inflationAdjustContributions',
+      ],
+    },
+    {
+      title: 'Buffer and routing',
+      description: 'Default routing order and cash reserve targets before investing.',
+      keyPaths: [
+        'depositStrategyDefaults.emergencyBufferTargetMonths',
+        'depositStrategyDefaults.routingPriority',
+      ],
+    },
+  ],
+  withdrawal: [
+    {
+      title: 'Withdrawal baseline',
+      description: 'Core drawdown assumptions that define spending sustainability.',
+      keyPaths: ['safeWithdrawalPct'],
+    },
+    {
+      title: 'Withdrawal policy',
+      description: 'Guardrails and cash-buffer defaults for drawdown strategies.',
+      keyPaths: [
+        'withdrawalStrategyDefaults.withdrawalRule',
+        'withdrawalStrategyDefaults.inflationAdjustSpending',
+        'withdrawalStrategyDefaults.guardrailFloorPct',
+        'withdrawalStrategyDefaults.guardrailCeilingPct',
+        'withdrawalStrategyDefaults.maxCutPctPerYear',
+        'withdrawalStrategyDefaults.cashBufferTargetMonths',
+      ],
+    },
+  ],
+  policy: [
+    {
+      title: 'Evaluation cadence',
+      description: 'How policy checks are coordinated and when they can fire again.',
+      keyPaths: [
+        'policyBuilderDefaults.evaluationFrequency',
+        'policyBuilderDefaults.conflictResolution',
+        'policyBuilderDefaults.cooldownMonths',
+      ],
+    },
+    {
+      title: 'Alerts and adjustment limits',
+      description: 'Failure-risk thresholds and policy change guardrails.',
+      keyPaths: [
+        'policyBuilderDefaults.maxSpendingCutPctPerYear',
+        'policyBuilderDefaults.maxDepositIncreasePctPerYear',
+        'policyBuilderDefaults.warnFailureRiskPct',
+        'policyBuilderDefaults.criticalFailureRiskPct',
+      ],
+    },
+  ],
+  milestones: [
+    {
+      title: 'Confidence and stability',
+      description: 'How milestone achievement is judged and how long it must hold.',
+      keyPaths: [
+        'fireMilestonesDefaults.confidenceTarget',
+        'fireMilestonesDefaults.milestoneStability',
+        'fireMilestonesDefaults.sustainedMonths',
+      ],
+    },
+    {
+      title: 'Spending thresholds',
+      description: 'Shared spending markers for Barista, Lean, and Fat FIRE discussions.',
+      keyPaths: [
+        'fireMilestonesDefaults.baristaFireRequiredMonthlyIncomeDkk',
+        'fireMilestonesDefaults.leanSpendingMonthlyDkk',
+        'fireMilestonesDefaults.fatSpendingMonthlyDkk',
+      ],
+    },
+  ],
+  goals: [
+    {
+      title: 'Funding order',
+      description: 'Default sequencing for buffer, debt, goals, and FI funding decisions.',
+      keyPaths: ['goalPlannerDefaults.fundingOrder'],
+    },
+    {
+      title: 'Inflation and risk handling',
+      description: 'How goal values and certainty expectations should be interpreted.',
+      keyPaths: [
+        'goalPlannerDefaults.goalInflationHandling',
+        'goalPlannerDefaults.goalRiskHandling',
+      ],
+    },
+  ],
 };
 
 const stringifyValue = (value: unknown): string => {
@@ -169,6 +381,15 @@ const formatValue = (unit: string, value: unknown): string => {
   if (value === undefined) return '—';
   if (unit === 'pct') return typeof value === 'number' ? `${value}%` : `${stringifyValue(value)}%`;
   return stringifyValue(value);
+};
+
+const incomeDerivedNetMeta = (assumptions: Assumptions): { value: number; sourceLabel: string } => {
+  return deriveReferenceNetSalary({
+    referenceSalaryPeriod: assumptions.incomeSetupDefaults.referenceSalaryPeriod,
+    referenceGrossSalaryAmount: assumptions.incomeSetupDefaults.referenceGrossSalaryAmount,
+    workingHoursPerMonth: assumptions.incomeSetupDefaults.workingHoursPerMonth,
+    salaryTaxatorDefaults: assumptions.salaryTaxatorDefaults,
+  });
 };
 
 const getValueAtKeyPath = (root: unknown, keyPath: string): unknown => {
@@ -213,88 +434,15 @@ const buildDiffRows = (
     .sort((a, b) => (a as DiffRow).keyPath.localeCompare((b as DiffRow).keyPath)) as DiffRow[];
 };
 
-const buildDiagnostics = (draft: Assumptions): DiagnosticsItem[] => {
-  const out: DiagnosticsItem[] = [];
-  const realDrift = Number(draft.expectedReturnPct) - Number(draft.yearlyFeePct) - Number(draft.inflationPct);
-
-  if (realDrift <= 0) {
-    out.push({
-      id: 'real-drift',
-      tone: 'warning',
-      title: 'Non-positive real drift',
-      description: 'Expected return minus yearly fee is at or below inflation, so long-run real growth is non-positive.',
-      tab: 'overview',
-    });
-  }
-
-  if (draft.safeWithdrawalPct >= draft.expectedReturnPct) {
-    out.push({
-      id: 'swr-vs-return',
-      tone: 'warning',
-      title: 'Withdrawal rate is at or above expected return',
-      description: 'The safe withdrawal rate is not meaningfully below expected nominal return, which weakens the baseline sustainability signal.',
-      tab: 'overview',
-    });
-  }
-
-  if (draft.withdrawalStrategyDefaults.guardrailFloorPct > draft.withdrawalStrategyDefaults.guardrailCeilingPct) {
-    out.push({
-      id: 'guardrail-order',
-      tone: 'warning',
-      title: 'Withdrawal guardrails are inverted',
-      description: 'The withdrawal floor is above the ceiling. The rule cannot operate coherently in this state.',
-      tab: 'withdrawal',
-    });
-  }
-
-  if (
-    draft.depositStrategyDefaults.escalationMode !== 'none' &&
-    draft.depositStrategyDefaults.escalationPct <= 0 &&
-    draft.depositStrategyDefaults.escalationDkkPerYear <= 0
-  ) {
-    out.push({
-      id: 'deposit-escalation',
-      tone: 'warning',
-      title: 'Deposit escalation mode has no growth value',
-      description: 'Deposit escalation is enabled, but both the percentage and fixed DKK step-up are zero or negative.',
-      tab: 'deposit',
-    });
-  }
-
-  if (draft.fireMilestonesDefaults.leanSpendingMonthlyDkk >= draft.fireMilestonesDefaults.fatSpendingMonthlyDkk) {
-    out.push({
-      id: 'milestone-band',
-      tone: 'warning',
-      title: 'Lean and fat FIRE spending bands overlap',
-      description: 'Lean spending is at or above fat spending, so milestone thresholds no longer form a sensible progression.',
-      tab: 'milestones',
-    });
-  }
-
-  if (draft.incomeSetupDefaults.bonusFrequency === 'none' && draft.incomeSetupDefaults.bonusPct > 0) {
-    out.push({
-      id: 'bonus-frequency',
-      tone: 'info',
-      title: 'Bonus percentage is set while bonus frequency is none',
-      description: 'The percentage is harmless, but it will not take effect until a bonus frequency is enabled.',
-      tab: 'income',
-    });
-  }
-
-  if (
-    draft.policyBuilderDefaults.evaluationFrequency === 'monthly' &&
-    draft.policyBuilderDefaults.cooldownMonths >= 12
-  ) {
-    out.push({
-      id: 'policy-cadence',
-      tone: 'info',
-      title: 'Policy cadence is tighter than cooldown behavior',
-      description: 'Policies evaluate monthly, but cooldown lasts a year or more, which may make adaptive rules feel unresponsive.',
-      tab: 'policy',
-    });
-  }
-
-  return out;
+const renderConsumerChips = (usedBy: string[]) => {
+  if (usedBy.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+      {usedBy.map((label) => (
+        <span key={label} style={consumerChipStyle}>{label}</span>
+      ))}
+    </div>
+  );
 };
 
 const renderDiffCards = (rows: DiffRow[]) => {
@@ -320,8 +468,8 @@ const renderDiffCards = (rows: DiffRow[]) => {
 };
 
 const AssumptionsHubPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<HubTabId>('overview');
-  const [viewMode, setViewMode] = useState<HubViewMode>('basic');
+  const [activeTab, setActiveTab] = useState<HubTabId>('income');
+  const [viewMode, setViewMode] = useState<HubViewMode>('advanced');
   const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
@@ -344,11 +492,6 @@ const AssumptionsHubPage: React.FC = () => {
 
   const baselineLocked = governance.lockBaseline;
   const activeTabMeta = HUB_TABS.find((tab) => tab.id === activeTab);
-  const diagnostics = useMemo(() => buildDiagnostics(draftAssumptions), [draftAssumptions]);
-  const activeDiagnostics = useMemo(
-    () => diagnostics.filter((item) => item.tab === 'overview' || item.tab === activeTab),
-    [activeTab, diagnostics]
-  );
 
   const persistGovernance = React.useCallback(
     (patch: Partial<AssumptionsGovernance>) => {
@@ -367,16 +510,28 @@ const AssumptionsHubPage: React.FC = () => {
 
   const registryByTab = useMemo(
     () => ({
-      overview: listRegistryByTab('worldModel'),
-      income: [
-        ...listRegistryByTab('incomeSetup'),
+      tax: [
+        ...listRegistryByTab('incomeSetup').filter((item) => item.keyPath === 'incomeSetupDefaults.taxRegime'),
         ...listRegistryByTab('salaryTaxator'),
-        ...listRegistryByTab('moneyPerspective'),
         ...listRegistryByTab('simulatorTax'),
       ],
+      income: [
+        ...listRegistryByTab('worldModel').filter((item) => item.keyPath === 'currency' || item.keyPath === 'inflationPct'),
+        ...listRegistryByTab('incomeSetup').filter(
+          (item) =>
+            item.keyPath !== 'incomeSetupDefaults.taxRegime'
+        ),
+      ],
+      expense: listRegistryByTab('moneyPerspective').filter((item) => item.keyPath !== 'moneyPerspectiveDefaults.timeHorizonYears'),
+      invest: [
+        ...listRegistryByTab('worldModel').filter((item) => item.keyPath === 'yearlyFeePct' || item.keyPath === 'expectedReturnPct'),
+        ...listRegistryByTab('passiveStrategy'),
+      ],
       deposit: listRegistryByTab('depositStrategy'),
-      passive: listRegistryByTab('passiveStrategy'),
-      withdrawal: listRegistryByTab('withdrawalStrategy'),
+      withdrawal: [
+        ...listRegistryByTab('worldModel').filter((item) => item.keyPath === 'safeWithdrawalPct'),
+        ...listRegistryByTab('withdrawalStrategy'),
+      ],
       policy: listRegistryByTab('policyBuilder'),
       milestones: listRegistryByTab('milestones'),
       goals: listRegistryByTab('goalPlanner'),
@@ -387,10 +542,11 @@ const AssumptionsHubPage: React.FC = () => {
 
   const previewRegistryItems = useMemo(
     () => [
-      ...registryByTab.overview,
+      ...registryByTab.tax,
       ...registryByTab.income,
+      ...registryByTab.expense,
+      ...registryByTab.invest,
       ...registryByTab.deposit,
-      ...registryByTab.passive,
       ...registryByTab.withdrawal,
       ...registryByTab.policy,
       ...registryByTab.milestones,
@@ -422,7 +578,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const currentImpact = useMemo(() => computeAssumptionsImpact(currentAssumptions), [currentAssumptions]);
   const draftImpact = useMemo(() => computeAssumptionsImpact(draftAssumptions), [draftAssumptions]);
-  const draftImpactSensitivity = useMemo(() => computeAssumptionsImpactSensitivity(draftAssumptions), [draftAssumptions]);
+  const derivedReferenceNet = useMemo(() => incomeDerivedNetMeta(draftAssumptions), [draftAssumptions]);
 
   const assumptionsDiffRows = useMemo(
     () => buildDiffRows(previewRegistryItems, currentAssumptions, draftAssumptions),
@@ -513,6 +669,43 @@ const AssumptionsHubPage: React.FC = () => {
     [baselineLocked, draftAssumptions, updateDraftAssumptions]
   );
 
+  const updateReferenceSalaryPeriod = React.useCallback(
+    (nextPeriod: Assumptions['incomeSetupDefaults']['referenceSalaryPeriod']) => {
+      if (baselineLocked) return;
+
+      const income = draftAssumptions.incomeSetupDefaults;
+      const currentPeriod = income.referenceSalaryPeriod;
+      if (nextPeriod === currentPeriod) return;
+
+      const workingHoursPerMonth = income.workingHoursPerMonth > 0 ? income.workingHoursPerMonth : 160;
+      const nextGrossSalaryAmount = convertSalaryAmountBetweenPeriods(
+        income.referenceGrossSalaryAmount,
+        currentPeriod,
+        nextPeriod,
+        workingHoursPerMonth,
+      );
+
+      const nextIncomeSetupDefaults: Assumptions['incomeSetupDefaults'] = {
+        ...income,
+        referenceSalaryPeriod: nextPeriod,
+        referenceGrossSalaryAmount: Number(nextGrossSalaryAmount.toFixed(2)),
+      };
+
+      if (!income.autoDeriveReferenceNetSalary) {
+        const nextNetSalaryAmount = convertSalaryAmountBetweenPeriods(
+          income.referenceNetSalaryAmount,
+          currentPeriod,
+          nextPeriod,
+          workingHoursPerMonth,
+        );
+        nextIncomeSetupDefaults.referenceNetSalaryAmount = Number(nextNetSalaryAmount.toFixed(2));
+      }
+
+      updateDraftAssumptions({ incomeSetupDefaults: nextIncomeSetupDefaults });
+    },
+    [baselineLocked, draftAssumptions.incomeSetupDefaults, updateDraftAssumptions]
+  );
+
   const updateExecutionValueAtKeyPath = React.useCallback(
     (keyPath: string, nextValue: unknown) => {
       const prop = keyPath.replace('executionDefaults.', '');
@@ -571,17 +764,88 @@ const AssumptionsHubPage: React.FC = () => {
     return allItems.filter((item) => allowed.has(item.keyPath));
   }, [activeTab, activeTabMeta?.isBaseline, registryByTab, viewMode]);
 
+  const sectionedBaselineItems = useMemo(() => {
+    const sectionDefs = HUB_FIELD_SECTIONS[activeTab] ?? [];
+    const itemByPath = new Map(visibleBaselineItems.map((item) => [item.keyPath, item]));
+    const assigned = new Set<string>();
+    const isPlaceholderItem = (item: AssumptionRegistryItem) => filterUsedByForAssumptionsHub(item.usedBy).length === 0;
+
+    const sections = sectionDefs
+      .map((section) => {
+        const items = section.keyPaths
+          .map((keyPath) => itemByPath.get(keyPath))
+          .filter((item): item is AssumptionRegistryItem => {
+            if (!item) return false;
+            return !isPlaceholderItem(item);
+          });
+        items.forEach((item) => assigned.add(item.keyPath));
+        return { ...section, items };
+      })
+      .filter((section) => section.items.length > 0);
+
+    const additionalFields = visibleBaselineItems
+      .filter((item) => !assigned.has(item.keyPath) && !isPlaceholderItem(item))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    const placeholders = visibleBaselineItems
+      .filter((item) => !assigned.has(item.keyPath) && isPlaceholderItem(item))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return { sections, additionalFields, placeholders };
+  }, [activeTab, visibleBaselineItems]);
+
   const renderBaselineRegistryField = (item: AssumptionRegistryItem) => {
     const inputId = `assumptions-${item.keyPath.replace(/\./g, '-')}`;
     const value = getValueAtKeyPath(draftAssumptions, item.keyPath);
     const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
     const disabled = baselineLocked;
+    const autoDeriveReferenceNetSalary = Boolean(draftAssumptions.incomeSetupDefaults.autoDeriveReferenceNetSalary);
     const labelNode = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div>{item.label}</div>
-        {usedBy.length > 0 && <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>}
+        {renderConsumerChips(usedBy)}
       </div>
     );
+
+    if (item.keyPath === 'incomeSetupDefaults.autoDeriveReferenceNetSalary') {
+      return null;
+    }
+
+    if (item.keyPath === 'incomeSetupDefaults.referenceNetSalaryAmount') {
+      const displayValue = autoDeriveReferenceNetSalary ? derivedReferenceNet.value : value;
+      return (
+        <div key={item.keyPath} style={fieldRowStyle}>
+          <label htmlFor={inputId} style={{ fontWeight: 700 }}>{labelNode}</label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+              <input
+                aria-label="Auto-calculate reference net salary"
+                type="checkbox"
+                checked={autoDeriveReferenceNetSalary}
+                disabled={disabled}
+                onChange={(event) => updateDraftValueAtKeyPath('incomeSetupDefaults.autoDeriveReferenceNetSalary', event.target.checked)}
+              />
+              Auto-calculate from Salary Taxator assumptions
+            </label>
+            <input
+              id={inputId}
+              aria-label={item.label}
+              type="number"
+              step={draftAssumptions.incomeSetupDefaults.referenceSalaryPeriod === 'hourly' ? 0.1 : 1}
+              value={typeof displayValue === 'number' && Number.isFinite(displayValue) ? displayValue : ''}
+              disabled={disabled || autoDeriveReferenceNetSalary}
+              onChange={(event) => updateDraftValueAtKeyPath(item.keyPath, Number(event.target.value))}
+              style={inputStyle}
+            />
+            {autoDeriveReferenceNetSalary && (
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Calculated from Salary Taxator assumptions using {derivedReferenceNet.sourceLabel}.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     if (item.unit === 'boolean') {
       return (
@@ -607,12 +871,19 @@ const AssumptionsHubPage: React.FC = () => {
           <div key={item.keyPath} style={fieldRowStyle}>
             <label htmlFor={inputId} style={{ fontWeight: 700 }}>{labelNode}</label>
             <select
+              className="fc-themed-select"
               id={inputId}
               aria-label={item.label}
               value={options.includes(selectedValue) ? selectedValue : options[0]}
               disabled={disabled}
-              onChange={(event) => updateDraftValueAtKeyPath(item.keyPath, event.target.value)}
-              style={inputStyle}
+              onChange={(event) => {
+                if (item.keyPath === 'incomeSetupDefaults.referenceSalaryPeriod') {
+                  updateReferenceSalaryPeriod(event.target.value as Assumptions['incomeSetupDefaults']['referenceSalaryPeriod']);
+                  return;
+                }
+                updateDraftValueAtKeyPath(item.keyPath, event.target.value);
+              }}
+              style={selectStyle}
             >
               {options.map((option) => (
                 <option key={option} value={option}>{option}</option>
@@ -625,6 +896,11 @@ const AssumptionsHubPage: React.FC = () => {
 
     if (isNumericRegistryUnit(item.unit)) {
       const numericValue = typeof value === 'number' && Number.isFinite(value) ? value : value == null ? '' : Number(value);
+      const numericStep = item.keyPath === 'incomeSetupDefaults.referenceGrossSalaryAmount'
+        ? (draftAssumptions.incomeSetupDefaults.referenceSalaryPeriod === 'hourly' ? 0.1 : 1)
+        : item.unit === 'pct'
+          ? 0.1
+          : 1;
       return (
         <div key={item.keyPath} style={fieldRowStyle}>
           <label htmlFor={inputId} style={{ fontWeight: 700 }}>{labelNode}</label>
@@ -632,7 +908,7 @@ const AssumptionsHubPage: React.FC = () => {
             id={inputId}
             aria-label={item.label}
             type="number"
-            step={item.unit === 'pct' ? 0.1 : 1}
+            step={numericStep}
             value={Number.isFinite(numericValue as number) ? numericValue : ''}
             disabled={disabled}
             onChange={(event) => updateDraftValueAtKeyPath(item.keyPath, Number(event.target.value))}
@@ -667,7 +943,7 @@ const AssumptionsHubPage: React.FC = () => {
     const labelNode = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div>{item.label}</div>
-        {usedBy.length > 0 && <div style={{ fontSize: 12, opacity: 0.75 }}>Used by: {usedBy.join(', ')}</div>}
+        {renderConsumerChips(usedBy)}
       </div>
     );
 
@@ -677,11 +953,12 @@ const AssumptionsHubPage: React.FC = () => {
         <div key={item.keyPath} style={fieldRowStyle}>
           <label htmlFor={inputId} style={{ fontWeight: 700 }}>{labelNode}</label>
           <select
+            className="fc-themed-select"
             id={inputId}
             aria-label={item.label}
             value={typeof value === 'string' ? value : String(value ?? '')}
             onChange={(event) => updateExecutionValueAtKeyPath(item.keyPath, event.target.value)}
-            style={inputStyle}
+            style={selectStyle}
           >
             {options.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -711,10 +988,8 @@ const AssumptionsHubPage: React.FC = () => {
   const baselineSummary = `${currentAssumptions.currency} · Inflation ${currentAssumptions.inflationPct}% · Fee ${currentAssumptions.yearlyFeePct}% · Return ${currentAssumptions.expectedReturnPct}% · SWR ${currentAssumptions.safeWithdrawalPct}%`;
   const viewModeDescription =
     viewMode === 'basic'
-      ? 'Basic view shows the few baseline assumptions that define each tab.'
-      : viewMode === 'advanced'
-        ? 'Advanced view exposes the full registry-backed baseline editor.'
-        : 'Diagnostics view emphasizes contradictions, impact, and draft-vs-current changes.';
+      ? 'Basic view keeps each tab focused on the currently aligned assumptions.'
+      : 'Advanced view exposes the full registry-backed editor, including placeholder fields that are not fully wired yet.';
 
   return (
     <PageLayout variant="constrained">
@@ -722,10 +997,10 @@ const AssumptionsHubPage: React.FC = () => {
         <div style={cardStyle}>
           <h1 style={{ margin: 0 }}>Assumptions Hub</h1>
           <div style={{ opacity: 0.78, marginTop: 6 }}>
-            Single source of truth for the app’s baseline assumptions, with draft editing, diagnostics, and preview tooling stored locally for now.
+            Single source of truth for the app’s baseline assumptions, with draft editing and preview tooling stored locally for now.
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            {(['basic', 'advanced', 'diagnostics'] as HubViewMode[]).map((mode) => {
+            {(['basic', 'advanced'] as HubViewMode[]).map((mode) => {
               const isActive = mode === viewMode;
               return (
                 <button
@@ -753,7 +1028,6 @@ const AssumptionsHubPage: React.FC = () => {
         <div role="tablist" aria-label="Assumptions Hub sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {HUB_TABS.map((tab) => {
             const isActive = tab.id === activeTab;
-            const warningCount = diagnostics.filter((item) => item.tab === tab.id).length;
             return (
               <button
                 key={tab.id}
@@ -764,85 +1038,16 @@ const AssumptionsHubPage: React.FC = () => {
                 style={{ padding: '8px 10px', fontWeight: isActive ? 850 : 700, opacity: isActive ? 1 : 0.82 }}
               >
                 {tab.label}
-                {warningCount > 0 ? ` · ${warningCount}` : ''}
               </button>
             );
           })}
         </div>
 
-        {viewMode === 'diagnostics' && (
-          <div style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
-              <div>
-                <div style={{ fontWeight: 850, fontSize: 18 }}>Diagnostics</div>
-                <div style={{ opacity: 0.8, fontSize: 13, marginTop: 4 }}>
-                  Diagnostics stay deterministic and low-noise. They highlight contradictions in the draft without inventing probabilistic scores.
-                </div>
-              </div>
-              <div style={{ ...chipStyle, fontWeight: 800 }}>{activeDiagnostics.length} active diagnostics</div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 12 }}>
-              <div style={{ padding: 12, border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.72 }}>Draft nominal net return</div>
-                <div style={{ fontWeight: 850, fontSize: 22 }}>{draftImpact.nominalNetReturnPct.toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.72 }}>Draft approx real return</div>
-                <div style={{ fontWeight: 850, fontSize: 22 }}>{draftImpact.approxRealReturnPct.toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.72 }}>Safe spend per 1M</div>
-                <div style={{ fontWeight: 850, fontSize: 22 }}>{Math.round(draftImpact.safeMonthlySpendPer1MDkk).toLocaleString()}</div>
-              </div>
-              <div style={{ padding: 12, border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.72 }}>FI number</div>
-                <div style={{ fontWeight: 850, fontSize: 22 }}>{draftImpact.fiNumberDkk === null ? '—' : Math.round(draftImpact.fiNumberDkk).toLocaleString()}</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-              {activeDiagnostics.length === 0 ? (
-                <div style={{ opacity: 0.8, fontSize: 13 }}>No active diagnostics for this tab. The current draft looks internally coherent under the fixed rule set.</div>
-              ) : (
-                activeDiagnostics.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: `1px solid ${item.tone === 'warning' ? '#7b5c19' : '#355b8a'}`,
-                      background: item.tone === 'warning' ? 'rgba(184, 129, 19, 0.10)' : 'rgba(53, 91, 138, 0.10)',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800 }}>{item.title}</div>
-                    <div style={{ opacity: 0.86, fontSize: 13, marginTop: 4 }}>{item.description}</div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>Draft sensitivity</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {draftImpactSensitivity.rows.map((row) => (
-                  <div key={row.label} style={{ padding: '10px 12px', border: '1px solid var(--fc-card-border)', borderRadius: 12 }}>
-                    <div style={{ fontWeight: 800 }}>{row.label}</div>
-                    <div style={{ fontSize: 13, opacity: 0.82, marginTop: 4 }}>
-                      Δ net return {row.deltaFromBase.nominalNetReturnPct.toFixed(2)}pp · Δ real return {row.deltaFromBase.approxRealReturnPct.toFixed(2)}pp · Δ safe spend/1M {Math.round(row.deltaFromBase.safeMonthlySpendPer1MDkk).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeTabMeta?.isBaseline && (
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontWeight: 850, fontSize: 18 }}>Baseline assumptions</div>
+                <div style={{ fontWeight: 850, fontSize: 18 }}>{activeTabMeta.label} assumptions</div>
                 <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>Current (saved): {baselineSummary}</div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -856,30 +1061,51 @@ const AssumptionsHubPage: React.FC = () => {
               {baselineLocked
                 ? 'Baseline edits and JSON imports are disabled while the baseline is locked.'
                 : viewMode === 'basic'
-                  ? 'Basic mode intentionally keeps this tab narrow. Switch to Advanced when you need the full registry-backed editor.'
-                  : viewMode === 'advanced'
-                    ? 'Advanced mode exposes the complete registry-backed editor for this tab.'
-                    : 'Diagnostics mode is read-mostly. Use Basic or Advanced to edit the draft.'}
+                  ? 'Basic mode keeps this tab focused on the assumptions that are already aligned with current workflows.'
+                  : 'Advanced mode includes the full registry-backed set for this tab, including placeholders not fully wired yet.'}
             </div>
 
-            {viewMode !== 'diagnostics' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-                {visibleBaselineItems.map(renderBaselineRegistryField)}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+              {sectionedBaselineItems.sections.map((section) => (
+                <div key={section.title} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{section.title}</div>
+                    {section.description && <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{section.description}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {section.items.map(renderBaselineRegistryField)}
+                  </div>
+                </div>
+              ))}
 
-            {viewMode === 'diagnostics' && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Draft vs current for this tab</div>
-                {renderDiffCards(
-                  buildDiffRows(
-                    registryByTab[activeTab as keyof typeof registryByTab] ?? [],
-                    currentAssumptions,
-                    draftAssumptions
-                  )
-                )}
-              </div>
-            )}
+              {sectionedBaselineItems.additionalFields.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>Additional fields</div>
+                    <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                      These fields have downstream consumers, but they do not fit the curated sections above yet.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {sectionedBaselineItems.additionalFields.map(renderBaselineRegistryField)}
+                  </div>
+                </div>
+              )}
+
+              {sectionedBaselineItems.placeholders.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>Placeholder</div>
+                    <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                      These fields are currently only used by Assumptions Hub, so they stay grouped separately at the bottom.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {sectionedBaselineItems.placeholders.map(renderBaselineRegistryField)}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -948,7 +1174,7 @@ const AssumptionsHubPage: React.FC = () => {
               <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Governance & import/export</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ marginBottom: 4, fontSize: 13, opacity: 0.82 }}>
-                  Locking the baseline prevents accidental draft edits and imports. It does not hide diagnostics or preview tooling.
+                  Locking the baseline prevents accidental draft edits and imports. It does not hide preview tooling.
                 </div>
                 <div style={fieldRowStyle}>
                   <label htmlFor="assumptions-source" style={{ fontWeight: 700 }}>Source note</label>
@@ -1178,7 +1404,7 @@ const AssumptionsHubPage: React.FC = () => {
                       <button type="button" onClick={() => setSelectedSnapshotId(snapshot.id)}>Compare snapshot → draft</button>
                       <button type="button" disabled={baselineLocked} onClick={() => {
                         setDraftAssumptions(normalizeAssumptions(snapshot.assumptions));
-                        setActiveTab('overview');
+                        setActiveTab('income');
                       }}>Use snapshot assumptions as draft</button>
                     </div>
                   </div>

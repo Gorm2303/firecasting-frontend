@@ -93,6 +93,12 @@ button:focus-visible {
   }
 }
 
+.fc-themed-select,
+.fc-themed-select option {
+  background: var(--fc-card-bg);
+  color: var(--fc-card-text);
+}
+
 /* Bottom page tabs (inherits your light/dark media queries) */
 .bottom-page-tabs {
   position: fixed;
