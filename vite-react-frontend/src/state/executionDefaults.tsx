@@ -6,6 +6,7 @@ export type ExecutionDefaults = {
   paths: number;
   batchSize: number;
   seedMode: MasterSeedMode;
+  customSeed: number;
 };
 
 const STORAGE_KEY_V1 = 'firecasting:executionDefaults:v1';
@@ -15,6 +16,7 @@ const DEFAULT_EXECUTION_DEFAULTS: ExecutionDefaults = {
   paths: 10_000,
   batchSize: 10_000,
   seedMode: 'default',
+  customSeed: 1,
 };
 
 const safeParse = (raw: string | null): unknown => {
@@ -52,6 +54,10 @@ const normalize = (raw: unknown): ExecutionDefaults => {
       DEFAULT_EXECUTION_DEFAULTS.batchSize
     ),
     seedMode: asSeedMode(r.seedMode, DEFAULT_EXECUTION_DEFAULTS.seedMode),
+    customSeed: clampPositiveInt(
+      asNumber(r.customSeed, DEFAULT_EXECUTION_DEFAULTS.customSeed),
+      DEFAULT_EXECUTION_DEFAULTS.customSeed
+    ),
   };
 };
 
@@ -65,10 +71,11 @@ const maybeMigrateFromLegacyAdvancedOptions = (): ExecutionDefaults | null => {
     paths: r.paths,
     batchSize: r.batchSize,
     seedMode: r.seedMode,
+    customSeed: r.seed,
   });
 
   // Only migrate if legacy had at least one relevant field.
-  const hasAny = r.paths !== undefined || r.batchSize !== undefined || r.seedMode !== undefined;
+  const hasAny = r.paths !== undefined || r.batchSize !== undefined || r.seedMode !== undefined || r.seed !== undefined;
   return hasAny ? candidate : null;
 };
 

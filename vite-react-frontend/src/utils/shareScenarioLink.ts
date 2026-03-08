@@ -67,9 +67,13 @@ const fromBase64Url = (b64url: string): string => {
 };
 
 const stripUndefinedPhaseFields = (value: PhaseRequest): PhaseRequest => {
-  return Object.fromEntries(
-    Object.entries(value as unknown as Record<string, unknown>).filter(([, entryValue]) => entryValue !== undefined)
-  ) as unknown as PhaseRequest;
+  const cleaned: Partial<PhaseRequest> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (entryValue !== undefined) {
+      (cleaned as Record<string, unknown>)[key] = entryValue;
+    }
+  }
+  return cleaned as PhaseRequest;
 };
 
 export type SharedScenarioPayload = {

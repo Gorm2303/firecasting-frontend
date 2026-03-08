@@ -692,7 +692,7 @@ ref
       // Returner
       returnType: DEFAULT_RETURN_TYPE as ReturnType,
       seedMode: executionDefaults.seedMode as MasterSeedMode,
-      seed: String(DEFAULT_MASTER_SEED),
+      seed: String(executionDefaults.customSeed),
       simpleAveragePercentage: '7',
       distributionType: 'normal' as DistributionType,
       normalMean: '0.07',
@@ -732,6 +732,7 @@ ref
     };
   }, [
     executionDefaults.batchSize,
+    executionDefaults.customSeed,
     executionDefaults.paths,
     executionDefaults.seedMode,
     currentAssumptions.inflationPct,
@@ -2519,6 +2520,7 @@ ref
       paths: Math.trunc(Number(adv.paths)),
       batchSize: Math.trunc(Number(adv.batchSize)),
       seedMode: adv.seedMode,
+      customSeed: Math.max(1, Math.trunc(Number(adv.seed))),
     });
 
     setPaths(String(adv.paths));
@@ -2812,7 +2814,7 @@ ref
                       if (!isTutorial) updateExecutionDefaults({ seedMode: next });
                       if (next === 'custom') {
                         const n = toNumOrUndef(seed);
-                        if (!n || n <= 0) setSeed(String(DEFAULT_MASTER_SEED));
+                        if (!n || n <= 0) setSeed(String(executionDefaults.customSeed));
                       }
                     }}
                     disabled={simulateInProgress}
@@ -2842,6 +2844,10 @@ ref
                         if (!isValidIntegerDraft(next)) return;
                         markUserEdited();
                         setSeed(next);
+                        const parsed = Number(next);
+                        if (!isTutorial && Number.isFinite(parsed) && parsed > 0) {
+                          updateExecutionDefaults({ customSeed: Math.trunc(parsed) });
+                        }
                       }}
                       disabled={simulateInProgress}
                       style={inputStyle}

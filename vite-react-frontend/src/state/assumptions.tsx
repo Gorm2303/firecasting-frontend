@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { deriveReferenceNetSalary } from '../lib/income/referenceNetSalary';
+import {
+  DEFAULT_FIRE_SIMULATOR_DEFAULTS,
+  normalizeFireSimulatorDefaults,
+  type FireSimulatorDefaults,
+} from '../lib/fireSimulatorAssumptions';
 import { appendAssumptionsHistory } from './assumptionsHistory';
 import { loadAssumptionsGovernance } from './assumptionsGovernance';
 
@@ -108,6 +113,9 @@ export type Assumptions = {
     timeHorizonYears: number;
     coreExpenseMonthlyDkk: number;
   };
+
+  /** Shared scenario inputs for the new FIRE Simulator workflow. */
+  fireSimulatorDefaults: FireSimulatorDefaults;
 };
 
 export type DeepPartial<T> = {
@@ -217,6 +225,8 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
     timeHorizonYears: 10,
     coreExpenseMonthlyDkk: 12_000,
   },
+
+  fireSimulatorDefaults: DEFAULT_FIRE_SIMULATOR_DEFAULTS,
 };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -356,6 +366,10 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
 
   const moneyDefaults = (r.moneyPerspectiveDefaults && typeof r.moneyPerspectiveDefaults === 'object'
     ? (r.moneyPerspectiveDefaults as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const fireSimulatorDefaults = (r.fireSimulatorDefaults && typeof r.fireSimulatorDefaults === 'object'
+    ? (r.fireSimulatorDefaults as Record<string, unknown>)
     : {}) as Record<string, unknown>;
 
   const normalizedIncomeSetupDefaults: Assumptions['incomeSetupDefaults'] = {
@@ -516,6 +530,8 @@ export const normalizeAssumptions = (raw: unknown): Assumptions => {
         DEFAULT_ASSUMPTIONS.moneyPerspectiveDefaults.coreExpenseMonthlyDkk
       ),
     },
+
+    fireSimulatorDefaults: normalizeFireSimulatorDefaults(fireSimulatorDefaults),
   };
 };
 
