@@ -294,4 +294,51 @@ describe('NormalInputForm scenarios', () => {
     const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>;
     expect(scenarios[0]?.runId).toBe('test-sim-id');
   });
+
+  it('marks saved scenarios that carry assumptions overrides', async () => {
+    window.localStorage.clear();
+
+    saveScenario(
+      'Scenario With Overrides',
+      normalToAdvancedWithDefaults({
+        startDate: { date: '2033-02-03' },
+        overallTaxRule: 'NOTIONAL',
+        taxPercentage: 25,
+        phases: [{ phaseType: 'PASSIVE', durationInMonths: 12, taxRules: [] }],
+      } as any, {
+        inflationPct: 2,
+        yearlyFeePct: 0.5,
+        taxExemptionDefaults: {
+          exemptionCardLimit: 51600,
+          exemptionCardYearlyIncrease: 1000,
+          stockExemptionTaxRate: 27,
+          stockExemptionLimit: 67500,
+          stockExemptionYearlyIncrease: 1000,
+        },
+      }) as any,
+      undefined,
+      undefined,
+      undefined,
+      { inflationPct: 3 }
+    );
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
+
+    await waitFor(() => {
+      const options = Array.from(scenarioSelect.options).map((option) => option.textContent ?? '');
+      expect(options.some((text) => text.includes('Scenario With Overrides (overrides)'))).toBe(true);
+    });
+  });
 });

@@ -39,6 +39,49 @@ export type AssumptionRegistryItem = {
 
 export const ASSUMPTIONS_REGISTRY: AssumptionRegistryItem[] = rawRegistry as AssumptionRegistryItem[];
 
+export const ASSUMPTIONS_TAB_LABELS: Record<AssumptionsTabId, string> = {
+  worldModel: 'World Model',
+  passiveStrategy: 'Passive Strategy',
+  execution: 'Execution',
+  simulatorTax: 'Simulator Tax',
+  salaryTaxator: 'Salary Taxator',
+  moneyPerspective: 'Money Perspective',
+  incomeSetup: 'Income Setup',
+  depositStrategy: 'Deposit Strategy',
+  withdrawalStrategy: 'Withdrawal Strategy',
+  policyBuilder: 'Policy Builder',
+  milestones: 'FIRE Milestones',
+  goalPlanner: 'Goal Planner',
+};
+
+const REGISTRY_ENUM_OPTIONS: Record<string, string[]> = {
+  'incomeSetupDefaults.incomeModelType': ['grossFirst', 'netFirst'],
+  'incomeSetupDefaults.payCadence': ['monthly', 'biweekly', 'yearly'],
+  'incomeSetupDefaults.salaryGrowthRule': ['fixedPct', 'inflationLinked'],
+  'incomeSetupDefaults.bonusFrequency': ['none', 'yearly', 'monthly'],
+  'incomeSetupDefaults.taxRegime': ['DK', 'none'],
+
+  'depositStrategyDefaults.depositTiming': ['startOfMonth', 'endOfMonth'],
+  'depositStrategyDefaults.contributionCadence': ['monthly', 'yearly'],
+  'depositStrategyDefaults.escalationMode': ['none', 'pctYearly', 'fixedDkkYearly'],
+  'depositStrategyDefaults.routingPriority': ['buffer>debt>wrappers>taxable', 'buffer>goals>debt>wrappers>taxable'],
+
+  'passiveStrategyDefaults.returnModel': ['fixed', 'normal', 'historical'],
+  'passiveStrategyDefaults.rebalancing': ['none', 'annual', 'threshold'],
+
+  'withdrawalStrategyDefaults.withdrawalRule': ['fixedPct', 'fixedReal', 'guardrails'],
+
+  'policyBuilderDefaults.evaluationFrequency': ['monthly', 'quarterly', 'yearly'],
+  'policyBuilderDefaults.conflictResolution': ['priority', 'mostConservative', 'firstMatch'],
+
+  'fireMilestonesDefaults.confidenceTarget': ['P50', 'P90', 'P95'],
+  'fireMilestonesDefaults.milestoneStability': ['instant', 'sustained'],
+
+  'goalPlannerDefaults.fundingOrder': ['buffer>debt>goals>fi', 'buffer>goals>debt>fi'],
+  'goalPlannerDefaults.goalInflationHandling': ['nominal', 'real'],
+  'goalPlannerDefaults.goalRiskHandling': ['default', 'highCertainty'],
+};
+
 const normalizeLabel = (label: string): string => String(label).replace(/\s+/g, '').toLowerCase();
 
 export const normalizeUsedByLabels = (usedBy: string[]): string[] => {
@@ -57,3 +100,29 @@ export const filterUsedByForAssumptionsHub = (usedBy: string[]): string[] => {
 
 export const listRegistryByTab = (tab: AssumptionsTabId): AssumptionRegistryItem[] =>
   ASSUMPTIONS_REGISTRY.filter((x) => x.tab === tab);
+
+export const getRegistryEnumOptions = (keyPath: string): string[] | null => {
+  const options = REGISTRY_ENUM_OPTIONS[keyPath];
+  return options ? [...options] : null;
+};
+
+export const isNumericRegistryUnit = (unit: AssumptionUnitId): boolean => {
+  return (
+    unit === 'pct' ||
+    unit === 'dkk' ||
+    unit === 'dkkPerMonth' ||
+    unit === 'dkkPerYear' ||
+    unit === 'hoursPerMonth' ||
+    unit === 'months' ||
+    unit === 'years' ||
+    unit === 'count'
+  );
+};
+
+export const listScenarioOverrideRegistryItems = (): AssumptionRegistryItem[] => {
+  return ASSUMPTIONS_REGISTRY.filter((item) => item.tab !== 'execution');
+};
+
+export const listStrategyRegistryItems = (tab: AssumptionsTabId): AssumptionRegistryItem[] => {
+  return listRegistryByTab(tab).filter((item) => item.keyPath !== 'currency');
+};

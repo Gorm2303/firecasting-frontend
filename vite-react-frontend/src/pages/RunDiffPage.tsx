@@ -5,14 +5,23 @@ import { diffRuns, findRunForInput, getCompletedSummaries, getRunInput, getRunSu
 import CompareMetricExplorer from '../components/CompareMetricExplorer';
 import SimulationProgress from '../components/SimulationProgress';
 import PageLayout from '../components/PageLayout';
-import { isRandomSeedRequested, listSavedScenarios, materializeRandomSeedIfNeeded, saveScenario, updateScenarioRunMeta, type SavedScenario } from '../config/savedScenarios';
+import {
+  formatSavedScenarioLabel,
+  isRandomSeedRequested,
+  listSavedScenarios,
+  materializeRandomSeedIfNeeded,
+  materializeSavedScenarioForRun,
+  saveScenario,
+  updateScenarioRunMeta,
+  type SavedScenario,
+} from '../config/savedScenarios';
 import type { YearlySummary } from '../models/YearlySummary';
 import type { SimulationTimelineContext } from '../models/types';
 import { deepEqual } from '../utils/deepEqual';
 import { toIsoDateString } from '../utils/backendDate';
 import { summarizeScenario, type ScenarioSummary } from '../utils/summarizeScenario';
 import { metricColor, moneyStoryStepColor, type MoneyStoryStepKey } from '../utils/metricColors';
-import { useAssumptions, type Assumptions } from '../state/assumptions';
+import { applyAssumptionsOverride, useAssumptions, type Assumptions } from '../state/assumptions';
 
 const fmt = (v: any): string => {
   if (v === null || v === undefined) return '';
@@ -448,7 +457,10 @@ const toScenarioSummary = (scenario: SavedScenario | null, assumptions: Assumpti
   try {
     if (!scenario?.advancedRequest) return null;
     // Always summarize from advancedRequest so returnType/seed/inflation/yearlyFee/etc are present.
-    return summarizeScenario(scenario.advancedRequest, assumptions);
+    return summarizeScenario(
+      scenario.advancedRequest,
+      applyAssumptionsOverride(assumptions, scenario.assumptionsOverride ?? null)
+    );
   } catch {
     return null;
   }
@@ -508,16 +520,18 @@ type ResolvedRun = {
 
 const resolveOrRerun = async (
   scenario: SavedScenario,
+  baselineAssumptions: Assumptions,
   opts: {
     onRerunStarted?: (simulationId: string, started: StartRunResponse) => void;
     getMetaForPersistedRun?: (runId: string) => Promise<RunListItem | null>;
   } = {}
 ): Promise<ResolvedRun> => {
   const random = isRandomRequested(scenario);
+  const { advancedRequest } = materializeSavedScenarioForRun(scenario, baselineAssumptions);
 
   // A saved scenario can be overwritten while still carrying an old runId.
   // Prefer the persisted run that matches the *current* scenario footprint.
-  const lookupId = await findRunForInput(scenario.advancedRequest).catch(() => null);
+  const lookupId = await findRunForInput(advancedRequest).catch(() => null);
 
   let maybePersistedId: string | null = scenario.runId ? String(scenario.runId) : null;
   if (lookupId) {
@@ -527,7 +541,7 @@ const resolveOrRerun = async (
     // No lookup match found: only trust the stored runId if its persisted input matches.
     try {
       const persistedInput = await getRunInput(maybePersistedId);
-      if (!deepEqual(persistedInput, scenario.advancedRequest)) {
+      if (!deepEqual(persistedInput, advancedRequest)) {
         maybePersistedId = null;
       }
     } catch {
@@ -545,7 +559,7 @@ const resolveOrRerun = async (
     }
   }
 
-  const started = await startAdvancedSimulation(scenario.advancedRequest);
+  const started = await startAdvancedSimulation(advancedRequest);
   opts.onRerunStarted?.(started.id, started);
   const summaries = await waitForSummaries(started.id);
   const meta: RunListItem = {
@@ -790,7 +804,8 @@ const RunDiffPage: React.FC = () => {
         pinnedReq,
         scenario.id,
         scenario.runId ?? undefined,
-        nextMeta
+        nextMeta,
+        scenario.assumptionsOverride
       );
     } catch {
       // ignore
@@ -996,7 +1011,7 @@ const RunDiffPage: React.FC = () => {
           >
             <option value="">Select…</option>
             {savedScenarios.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+              <option key={s.id} value={s.id}>{formatSavedScenarioLabel(s)}</option>
             ))}
           </select>
 
@@ -1029,7 +1044,7 @@ const RunDiffPage: React.FC = () => {
                     return found ?? null;
                   };
 
-                  const ra = await resolveOrRerun(scenarioAStable, {
+                  const ra = await resolveOrRerun(scenarioAStable, currentAssumptions, {
                     onRerunStarted: (id, started) => {
                       setRerunAId(id);
                       updateScenarioRunMeta(scenarioAStable.id, {
@@ -1075,7 +1090,8 @@ const RunDiffPage: React.FC = () => {
                               modelSpringBootVersion: ra.meta.modelSpringBootVersion ?? null,
                               modelJavaVersion: ra.meta.modelJavaVersion ?? null,
                             }
-                          : scenarioAStable.lastRunMeta
+                          : scenarioAStable.lastRunMeta,
+                        scenarioAStable.assumptionsOverride
                       );
                       refreshSavedScenarios();
                     }
@@ -1147,7 +1163,7 @@ const RunDiffPage: React.FC = () => {
                 };
 
                 const [ra, rb] = await Promise.all([
-                  resolveOrRerun(scenarioAStable, {
+                  resolveOrRerun(scenarioAStable, currentAssumptions, {
                     onRerunStarted: (id, started) => {
                       setRerunAId(id);
                       // Store best-effort meta locally so future diffs can display it.
@@ -1165,7 +1181,7 @@ const RunDiffPage: React.FC = () => {
                     },
                     getMetaForPersistedRun: metaForRun,
                   }),
-                  resolveOrRerun(scenarioBStable, {
+                  resolveOrRerun(scenarioBStable, currentAssumptions, {
                     onRerunStarted: (id, started) => {
                       setRerunBId(id);
                       updateScenarioRunMeta(scenarioBStable.id, {
@@ -1224,7 +1240,8 @@ const RunDiffPage: React.FC = () => {
                             modelSpringBootVersion: ra.meta.modelSpringBootVersion ?? null,
                             modelJavaVersion: ra.meta.modelJavaVersion ?? null,
                           }
-                        : scenarioAStable.lastRunMeta
+                        : scenarioAStable.lastRunMeta,
+                      scenarioAStable.assumptionsOverride
                     );
                     refreshSavedScenarios();
                   } catch {
@@ -1248,7 +1265,8 @@ const RunDiffPage: React.FC = () => {
                             modelSpringBootVersion: rb.meta.modelSpringBootVersion ?? null,
                             modelJavaVersion: rb.meta.modelJavaVersion ?? null,
                           }
-                        : scenarioBStable.lastRunMeta
+                        : scenarioBStable.lastRunMeta,
+                      scenarioBStable.assumptionsOverride
                     );
                     refreshSavedScenarios();
                   } catch {
@@ -1313,7 +1331,7 @@ const RunDiffPage: React.FC = () => {
           >
             <option value="">Select…</option>
             {savedScenarios.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+              <option key={s.id} value={s.id}>{formatSavedScenarioLabel(s)}</option>
             ))}
           </select>
 
@@ -1346,7 +1364,7 @@ const RunDiffPage: React.FC = () => {
                     return found ?? null;
                   };
 
-                  const rb = await resolveOrRerun(scenarioBStable, {
+                  const rb = await resolveOrRerun(scenarioBStable, currentAssumptions, {
                     onRerunStarted: (id, started) => {
                       setRerunBId(id);
                       updateScenarioRunMeta(scenarioBStable.id, {
@@ -1392,7 +1410,8 @@ const RunDiffPage: React.FC = () => {
                               modelSpringBootVersion: rb.meta.modelSpringBootVersion ?? null,
                               modelJavaVersion: rb.meta.modelJavaVersion ?? null,
                             }
-                          : scenarioBStable.lastRunMeta
+                          : scenarioBStable.lastRunMeta,
+                        scenarioBStable.assumptionsOverride
                       );
                       refreshSavedScenarios();
                     }

@@ -56,6 +56,7 @@ vi.mock('../api/simulation', async () => {
 
 vi.mock('../config/savedScenarios', () => {
   return {
+    formatSavedScenarioLabel: (scenario: any) => scenario?.name ?? '',
     isRandomSeedRequested: () => false,
     listSavedScenarios: () => ([
       {
@@ -75,6 +76,10 @@ vi.mock('../config/savedScenarios', () => {
         runId: 'run-2',
       },
     ]),
+    materializeSavedScenarioForRun: (scenario: any, assumptions: any) => ({
+      advancedRequest: scenario.advancedRequest,
+      assumptionsUsed: assumptions,
+    }),
     materializeRandomSeedIfNeeded: (req: any) => req,
     saveScenario: () => ({
       id: 's1',

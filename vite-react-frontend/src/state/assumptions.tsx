@@ -221,6 +221,24 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const pruneEmptyValues = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    const next = value
+      .map((item) => pruneEmptyValues(item))
+      .filter((item) => item !== undefined);
+    return next.length > 0 ? next : undefined;
+  }
+
+  if (!isPlainObject(value)) return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const next = pruneEmptyValues(item);
+    if (next !== undefined) out[key] = next;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 const deepMerge = <T,>(base: T, patch: DeepPartial<T> | null | undefined): T => {
   if (!patch) return base;
   if (!isPlainObject(base) || !isPlainObject(patch)) return (patch as unknown as T) ?? base;
@@ -238,9 +256,24 @@ const deepMerge = <T,>(base: T, patch: DeepPartial<T> | null | undefined): T => 
   return out as unknown as T;
 };
 
+export function normalizeAssumptionsOverride(
+  override?: AssumptionsOverride | null
+): AssumptionsOverride | null {
+  if (!override) return null;
+  const pruned = pruneEmptyValues(override);
+  return isPlainObject(pruned) ? (pruned as AssumptionsOverride) : null;
+}
+
+export function hasMeaningfulAssumptionsOverride(
+  override?: AssumptionsOverride | null
+): boolean {
+  return normalizeAssumptionsOverride(override) !== null;
+}
+
 export function applyAssumptionsOverride(base: Assumptions, override?: AssumptionsOverride | null): Assumptions {
-  if (!override || (isPlainObject(override) && Object.keys(override).length === 0)) return base;
-  return normalizeAssumptions(deepMerge(base, override));
+  const normalizedOverride = normalizeAssumptionsOverride(override);
+  if (!normalizedOverride) return base;
+  return normalizeAssumptions(deepMerge(base, normalizedOverride));
 }
 
 type AssumptionsContextValue = {
