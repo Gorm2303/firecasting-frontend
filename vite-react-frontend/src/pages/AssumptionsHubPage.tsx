@@ -23,6 +23,7 @@ import { computeAssumptionsImpact } from '../utils/assumptionsImpact';
 
 type HubTabId =
   | 'overview'
+  | 'plan'
   | 'tax'
   | 'income'
   | 'expense'
@@ -37,6 +38,7 @@ type HubTabId =
   | 'preview';
 
 type BaselineHubTabId =
+  | 'plan'
   | 'tax'
   | 'income'
   | 'expense'
@@ -117,6 +119,7 @@ const consumerChipStyle: React.CSSProperties = {
 
 const HUB_TABS: Array<{ id: HubTabId; label: string; isBaseline?: boolean }> = [
   { id: 'overview', label: 'Overview' },
+  { id: 'plan', label: 'Plan', isBaseline: true },
   { id: 'tax', label: 'Tax', isBaseline: true },
   { id: 'income', label: 'Income', isBaseline: true },
   { id: 'expense', label: 'Expense', isBaseline: true },
@@ -136,13 +139,21 @@ const BASELINE_HUB_TABS: Array<{ id: BaselineHubTabId; label: string; isBaseline
 );
 
 const PAGE_VIEW_LABEL_OVERRIDES: Record<string, string> = {
+  FireSimulator: 'FIRE Simulator',
   MoneyPerspective: 'Money Perspective',
   SalaryTaxator: 'Salary Taxator',
+  SimulationEngine: 'Simulation Engine',
+  SimulationInvest: 'Simulation Invest',
+  SimulationPlan: 'Simulation Plan',
+  TaxOptimizer: 'Tax Optimizer',
 };
 
 const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'overview' | 'conventions' | 'preview'>, string[]> = {
+  plan: ['fireSimulatorDefaults.templateId', 'fireSimulatorDefaults.startDate', 'fireSimulatorDefaults.phases'],
   tax: [
     'incomeSetupDefaults.taxRegime',
+    'fireSimulatorDefaults.overallTaxRule',
+    'fireSimulatorDefaults.taxPercentage',
     'salaryTaxatorDefaults.municipalityId',
     'salaryTaxatorDefaults.defaultMunicipalTaxRatePct',
     'salaryTaxatorDefaults.churchMember',
@@ -170,11 +181,19 @@ const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'overview' | 'conventions' | 'pr
     'moneyPerspectiveDefaults.coreExpenseMonthlyDkk',
   ],
   invest: [
-    'expectedReturnPct',
+    'fireSimulatorDefaults.returnEngine.returnType',
     'yearlyFeePct',
-    'passiveStrategyDefaults.returnModel',
-    'passiveStrategyDefaults.volatilityPct',
-    'passiveStrategyDefaults.rebalancing',
+    'fireSimulatorDefaults.returnEngine.simpleAveragePercentage',
+    'fireSimulatorDefaults.returnEngine.distributionType',
+    'fireSimulatorDefaults.returnEngine.normalMean',
+    'fireSimulatorDefaults.returnEngine.normalStdDev',
+    'fireSimulatorDefaults.returnEngine.brownianDrift',
+    'fireSimulatorDefaults.returnEngine.brownianVolatility',
+    'fireSimulatorDefaults.returnEngine.studentMu',
+    'fireSimulatorDefaults.returnEngine.studentSigma',
+    'fireSimulatorDefaults.returnEngine.studentNu',
+    'fireSimulatorDefaults.returnEngine.regimeTickMonths',
+    'fireSimulatorDefaults.returnEngine.regimes',
   ],
   deposit: [
     'depositStrategyDefaults.depositTiming',
@@ -210,10 +229,17 @@ const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'overview' | 'conventions' | 'pr
     'goalPlannerDefaults.goalInflationHandling',
     'goalPlannerDefaults.goalRiskHandling',
   ],
-  execution: ['executionDefaults.paths', 'executionDefaults.batchSize', 'executionDefaults.seedMode'],
+  execution: ['executionDefaults.paths', 'executionDefaults.batchSize', 'executionDefaults.seedMode', 'executionDefaults.customSeed'],
 };
 
 const HUB_FIELD_SECTIONS: Partial<Record<HubTabId, HubFieldSection[]>> = {
+  plan: [
+    {
+      title: 'Plan structure',
+      description: 'The ordered phase list materialized into the simulator request.',
+      keyPaths: ['fireSimulatorDefaults.templateId', 'fireSimulatorDefaults.startDate', 'fireSimulatorDefaults.phases'],
+    },
+  ],
   tax: [
     {
       title: 'Payroll and tax defaults',
@@ -227,6 +253,14 @@ const HUB_FIELD_SECTIONS: Partial<Record<HubTabId, HubFieldSection[]>> = {
         'salaryTaxatorDefaults.otherDeductionsAnnualDkk',
         'salaryTaxatorDefaults.atpMonthlyDkk',
         'salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk',
+      ],
+    },
+    {
+      title: 'Simulator tax rules',
+      description: 'Top-level tax settings used by the FIRE simulator before phase-specific exemptions apply.',
+      keyPaths: [
+        'fireSimulatorDefaults.overallTaxRule',
+        'fireSimulatorDefaults.taxPercentage',
       ],
     },
     {
@@ -277,17 +311,22 @@ const HUB_FIELD_SECTIONS: Partial<Record<HubTabId, HubFieldSection[]>> = {
   ],
   invest: [
     {
-      title: 'Return and fee baseline',
-      description: 'Core investing assumptions for return, fees, and capital growth.',
-      keyPaths: ['expectedReturnPct', 'yearlyFeePct'],
-    },
-    {
-      title: 'Portfolio behavior',
-      description: 'Portfolio return-model defaults and maintenance assumptions.',
+      title: 'Return engine',
+      description: 'Advanced return engine controls for the new FIRE simulator.',
       keyPaths: [
-        'passiveStrategyDefaults.returnModel',
-        'passiveStrategyDefaults.volatilityPct',
-        'passiveStrategyDefaults.rebalancing',
+        'fireSimulatorDefaults.returnEngine.returnType',
+        'fireSimulatorDefaults.returnEngine.simpleAveragePercentage',
+        'fireSimulatorDefaults.returnEngine.distributionType',
+        'fireSimulatorDefaults.returnEngine.normalMean',
+        'fireSimulatorDefaults.returnEngine.normalStdDev',
+        'fireSimulatorDefaults.returnEngine.brownianDrift',
+        'fireSimulatorDefaults.returnEngine.brownianVolatility',
+        'fireSimulatorDefaults.returnEngine.studentMu',
+        'fireSimulatorDefaults.returnEngine.studentSigma',
+        'fireSimulatorDefaults.returnEngine.studentNu',
+        'fireSimulatorDefaults.returnEngine.regimeTickMonths',
+        'fireSimulatorDefaults.returnEngine.regimes',
+        'yearlyFeePct',
       ],
     },
   ],
@@ -549,6 +588,8 @@ const AssumptionsHubPage: React.FC = () => {
   const [profilesRefresh, setProfilesRefresh] = useState(0);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [profileName, setProfileName] = useState('');
+  const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
+  const [jsonErrors, setJsonErrors] = useState<Record<string, string>>({});
   const [governance, setGovernance] = useState<AssumptionsGovernance>(() => loadAssumptionsGovernance());
   const {
     currentAssumptions,
@@ -583,8 +624,17 @@ const AssumptionsHubPage: React.FC = () => {
 
   const registryByTab = useMemo(
     () => ({
+      plan: listRegistryByTab('fireSimulator').filter(
+        (item) =>
+          item.keyPath === 'fireSimulatorDefaults.templateId' ||
+          item.keyPath === 'fireSimulatorDefaults.startDate' ||
+          item.keyPath === 'fireSimulatorDefaults.phases'
+      ),
       tax: [
         ...listRegistryByTab('incomeSetup').filter((item) => item.keyPath === 'incomeSetupDefaults.taxRegime'),
+        ...listRegistryByTab('fireSimulator').filter(
+          (item) => item.keyPath === 'fireSimulatorDefaults.overallTaxRule' || item.keyPath === 'fireSimulatorDefaults.taxPercentage'
+        ),
         ...listRegistryByTab('salaryTaxator'),
         ...listRegistryByTab('simulatorTax'),
       ],
@@ -597,8 +647,10 @@ const AssumptionsHubPage: React.FC = () => {
       ],
       expense: listRegistryByTab('moneyPerspective').filter((item) => item.keyPath !== 'moneyPerspectiveDefaults.timeHorizonYears'),
       invest: [
+        ...listRegistryByTab('fireSimulator').filter(
+          (item) => item.keyPath.startsWith('fireSimulatorDefaults.returnEngine.')
+        ),
         ...listRegistryByTab('worldModel').filter((item) => item.keyPath === 'yearlyFeePct' || item.keyPath === 'expectedReturnPct'),
-        ...listRegistryByTab('passiveStrategy'),
       ],
       deposit: listRegistryByTab('depositStrategy'),
       withdrawal: [
@@ -615,6 +667,7 @@ const AssumptionsHubPage: React.FC = () => {
 
   const previewRegistryItems = useMemo(
     () => [
+      ...registryByTab.plan,
       ...registryByTab.tax,
       ...registryByTab.income,
       ...registryByTab.expense,
@@ -668,7 +721,7 @@ const AssumptionsHubPage: React.FC = () => {
     const base = selectedSnapshot.advancedRequest;
     const snapshotSeed = typeof base.seed === 'number' && Number.isFinite(base.seed) ? Math.trunc(base.seed) : 1;
     const snapshotSeedForCustom = snapshotSeed > 0 ? snapshotSeed : 1;
-    const seed = seedForMode(executionDefaults.seedMode, snapshotSeedForCustom);
+    const seed = seedForMode(executionDefaults.seedMode, executionDefaults.customSeed || snapshotSeedForCustom);
     const next: Record<string, unknown> = { ...base, seed };
 
     if (base.returnerConfig && typeof base.returnerConfig === 'object') {
@@ -677,11 +730,12 @@ const AssumptionsHubPage: React.FC = () => {
 
     if (base.paths !== undefined) next.paths = executionDefaults.paths;
     if (base.batchSize !== undefined) next.batchSize = executionDefaults.batchSize;
+    if (executionDefaults.seedMode === 'custom') next.seed = executionDefaults.customSeed;
     if (base.inflationFactor !== undefined) next.inflationFactor = 1 + (Number(draftAssumptions.inflationPct) || 0) / 100;
     if (base.yearlyFeePercentage !== undefined) next.yearlyFeePercentage = Number(draftAssumptions.yearlyFeePct) || 0;
 
     return next;
-  }, [draftAssumptions.inflationPct, draftAssumptions.yearlyFeePct, executionDefaults.batchSize, executionDefaults.paths, executionDefaults.seedMode, selectedSnapshot]);
+  }, [draftAssumptions.inflationPct, draftAssumptions.yearlyFeePct, executionDefaults.batchSize, executionDefaults.customSeed, executionDefaults.paths, executionDefaults.seedMode, selectedSnapshot]);
 
   const snapshotAdvancedRequestDiffRows = useMemo(() => {
     if (!selectedSnapshot?.advancedRequest || !selectedSnapshotRerunRequest) return [];
@@ -737,6 +791,11 @@ const AssumptionsHubPage: React.FC = () => {
       }
       const [top, ...rest] = parts;
       const nextTop = setObjectValueAtPath((draftAssumptions as Record<string, unknown>)[top], rest, nextValue);
+      if (top === 'fireSimulatorDefaults' && keyPath !== 'fireSimulatorDefaults.templateId') {
+        const withTemplateReset = setObjectValueAtPath(nextTop, ['templateId'], 'custom');
+        updateDraftAssumptions({ [top]: withTemplateReset } as Partial<Assumptions>);
+        return;
+      }
       updateDraftAssumptions({ [top]: nextTop } as Partial<Assumptions>);
     },
     [baselineLocked, draftAssumptions, updateDraftAssumptions]
@@ -832,7 +891,10 @@ const AssumptionsHubPage: React.FC = () => {
   const visibleBaselineItems = useMemo(() => {
     if (!activeTabMeta?.isBaseline) return [];
     const allItems = registryByTab[activeTab as keyof typeof registryByTab] ?? [];
-    if (viewMode === 'advanced') return allItems;
+    if (viewMode === 'advanced') {
+      if (activeTab === 'invest') return allItems.filter((item) => item.keyPath !== 'expectedReturnPct');
+      return allItems;
+    }
     const allowed = new Set(BASIC_KEY_PATHS[activeTab as keyof typeof BASIC_KEY_PATHS] ?? []);
     return allItems.filter((item) => allowed.has(item.keyPath));
   }, [activeTab, activeTabMeta?.isBaseline, registryByTab, viewMode]);
@@ -905,6 +967,38 @@ const AssumptionsHubPage: React.FC = () => {
     );
 
     if (item.keyPath === 'incomeSetupDefaults.autoDeriveReferenceNetSalary') {
+      return null;
+    }
+
+    const returnEngine = draftAssumptions.fireSimulatorDefaults.returnEngine;
+    if (item.keyPath === 'fireSimulatorDefaults.returnEngine.simpleAveragePercentage' && returnEngine.returnType !== 'simpleReturn') {
+      return null;
+    }
+    if (item.keyPath === 'fireSimulatorDefaults.returnEngine.distributionType' && returnEngine.returnType !== 'distributionReturn') {
+      return null;
+    }
+    if (
+      (item.keyPath === 'fireSimulatorDefaults.returnEngine.normalMean' || item.keyPath === 'fireSimulatorDefaults.returnEngine.normalStdDev') &&
+      (returnEngine.returnType !== 'distributionReturn' || returnEngine.distributionType !== 'normal')
+    ) {
+      return null;
+    }
+    if (
+      (item.keyPath === 'fireSimulatorDefaults.returnEngine.brownianDrift' || item.keyPath === 'fireSimulatorDefaults.returnEngine.brownianVolatility') &&
+      (returnEngine.returnType !== 'distributionReturn' || returnEngine.distributionType !== 'brownianMotion')
+    ) {
+      return null;
+    }
+    if (
+      (item.keyPath === 'fireSimulatorDefaults.returnEngine.studentMu' || item.keyPath === 'fireSimulatorDefaults.returnEngine.studentSigma' || item.keyPath === 'fireSimulatorDefaults.returnEngine.studentNu') &&
+      (returnEngine.returnType !== 'distributionReturn' || returnEngine.distributionType !== 'studentT')
+    ) {
+      return null;
+    }
+    if (
+      (item.keyPath === 'fireSimulatorDefaults.returnEngine.regimeTickMonths' || item.keyPath === 'fireSimulatorDefaults.returnEngine.regimes') &&
+      (returnEngine.returnType !== 'distributionReturn' || returnEngine.distributionType !== 'regimeBased')
+    ) {
       return null;
     }
 
@@ -991,6 +1085,52 @@ const AssumptionsHubPage: React.FC = () => {
       }
     }
 
+    if (item.unit === 'json') {
+      const draftValue = jsonDrafts[item.keyPath];
+      const displayValue = draftValue ?? JSON.stringify(value ?? item.default ?? [], null, 2);
+      const error = jsonErrors[item.keyPath];
+
+      return (
+        <div key={item.keyPath} style={fieldRowStyle}>
+          <label htmlFor={inputId} style={{ fontWeight: 700 }}>{labelNode}</label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <textarea
+              id={inputId}
+              aria-label={item.label}
+              value={displayValue}
+              disabled={disabled}
+              rows={10}
+              onChange={(event) => {
+                const next = event.target.value;
+                setJsonDrafts((prev) => ({ ...prev, [item.keyPath]: next }));
+              }}
+              onBlur={() => {
+                const next = jsonDrafts[item.keyPath] ?? displayValue;
+                try {
+                  const parsed = JSON.parse(next);
+                  updateDraftValueAtKeyPath(item.keyPath, parsed);
+                  setJsonErrors((prev) => {
+                    const clone = { ...prev };
+                    delete clone[item.keyPath];
+                    return clone;
+                  });
+                  setJsonDrafts((prev) => {
+                    const clone = { ...prev };
+                    delete clone[item.keyPath];
+                    return clone;
+                  });
+                } catch {
+                  setJsonErrors((prev) => ({ ...prev, [item.keyPath]: 'Invalid JSON. Fix the value before leaving the field.' }));
+                }
+              }}
+              style={{ ...inputStyle, minHeight: 220, fontFamily: 'Consolas, Monaco, monospace' }}
+            />
+            {error ? <div style={{ fontSize: 12, color: '#b42318' }}>{error}</div> : null}
+          </div>
+        </div>
+      );
+    }
+
     if (isNumericRegistryUnit(item.unit)) {
       const numericValue = typeof value === 'number' && Number.isFinite(value) ? value : value == null ? '' : Number(value);
       const numericStep = item.keyPath === 'incomeSetupDefaults.referenceGrossSalaryAmount'
@@ -1036,6 +1176,7 @@ const AssumptionsHubPage: React.FC = () => {
     const inputId = `execution-${item.keyPath.replace(/\./g, '-')}`;
     const prop = item.keyPath.replace('executionDefaults.', '');
     const value = (executionDefaults as Record<string, unknown>)[prop];
+    if (item.keyPath === 'executionDefaults.customSeed' && executionDefaults.seedMode !== 'custom') return null;
     const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
     const labelNode = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

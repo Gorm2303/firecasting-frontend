@@ -96,11 +96,19 @@ describe('AssumptionsHubPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /tax/i }));
     expect(screen.getByLabelText('Tax regime')).toBeInTheDocument();
+    expect(screen.getByLabelText('Overall tax rule')).toBeInTheDocument();
+    expect(screen.getByLabelText('Simulation tax percentage')).toBeInTheDocument();
     expect(screen.getByLabelText('Stock exemption tax rate (%/year)')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /invest/i }));
-    expect(screen.getByLabelText('Expected return (%/year)')).toBeInTheDocument();
-    expect(screen.getByLabelText('Return model')).toBeInTheDocument();
+    expect(screen.getByLabelText('Return engine')).toBeInTheDocument();
+    expect(screen.getByLabelText('Yearly fee (%/year)')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Expected return (%/year)')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /plan/i }));
+    expect(screen.getByLabelText('Simulation template')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start date (YYYY-MM-DD)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Phase list (JSON)')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /expense/i }));
     expect(screen.getByLabelText('Core expense (DKK/month)')).toBeInTheDocument();
