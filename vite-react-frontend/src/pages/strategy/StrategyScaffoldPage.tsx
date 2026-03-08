@@ -12,19 +12,36 @@ import {
 
 type StrategyField = {
   label: string;
-  kind: 'text' | 'number' | 'select';
   placeholder?: string;
-  options?: string[];
-  initialValue?: string;
+};
+
+type StrategyWidget =
+  | {
+      kind: 'table';
+      title: string;
+      columns: string[];
+      rows: number;
+      subtitle?: string;
+    }
+  | {
+      kind: 'chart';
+      title: string;
+      subtitle?: string;
+    };
+
+export type StrategySection = {
+  title: string;
+  bullets?: string[];
+  fields?: StrategyField[];
+  actions?: string[];
+  widgets?: StrategyWidget[];
 };
 
 type Props = {
   title: string;
   subtitle: string;
   tab: AssumptionsTabId;
-  intentFields: StrategyField[];
-  actionCards: Array<{ title: string; body: string }>;
-  futureSections: string[];
+  sections: StrategySection[];
 };
 
 const cardStyle: React.CSSProperties = {
@@ -63,15 +80,15 @@ const StrategyScaffoldPage: React.FC<Props> = ({
   title,
   subtitle,
   tab,
-  intentFields,
-  actionCards,
-  futureSections,
+  sections,
 }) => {
   const { currentAssumptions } = useAssumptions();
   const [formState, setFormState] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    intentFields.forEach((field) => {
-      init[field.label] = field.initialValue ?? '';
+    sections.forEach((section) => {
+      section.fields?.forEach((field) => {
+        init[`${section.title}:${field.label}`] = '';
+      });
     });
     return init;
   });
@@ -115,47 +132,87 @@ const StrategyScaffoldPage: React.FC<Props> = ({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(420px, 1.05fr)', gap: 16, alignItems: 'start' }}>
-          <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 800 }}>Strategy intent</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>This is the route/page scaffold for the actual user plan. It stays separate from assumptions defaults.</div>
-            </div>
-            {intentFields.map((field) => (
-              <label key={field.label} style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontWeight: 600 }}>{field.label}</span>
-                {field.kind === 'select' ? (
-                  <select
-                    value={formState[field.label] ?? ''}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, [field.label]: event.target.value }))}
-                    style={{ padding: '10px 12px', borderRadius: 10 }}
-                  >
-                    <option value="">Select…</option>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.kind === 'number' ? 'number' : 'text'}
-                    value={formState[field.label] ?? ''}
-                    placeholder={field.placeholder}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, [field.label]: event.target.value }))}
-                    style={{ padding: '10px 12px', borderRadius: 10 }}
-                  />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(360px, 0.85fr)', gap: 16, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {sections.map((section) => (
+              <div key={section.title} style={{ ...cardStyle, display: 'grid', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 800 }}>{section.title}</div>
+                  {section.bullets && section.bullets.length > 0 && (
+                    <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                      {section.bullets.map((bullet) => (
+                        <div key={bullet} style={{ fontSize: 13, opacity: 0.78 }}>• {bullet}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {section.fields && section.fields.length > 0 && (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {section.fields.map((field) => {
+                      const stateKey = `${section.title}:${field.label}`;
+                      return (
+                        <label key={field.label} style={{ display: 'grid', gap: 6 }}>
+                          <span style={{ fontWeight: 600 }}>{field.label}</span>
+                          <input
+                            type="text"
+                            value={formState[stateKey] ?? ''}
+                            placeholder={field.placeholder}
+                            onChange={(event) => setFormState((prev) => ({ ...prev, [stateKey]: event.target.value }))}
+                            style={{ padding: '10px 12px', borderRadius: 10 }}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
                 )}
-              </label>
+
+                {section.actions && section.actions.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {section.actions.map((action) => (
+                      <button key={action} type="button" style={{ padding: '10px 14px', borderRadius: 10 }}>{action}</button>
+                    ))}
+                  </div>
+                )}
+
+                {section.widgets && section.widgets.length > 0 && (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {section.widgets.map((widget) => (
+                      <div key={`${section.title}:${widget.title}`} style={{ border: '1px dashed var(--fc-card-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
+                        <div style={{ fontWeight: 700 }}>{widget.title}</div>
+                        {widget.subtitle && <div style={{ fontSize: 12, opacity: 0.72 }}>{widget.subtitle}</div>}
+                        {widget.kind === 'table' ? (
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${widget.columns.length}, minmax(0, 1fr))`, gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.78 }}>
+                              {widget.columns.map((column) => (
+                                <div key={column}>{column}</div>
+                              ))}
+                            </div>
+                            {Array.from({ length: widget.rows }).map((_, index) => (
+                              <div key={`${widget.title}:${index}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${widget.columns.length}, minmax(0, 1fr))`, gap: 8, fontSize: 12, opacity: 0.55 }}>
+                                {widget.columns.map((column) => (
+                                  <div key={column}>{column} {index + 1}</div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ height: 140, borderRadius: 10, border: '1px dashed var(--fc-card-border)', display: 'grid', placeItems: 'center', opacity: 0.65 }}>
+                            {widget.title}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" style={{ padding: '10px 14px', borderRadius: 10 }}>Save draft scaffold</button>
-              <button type="button" style={{ padding: '10px 14px', borderRadius: 10 }}>Run preview later</button>
-            </div>
           </div>
 
-          <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
+          <div style={{ ...cardStyle, display: 'grid', gap: 12, position: 'sticky', top: 16 }}>
             <div>
               <div style={{ fontWeight: 800 }}>Inherited defaults from assumptions</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>These defaults come from the authority layer today. Strategy-specific config can later override them explicitly.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>These defaults come from the authority layer today. Strategy-specific config can later override them explicitly, but this skeleton keeps them visible for traceability.</div>
             </div>
             <div style={{ display: 'grid', gap: 10 }}>
               {registryItems.map((item) => {
@@ -178,27 +235,6 @@ const StrategyScaffoldPage: React.FC<Props> = ({
                 );
               })}
             </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-          {actionCards.map((card) => (
-            <div key={card.title} style={cardStyle}>
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>{card.title}</div>
-              <div style={{ opacity: 0.8 }}>{card.body}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, marginBottom: 10 }}>Next scaffolding slices</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {futureSections.map((item) => (
-              <div key={item} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ ...chipStyle, minWidth: 28, textAlign: 'center' }}>→</span>
-                <span>{item}</span>
-              </div>
-            ))}
           </div>
         </div>
       </div>
