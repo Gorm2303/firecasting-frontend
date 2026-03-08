@@ -8,12 +8,15 @@ import InfoPage from './pages/InfoPage';
 import LandingPage from './pages/LandingPage';
 import MoneyPerspectivePage from './pages/MoneyPerspectivePage';
 import NoSpendChallengeArenaPage from './pages/NoSpendChallengeArenaPage';
+import PolicyBuilderPage from './pages/PolicyBuilderPage';
 import ProgressTrackerPage from './pages/ProgressTrackerPage';
 import RunDiffPage from './pages/RunDiffPage';
 import SalaryAfterTaxPage from './pages/SalaryAfterTaxPage';
 import SimulationPage from './pages/SimulationPage';
+import DepositStrategyPage from './pages/DepositStrategyPage';
 import TutorialLandingPage from './pages/TutorialLandingPage';
 import TutorialPage from './pages/TutorialPage';
+import WithdrawalStrategyPage from './pages/WithdrawalStrategyPage';
 
 import SkeletonPage, { type SkeletonSection } from './pages/skeleton/SkeletonPage';
 import FeedbackPage from './pages/FeedbackPage';
@@ -1358,6 +1361,9 @@ const AppRoutes: React.FC = () => {
       <Route path="/simulation/tutorial" element={<TutorialLandingPage />} />
       <Route path="/simulation/tutorial/:mode" element={<TutorialPage />} />
       <Route path="/simulation/diff" element={<RunDiffPage />} />
+      <Route path="/policy-builder" element={<PolicyBuilderPage />} />
+      <Route path="/deposit-strategy" element={<DepositStrategyPage />} />
+      <Route path="/withdrawal-strategy" element={<WithdrawalStrategyPage />} />
       <Route path="/explore" element={<ExplorePage />} />
       <Route path="/decision-journal" element={<DecisionJournalPage />} />
       <Route path="/no-spend-challenge-arena" element={<NoSpendChallengeArenaPage />} />

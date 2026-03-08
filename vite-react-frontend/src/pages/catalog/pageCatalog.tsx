@@ -101,15 +101,15 @@ export const PAGE_META: Record<string, PageMeta> = {
     preview: { kind: 'table', label: 'Executive summary' },
   },
   '/policy-builder': {
-    description: 'Define IF/THEN guardrails so behavior is predictable under stress (placeholder).',
+    description: 'Scaffold policy rules around signals, actions, and governance while inheriting defaults from the assumptions authority layer.',
     preview: { kind: 'table', label: 'Policies' },
   },
   '/deposit-strategy': {
-    description: 'Build deposit schedules: presets, escalation, one-offs, routing priorities.',
+    description: 'Scaffold deposit-plan authoring while showing the inherited deposit defaults from the assumptions hub.',
     preview: { kind: 'table', label: 'Deposit preview' },
   },
   '/withdrawal-strategy': {
-    description: 'Withdrawal guardrails, blending income, routing and buffer policy.',
+    description: 'Scaffold withdrawal planning around guardrails, buffers, and income blending with explicit assumptions context.',
     preview: { kind: 'chart', label: 'Withdrawals' },
   },
   '/tutorial': {
