@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import PageLayout from '../../components/PageLayout';
@@ -9,6 +9,18 @@ import {
   listStrategyRegistryItems,
   type AssumptionsTabId,
 } from '../../state/assumptionsRegistry';
+import {
+  applyStrategyProfile,
+  clearStrategyDraft,
+  deleteStrategyProfile,
+  exportStrategyProfilesJson,
+  importStrategyProfilesJson,
+  loadStrategyProfileState,
+  persistStrategyDraft,
+  saveStrategyProfile,
+  saveStrategyProfileState,
+  type StrategyProfileState,
+} from './strategyProfiles';
 
 type StrategyField = {
   label: string;
@@ -60,6 +72,26 @@ const chipStyle: React.CSSProperties = {
   opacity: 0.9,
 };
 
+const buildFieldStateKey = (sectionTitle: string, fieldLabel: string, fieldIndex: number): string =>
+  `${sectionTitle}:${fieldLabel}:${fieldIndex}`;
+
+const buildEmptyStrategyDraft = (fieldKeys: string[]): Record<string, string> => {
+  const out: Record<string, string> = {};
+  fieldKeys.forEach((key) => {
+    out[key] = '';
+  });
+  return out;
+};
+
+const normalizeDraftValues = (value: unknown, fieldKeys: string[]): Record<string, string> => {
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const out: Record<string, string> = {};
+  fieldKeys.forEach((key) => {
+    out[key] = typeof source[key] === 'string' ? String(source[key]) : '';
+  });
+  return out;
+};
+
 const getByPath = (obj: unknown, keyPath: string): unknown => {
   let cur: any = obj;
   for (const segment of keyPath.split('.')) {
@@ -83,21 +115,46 @@ const StrategyScaffoldPage: React.FC<Props> = ({
   sections,
 }) => {
   const { currentAssumptions } = useAssumptions();
-  const [formState, setFormState] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
+  const fieldKeys = useMemo(() => {
+    const keys: string[] = [];
     sections.forEach((section) => {
-      section.fields?.forEach((field) => {
-        init[`${section.title}:${field.label}`] = '';
+      section.fields?.forEach((field, index) => {
+        keys.push(buildFieldStateKey(section.title, field.label, index));
       });
     });
-    return init;
-  });
+    return keys;
+  }, [sections]);
+  const emptyDraft = useMemo(() => buildEmptyStrategyDraft(fieldKeys), [fieldKeys]);
+  const [profileState, setProfileState] = useState<StrategyProfileState<Record<string, string>>>(() =>
+    loadStrategyProfileState(tab, emptyDraft, (value) => normalizeDraftValues(value, fieldKeys))
+  );
+  const [formState, setFormState] = useState<Record<string, string>>(() => profileState.draft);
+  const [selectedProfileId, setSelectedProfileId] = useState(profileState.activeProfileId ?? '');
+  const [profileName, setProfileName] = useState(
+    () => profileState.profiles.find((profile) => profile.id === profileState.activeProfileId)?.name ?? ''
+  );
+  const [importStatus, setImportStatus] = useState('');
+
+  useEffect(() => {
+    const next = loadStrategyProfileState(tab, emptyDraft, (value) => normalizeDraftValues(value, fieldKeys));
+    setProfileState(next);
+    setFormState(next.draft);
+    setSelectedProfileId(next.activeProfileId ?? '');
+    setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? '');
+  }, [emptyDraft, fieldKeys, tab]);
 
   const registryItems = useMemo(() => listStrategyRegistryItems(tab), [tab]);
   const usedByCount = useMemo(
     () => new Set(registryItems.flatMap((item) => filterUsedByForAssumptionsHub(item.usedBy))).size,
     [registryItems]
   );
+  const isDirty = JSON.stringify(formState) !== JSON.stringify(profileState.draft);
+  const lastSavedLabel = profileState.draftSavedAt ? new Date(profileState.draftSavedAt).toLocaleString() : 'Not saved yet';
+
+  const persistState = (next: StrategyProfileState<Record<string, string>>) => {
+    setProfileState(next);
+    saveStrategyProfileState(tab, next);
+  };
 
   return (
     <PageLayout variant="wide">
@@ -107,13 +164,158 @@ const StrategyScaffoldPage: React.FC<Props> = ({
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <span style={chipStyle}>Slice E scaffold</span>
               <span style={chipStyle}>Defaults tab: {ASSUMPTIONS_TAB_LABELS[tab]}</span>
+              <span style={chipStyle}>{isDirty ? 'Unsaved draft' : 'Saved draft'}</span>
+              <span style={chipStyle}>Profiles: {profileState.profiles.length}</span>
             </div>
             <h1 style={{ margin: 0 }}>{title}</h1>
             <div style={{ opacity: 0.8, maxWidth: 900 }}>{subtitle}</div>
+            <div style={{ fontSize: 12, opacity: 0.72 }}>Local draft persistence: {lastSavedLabel}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                <span>Profile</span>
+                <select
+                  aria-label="Strategy profile"
+                  value={selectedProfileId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setSelectedProfileId(nextId);
+                    setProfileName(profileState.profiles.find((profile) => profile.id === nextId)?.name ?? '');
+                  }}
+                  style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }}
+                >
+                  <option value="">Scratch draft</option>
+                  {profileState.profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                <span>Profile name</span>
+                <input
+                  aria-label="Profile name"
+                  type="text"
+                  value={profileName}
+                  onChange={(event) => setProfileName(event.target.value)}
+                  placeholder="e.g. Steady monthly"
+                  style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }}
+                />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => {
+                const next = persistStrategyDraft(profileState, { ...formState });
+                persistState(next);
+              }}
+              style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+            >
+              Save draft
+            </button>
+            <button
+              type="button"
+              disabled={!profileName.trim()}
+              onClick={() => {
+                const next = saveStrategyProfile(profileState, {
+                  id: selectedProfileId || null,
+                  name: profileName,
+                  data: { ...formState },
+                });
+                persistState(next);
+                setSelectedProfileId(next.activeProfileId ?? '');
+                setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? profileName);
+              }}
+              style={{ ...chipStyle, cursor: profileName.trim() ? 'pointer' : 'default', background: 'transparent' }}
+            >
+              {selectedProfileId ? 'Update profile' : 'Save as profile'}
+            </button>
+            <button
+              type="button"
+              disabled={!selectedProfileId}
+              onClick={() => {
+                if (!selectedProfileId) return;
+                const next = applyStrategyProfile(profileState, selectedProfileId);
+                persistState(next);
+                setFormState(next.draft);
+                setProfileName(next.profiles.find((profile) => profile.id === selectedProfileId)?.name ?? '');
+              }}
+              style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}
+            >
+              Load selected
+            </button>
+            <button
+              type="button"
+              disabled={!selectedProfileId}
+              onClick={() => {
+                if (!selectedProfileId) return;
+                const next = deleteStrategyProfile(profileState, selectedProfileId);
+                persistState(next);
+                setSelectedProfileId(next.activeProfileId ?? '');
+                setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? '');
+              }}
+              style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}
+            >
+              Delete profile
+            </button>
+            <button
+              type="button"
+              onClick={() => exportStrategyProfilesJson(tab, { ...profileState, draft: formState })}
+              style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+            >
+              Export profiles
+            </button>
+            <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <input
+                type="file"
+                accept="application/json"
+                style={{ display: 'none' }}
+                onChange={(event) => {
+                  const file = event.target.files && event.target.files.length ? event.target.files[0] : null;
+                  void importStrategyProfilesJson(file, emptyDraft, (value) => normalizeDraftValues(value, fieldKeys)).then((next) => {
+                    if (!next) {
+                      setImportStatus('Import failed. The file could not be parsed as valid strategy profile JSON.');
+                      return;
+                    }
+                    persistState(next);
+                    setFormState(next.draft);
+                    setSelectedProfileId(next.activeProfileId ?? '');
+                    setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? '');
+                    setImportStatus('Strategy profiles imported into the current page.');
+                  }).catch(() => {
+                    setImportStatus('Import failed. The file could not be parsed as valid strategy profile JSON.');
+                  });
+                  event.target.value = '';
+                }}
+              />
+              <span style={{ ...chipStyle, cursor: 'pointer' }}>Import profiles</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setFormState(profileState.draft)}
+              disabled={!isDirty}
+              style={{ ...chipStyle, cursor: isDirty ? 'pointer' : 'default', background: 'transparent' }}
+            >
+              Reset to saved
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next = clearStrategyDraft(profileState, emptyDraft);
+                persistState(next);
+                setFormState(next.draft);
+                setSelectedProfileId('');
+                setProfileName('');
+              }}
+              style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+            >
+              Clear draft
+            </button>
             <Link to="/assumptions" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Open Assumptions Hub</Link>
             <Link to="/simulation" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Back to simulator</Link>
+            </div>
+            {importStatus && <div style={{ fontSize: 12, opacity: 0.78 }}>{importStatus}</div>}
           </div>
         </div>
 
@@ -149,13 +351,14 @@ const StrategyScaffoldPage: React.FC<Props> = ({
 
                 {section.fields && section.fields.length > 0 && (
                   <div style={{ display: 'grid', gap: 10 }}>
-                    {section.fields.map((field) => {
-                      const stateKey = `${section.title}:${field.label}`;
+                      {section.fields.map((field, index) => {
+                        const stateKey = buildFieldStateKey(section.title, field.label, index);
                       return (
-                        <label key={field.label} style={{ display: 'grid', gap: 6 }}>
+                        <label key={stateKey} style={{ display: 'grid', gap: 6 }}>
                           <span style={{ fontWeight: 600 }}>{field.label}</span>
                           <input
                             type="text"
+                            aria-label={`${section.title}: ${field.label}`}
                             value={formState[stateKey] ?? ''}
                             placeholder={field.placeholder}
                             onChange={(event) => setFormState((prev) => ({ ...prev, [stateKey]: event.target.value }))}
