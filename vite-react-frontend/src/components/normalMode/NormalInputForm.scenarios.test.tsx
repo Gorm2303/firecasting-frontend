@@ -46,6 +46,8 @@ import { startAdvancedSimulation } from '../../api/simulation';
 import { normalToAdvancedWithDefaults } from '../../models/advancedSimulation';
 import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
 
+const WITHDRAWAL_STORAGE_KEY = 'firecasting:strategyProfiles:withdrawalStrategy:v1';
+
 describe('NormalInputForm scenarios', () => {
   it('saves and reloads a scenario with identical inputs', async () => {
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('My scenario');
@@ -293,6 +295,80 @@ describe('NormalInputForm scenarios', () => {
     const raw = window.localStorage.getItem('firecasting:savedScenarios:v2');
     const scenarios = JSON.parse(raw as string) as Array<{ runId?: string | null }>;
     expect(scenarios[0]?.runId).toBe('test-sim-id');
+  });
+
+  it('persists and restores attached strategy profiles with saved scenarios', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    window.localStorage.clear();
+    saveScenario(
+      'Scenario With Strategy',
+      normalToAdvancedWithDefaults({
+        startDate: { date: '2033-02-03' },
+        overallTaxRule: 'NOTIONAL',
+        taxPercentage: 25,
+        phases: [{ phaseType: 'PASSIVE', durationInMonths: 12, taxRules: [] }],
+      } as any, {
+        inflationPct: 2,
+        yearlyFeePct: 0.5,
+        taxExemptionDefaults: {
+          exemptionCardLimit: 51600,
+          exemptionCardYearlyIncrease: 1000,
+          stockExemptionTaxRate: 27,
+          stockExemptionLimit: 67500,
+          stockExemptionYearlyIncrease: 1000,
+        },
+      }) as any,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        withdrawalStrategy: {
+          id: 'withdrawal-profile-7',
+          name: 'Guardrail bridge',
+          savedAt: '2026-03-08T00:00:00.000Z',
+          data: {
+            title: 'Guardrail bridge',
+            baseMonthlySpending: 27500,
+          },
+        },
+      }
+    );
+
+    const ref = React.createRef<NormalInputFormHandle>();
+    render(
+      <ExecutionDefaultsProvider>
+        <SimulationForm ref={ref} />
+      </ExecutionDefaultsProvider>
+    );
+
+    act(() => {
+      ref.current?.openSavedScenarios();
+    });
+
+    window.localStorage.removeItem(WITHDRAWAL_STORAGE_KEY);
+
+    const dialog = screen.getByRole('dialog', { name: /Saved scenarios/i });
+    const scenarioSelect = within(dialog).getByRole('combobox', { name: /^Scenario$/i }) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(scenarioSelect.querySelectorAll('option').length).toBeGreaterThan(1);
+    });
+
+    fireEvent.change(scenarioSelect, { target: { value: scenarioSelect.querySelectorAll('option')[1].getAttribute('value') } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Load scenario/i }));
+
+    await waitFor(() => {
+      const restored = JSON.parse(window.localStorage.getItem(WITHDRAWAL_STORAGE_KEY) ?? '{}') as {
+        activeProfileId?: string;
+        draft?: { title?: string; baseMonthlySpending?: number };
+      };
+      expect(restored.activeProfileId).toBe('withdrawal-profile-7');
+      expect(restored.draft?.title).toBe('Guardrail bridge');
+      expect(restored.draft?.baseMonthlySpending).toBe(27500);
+    });
+
+    confirmSpy.mockRestore();
   });
 
   it('marks saved scenarios that carry assumptions overrides', async () => {

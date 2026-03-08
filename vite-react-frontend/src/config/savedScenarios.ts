@@ -9,6 +9,7 @@ import {
   type Assumptions,
   type AssumptionsOverride,
 } from '../state/assumptions';
+import type { StrategyProfileAttachments } from '../pages/strategy/strategyProfiles';
 import { normalizeTaxRules } from '../utils/taxRules';
 
 function isFiniteNumber(v: unknown): v is number {
@@ -66,6 +67,7 @@ export type SavedScenario = {
    * Used to model scenario-specific world-model tweaks without mutating the global baseline.
    */
   assumptionsOverride?: AssumptionsOverride | null;
+  strategyProfileAttachments?: StrategyProfileAttachments | null;
   /** Canonical scenario footprint used for reruns/diff and to match backend persistence. */
   advancedRequest: AdvancedSimulationRequest;
   /** Backward-compatible subset for older UI flows / share links. */
@@ -199,6 +201,7 @@ export function listSavedScenarios(): SavedScenario[] {
       return {
         ...s,
         assumptionsOverride: normalizedOverride,
+        strategyProfileAttachments: (s.strategyProfileAttachments ?? null) as StrategyProfileAttachments | null,
         advancedRequest: normalizedAdvanced,
         request: normalizedRequest,
       };
@@ -254,7 +257,8 @@ export function saveScenario(
   id?: string,
   runId?: string | null,
   lastRunMeta?: SavedScenario['lastRunMeta'],
-  assumptionsOverride?: SavedScenario['assumptionsOverride']
+  assumptionsOverride?: SavedScenario['assumptionsOverride'],
+  strategyProfileAttachments?: SavedScenario['strategyProfileAttachments']
 ): SavedScenario {
   if (typeof window === 'undefined') throw new Error('Cannot save scenario outside browser');
 
@@ -272,6 +276,7 @@ export function saveScenario(
     name: trimmed,
     savedAt: now,
     ...(assumptionsOverride !== undefined ? { assumptionsOverride: normalizedOverride } : {}),
+    ...(strategyProfileAttachments !== undefined ? { strategyProfileAttachments: strategyProfileAttachments ?? null } : {}),
     advancedRequest: normalizedAdvanced,
     request: advancedToNormalRequest(normalizedAdvanced),
     runId: runId ?? undefined,

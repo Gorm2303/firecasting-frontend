@@ -72,15 +72,55 @@ describe('shareScenarioLink', () => {
       },
     });
 
-    expect(decodeScenarioFromShareParam(param)).toEqual(request);
+    const normalizedRequest = decodeScenarioFromShareParam(param);
+    expect(normalizedRequest).toEqual(request);
     expect(decodeSharedScenarioFromShareParam(param)).toEqual({
-      request,
+      request: normalizedRequest,
       assumptionsOverride: {
         inflationPct: 3,
         taxExemptionDefaults: {
           stockExemptionLimit: 70000,
         },
       },
+      strategyProfileAttachments: null,
+    });
+  });
+
+  it('round-trips strategy profile attachments when present', () => {
+    const request = {
+      startDate: { date: '2040-01-01' },
+      overallTaxRule: 'NOTIONAL' as const,
+      taxPercentage: 30,
+      phases: [
+        {
+          ...createDefaultPhase('DEPOSIT'),
+          durationInMonths: 12,
+          initialDeposit: 100,
+          monthlyDeposit: 10,
+          yearlyIncreaseInPercentage: 1,
+          taxRules: ['exemptioncard'],
+        },
+      ],
+    };
+
+    const attachments = {
+      withdrawalStrategy: {
+        id: 'withdrawal-profile-1',
+        name: 'Guardrail bridge',
+        savedAt: '2026-03-08T00:00:00.000Z',
+        data: {
+          title: 'Guardrail bridge',
+          baseMonthlySpending: 28000,
+        },
+      },
+    };
+
+    const param = encodeScenarioToShareParam(request, undefined, attachments);
+
+    expect(decodeSharedScenarioFromShareParam(param)).toEqual({
+      request,
+      assumptionsOverride: null,
+      strategyProfileAttachments: attachments,
     });
   });
 

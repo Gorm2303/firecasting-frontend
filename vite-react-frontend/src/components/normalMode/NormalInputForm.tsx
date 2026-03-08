@@ -32,6 +32,7 @@ import InfoTooltip from '../InfoTooltip';
 import { applyAssumptionsOverride, normalizeAssumptionsOverride, useAssumptions, type Assumptions, type AssumptionsOverride } from '../../state/assumptions';
 import { getDefaultExecutionDefaults, useExecutionDefaults } from '../../state/executionDefaults';
 import { appendSimulationSnapshot } from '../../state/simulationSnapshots';
+import { applyStrategyProfileAttachments, captureActiveStrategyProfileAttachments } from '../../pages/strategy/strategyProfiles';
 import ScenarioOverrideEditor from './ScenarioOverrideEditor';
 
 const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
@@ -2020,14 +2021,23 @@ ref
         existing.id,
         resolvedRunId ?? (keepExistingRunId ? existing.runId : undefined),
         metaToStore ?? existing.lastRunMeta,
-        existing.id === selectedScenarioId ? scenarioOverrideDraft ?? existing.assumptionsOverride : existing.assumptionsOverride
+        existing.id === selectedScenarioId ? scenarioOverrideDraft ?? existing.assumptionsOverride : existing.assumptionsOverride,
+        captureActiveStrategyProfileAttachments()
       );
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
       return;
     }
 
-    const saved = saveScenario(name, requestToSave, undefined, resolvedRunId ?? undefined, metaToStore);
+    const saved = saveScenario(
+      name,
+      requestToSave,
+      undefined,
+      resolvedRunId ?? undefined,
+      metaToStore,
+      undefined,
+      captureActiveStrategyProfileAttachments()
+    );
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
   }, [currentAdvancedRequest, refreshSavedScenarios, lastCompletedRun, scenarioOverrideDraft, selectedScenarioId]);
@@ -2078,6 +2088,7 @@ ref
       if (!ok) return;
     }
     const reqForForm = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
+    applyStrategyProfileAttachments(scenario.strategyProfileAttachments ?? null);
     applyRequestToForm(reqForForm);
     setSelectedScenarioId(scenario.id);
 
@@ -2098,7 +2109,8 @@ ref
       scenarioA.id,
       scenarioA.runId ?? undefined,
       scenarioA.lastRunMeta,
-      scenarioOverrideDraft
+      scenarioOverrideDraft,
+      scenarioA.strategyProfileAttachments ?? captureActiveStrategyProfileAttachments()
     );
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
@@ -2114,14 +2126,18 @@ ref
     if (!scenario) return;
 
     const ok = window.confirm(
-      scenarioHasAssumptionsOverride(scenario)
-        ? 'This share link encodes your full scenario inputs and scenario-specific assumption overrides in the URL. Anyone with the link can view/decode them. Continue?'
-        : 'This share link encodes your full scenario inputs in the URL. Global assumptions still come from the receiver unless scenario overrides are included. Continue?'
+      scenarioHasAssumptionsOverride(scenario) || Boolean(scenario.strategyProfileAttachments && Object.keys(scenario.strategyProfileAttachments).length > 0)
+        ? 'This share link encodes your full scenario inputs plus any scenario-specific assumption overrides and attached strategy presets in the URL. Anyone with the link can view/decode them. Continue?'
+        : 'This share link encodes your full scenario inputs in the URL. Global assumptions still come from the receiver unless overrides or attached strategy presets are included. Continue?'
     );
     if (!ok) return;
 
     const reqForShare = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
-    const param = encodeScenarioToShareParam(reqForShare, scenario.assumptionsOverride ?? null);
+    const param = encodeScenarioToShareParam(
+      reqForShare,
+      scenario.assumptionsOverride ?? null,
+      scenario.strategyProfileAttachments ?? null
+    );
     const url = new URL(window.location.href);
     url.pathname = '/simulation';
     url.searchParams.set('scenario', param);
@@ -2677,6 +2693,7 @@ ref
       }
     }
 
+    applyStrategyProfileAttachments(decoded.strategyProfileAttachments ?? null);
     applyRequestToForm(decoded.request);
     setSelectedScenarioId('');
     const assumptionsUsed = applyAssumptionsOverride(currentAssumptions, decoded.assumptionsOverride ?? null);

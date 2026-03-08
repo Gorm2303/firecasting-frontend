@@ -6,6 +6,7 @@ import {
   normalizeAssumptionsOverride,
   type AssumptionsOverride,
 } from '../state/assumptions';
+import type { StrategyProfileAttachments } from '../pages/strategy/strategyProfiles';
 
 type PhaseType = PhaseRequest['phaseType'];
 type TaxRule = NonNullable<PhaseRequest['taxRules']>[number];
@@ -68,9 +69,10 @@ const fromBase64Url = (b64url: string): string => {
 export type SharedScenarioPayload = {
   request: SimulationRequest;
   assumptionsOverride?: AssumptionsOverride | null;
+  strategyProfileAttachments?: StrategyProfileAttachments | null;
 };
 
-const isSharedScenarioPayload = (decoded: unknown): decoded is { request: unknown; assumptionsOverride?: unknown } => {
+const isSharedScenarioPayload = (decoded: unknown): decoded is { request: unknown; assumptionsOverride?: unknown; strategyProfileAttachments?: unknown } => {
   return isRecord(decoded) && 'request' in decoded;
 };
 
@@ -81,27 +83,31 @@ const normalizeDecodedSharedScenario = (decoded: unknown): SharedScenarioPayload
     return {
       request,
       assumptionsOverride: normalizeAssumptionsOverride(decoded.assumptionsOverride as AssumptionsOverride | null | undefined),
+      strategyProfileAttachments: (decoded.strategyProfileAttachments ?? null) as StrategyProfileAttachments | null,
     };
   }
 
   const request = normalizeDecodedScenario(decoded);
   if (!request) return null;
-  return { request, assumptionsOverride: null };
+  return { request, assumptionsOverride: null, strategyProfileAttachments: null };
 };
 
 export function encodeScenarioToShareParam(
   request: SimulationRequest,
-  assumptionsOverride?: AssumptionsOverride | null
+  assumptionsOverride?: AssumptionsOverride | null,
+  strategyProfileAttachments?: StrategyProfileAttachments | null
 ): string {
   // Normalize before encoding so the share format stays stable.
   const normalizedRequest: SimulationRequest = {
     ...request,
     phases: (request.phases ?? []).map((p) => ({ ...p, taxRules: toTaxRules((p as any).taxRules) })),
   };
-  const payload = hasMeaningfulAssumptionsOverride(assumptionsOverride)
+  const hasStrategyAttachments = Boolean(strategyProfileAttachments && Object.keys(strategyProfileAttachments).length > 0);
+  const payload = hasMeaningfulAssumptionsOverride(assumptionsOverride) || hasStrategyAttachments
     ? {
         request: normalizedRequest,
         assumptionsOverride: normalizeAssumptionsOverride(assumptionsOverride),
+        ...(hasStrategyAttachments ? { strategyProfileAttachments } : {}),
       }
     : normalizedRequest;
   const json = JSON.stringify(payload);
