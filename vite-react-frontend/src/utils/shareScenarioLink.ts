@@ -66,6 +66,12 @@ const fromBase64Url = (b64url: string): string => {
   return padded + '='.repeat(padLength);
 };
 
+const stripUndefinedPhaseFields = (value: PhaseRequest): PhaseRequest => {
+  return Object.fromEntries(
+    Object.entries(value as unknown as Record<string, unknown>).filter(([, entryValue]) => entryValue !== undefined)
+  ) as unknown as PhaseRequest;
+};
+
 export type SharedScenarioPayload = {
   request: SimulationRequest;
   assumptionsOverride?: AssumptionsOverride | null;
@@ -169,7 +175,7 @@ export function normalizeDecodedScenario(decoded: unknown): SimulationRequest | 
       if (!isRecord(p)) return null;
       if (!isPhaseType(p.phaseType)) return null;
 
-      return normalizePhase({
+      const normalizedPhase = normalizePhase({
         phaseType: p.phaseType,
         durationInMonths: toNumberOrUndefined(p.durationInMonths),
         initialDeposit: toNumberOrUndefined(p.initialDeposit),
@@ -181,6 +187,7 @@ export function normalizeDecodedScenario(decoded: unknown): SimulationRequest | 
         upperVariationPercentage: toNumberOrUndefined(p.upperVariationPercentage),
         taxRules: toTaxRules(p.taxRules),
       });
+      return stripUndefinedPhaseFields(normalizedPhase);
     })
     .filter((p): p is PhaseRequest => p !== null);
 
