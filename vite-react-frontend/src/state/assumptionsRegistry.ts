@@ -4,6 +4,7 @@ export type AssumptionsTabId =
   | 'worldModel'
   | 'passiveStrategy'
   | 'execution'
+  | 'fireSimulator'
   | 'simulatorTax'
   | 'salaryTaxator'
   | 'moneyPerspective'
@@ -17,6 +18,7 @@ export type AssumptionsTabId =
 export type AssumptionUnitId =
   | 'string'
   | 'boolean'
+  | 'decimal'
   | 'pct'
   | 'dkk'
   | 'dkkPerMonth'
@@ -25,7 +27,8 @@ export type AssumptionUnitId =
   | 'months'
   | 'years'
   | 'count'
-  | 'enum';
+  | 'enum'
+  | 'json';
 
 export type AssumptionRegistryItem = {
   keyPath: string;
@@ -43,6 +46,7 @@ export const ASSUMPTIONS_TAB_LABELS: Record<AssumptionsTabId, string> = {
   worldModel: 'World Model',
   passiveStrategy: 'Passive Strategy',
   execution: 'Execution',
+  fireSimulator: 'FIRE Simulator',
   simulatorTax: 'Simulator Tax',
   salaryTaxator: 'Salary Taxator',
   moneyPerspective: 'Money Perspective',
@@ -59,6 +63,11 @@ const REGISTRY_ENUM_OPTIONS: Record<string, string[]> = {
   'incomeSetupDefaults.referenceSalaryPeriod': ['hourly', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'],
   'incomeSetupDefaults.bonusFrequency': ['none', 'yearly', 'monthly'],
   'incomeSetupDefaults.taxRegime': ['DK', 'none'],
+
+  'fireSimulatorDefaults.overallTaxRule': ['CAPITAL', 'NOTIONAL'],
+  'fireSimulatorDefaults.templateId': ['custom', 'starter', 'aktiesparekonto', 'aktiedepot', 'pension', 'childSavings'],
+  'fireSimulatorDefaults.returnEngine.returnType': ['dataDrivenReturn', 'distributionReturn', 'simpleReturn'],
+  'fireSimulatorDefaults.returnEngine.distributionType': ['normal', 'brownianMotion', 'studentT', 'regimeBased'],
 
   'depositStrategyDefaults.depositTiming': ['startOfMonth', 'endOfMonth'],
   'depositStrategyDefaults.contributionCadence': ['monthly', 'yearly'],
@@ -107,6 +116,7 @@ export const getRegistryEnumOptions = (keyPath: string): string[] | null => {
 
 export const isNumericRegistryUnit = (unit: AssumptionUnitId): boolean => {
   return (
+    unit === 'decimal' ||
     unit === 'pct' ||
     unit === 'dkk' ||
     unit === 'dkkPerMonth' ||

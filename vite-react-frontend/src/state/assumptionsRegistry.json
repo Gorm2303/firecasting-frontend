@@ -14,7 +14,7 @@
     "label": "Inflation (%/year)",
     "unit": "pct",
     "default": 2,
-    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationInvest", "MoneyPerspective", "Explore", "Tutorial"],
     "overrideableByStrategy": false
   },
   {
@@ -23,7 +23,7 @@
     "label": "Yearly fee (%/year)",
     "unit": "pct",
     "default": 0.5,
-    "usedBy": ["AssumptionsHub", "Simulation", "MoneyPerspective", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationInvest", "MoneyPerspective", "Tutorial"],
     "overrideableByStrategy": false
   },
   {
@@ -51,7 +51,7 @@
     "label": "Paths (runs)",
     "unit": "count",
     "default": 10000,
-    "usedBy": ["AssumptionsHub", "Simulation"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationEngine"],
     "overrideableByStrategy": true
   },
   {
@@ -60,7 +60,7 @@
     "label": "Batch size",
     "unit": "count",
     "default": 10000,
-    "usedBy": ["AssumptionsHub", "Simulation"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationEngine"],
     "overrideableByStrategy": true
   },
   {
@@ -69,7 +69,201 @@
     "label": "Master seed mode",
     "unit": "enum",
     "default": "default",
-    "usedBy": ["AssumptionsHub", "Simulation"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationEngine"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "executionDefaults.customSeed",
+    "tab": "execution",
+    "label": "Custom master seed",
+    "unit": "count",
+    "default": 1,
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "SimulationEngine"],
+    "overrideableByStrategy": true
+  },
+
+  {
+    "keyPath": "fireSimulatorDefaults.startDate",
+    "tab": "fireSimulator",
+    "label": "Start date (YYYY-MM-DD)",
+    "unit": "string",
+    "default": "2026-01-01",
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationPlan"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.templateId",
+    "tab": "fireSimulator",
+    "label": "Simulation template",
+    "unit": "enum",
+    "default": "custom",
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationPlan"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.overallTaxRule",
+    "tab": "fireSimulator",
+    "label": "Overall tax rule",
+    "unit": "enum",
+    "default": "CAPITAL",
+    "usedBy": ["AssumptionsHub", "FireSimulator", "TaxOptimizer"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.taxPercentage",
+    "tab": "fireSimulator",
+    "label": "Simulation tax percentage",
+    "unit": "pct",
+    "default": 42,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "TaxOptimizer"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.returnType",
+    "tab": "fireSimulator",
+    "label": "Return engine",
+    "unit": "enum",
+    "default": "dataDrivenReturn",
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.simpleAveragePercentage",
+    "tab": "fireSimulator",
+    "label": "Return % / year",
+    "unit": "pct",
+    "default": 7,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.distributionType",
+    "tab": "fireSimulator",
+    "label": "Distribution model",
+    "unit": "enum",
+    "default": "normal",
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.normalMean",
+    "tab": "fireSimulator",
+    "label": "Normal mean",
+    "unit": "pct",
+    "default": 0.07,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.normalStdDev",
+    "tab": "fireSimulator",
+    "label": "Normal std dev",
+    "unit": "pct",
+    "default": 0.2,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.brownianDrift",
+    "tab": "fireSimulator",
+    "label": "Brownian drift",
+    "unit": "pct",
+    "default": 0.07,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.brownianVolatility",
+    "tab": "fireSimulator",
+    "label": "Brownian volatility",
+    "unit": "pct",
+    "default": 0.2,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.studentMu",
+    "tab": "fireSimulator",
+    "label": "Student-t mu",
+    "unit": "pct",
+    "default": 0.042,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.studentSigma",
+    "tab": "fireSimulator",
+    "label": "Student-t sigma",
+    "unit": "pct",
+    "default": 0.609,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.studentNu",
+    "tab": "fireSimulator",
+    "label": "Student-t nu",
+    "unit": "decimal",
+    "default": 3.6,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.regimeTickMonths",
+    "tab": "fireSimulator",
+    "label": "Regime tick months",
+    "unit": "count",
+    "default": 1,
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.returnEngine.regimes",
+    "tab": "fireSimulator",
+    "label": "Regimes (JSON)",
+    "unit": "json",
+    "default": [
+      {
+        "distributionType": "normal",
+        "expectedDurationMonths": 12,
+        "switchWeights": { "toRegime0": 0, "toRegime1": 1, "toRegime2": 1 },
+        "normalMean": 0.07,
+        "normalStdDev": 0.2,
+        "studentMu": 0.042,
+        "studentSigma": 0.609,
+        "studentNu": 3.6
+      },
+      {
+        "distributionType": "normal",
+        "expectedDurationMonths": 12,
+        "switchWeights": { "toRegime0": 1, "toRegime1": 0, "toRegime2": 1 },
+        "normalMean": 0.07,
+        "normalStdDev": 0.2,
+        "studentMu": 0.042,
+        "studentSigma": 0.609,
+        "studentNu": 3.6
+      },
+      {
+        "distributionType": "normal",
+        "expectedDurationMonths": 12,
+        "switchWeights": { "toRegime0": 1, "toRegime1": 1, "toRegime2": 0 },
+        "normalMean": 0.07,
+        "normalStdDev": 0.2,
+        "studentMu": 0.042,
+        "studentSigma": 0.609,
+        "studentNu": 3.6
+      }
+    ],
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationInvest"],
+    "overrideableByStrategy": true
+  },
+  {
+    "keyPath": "fireSimulatorDefaults.phases",
+    "tab": "fireSimulator",
+    "label": "Phase list (JSON)",
+    "unit": "json",
+    "default": [],
+    "usedBy": ["AssumptionsHub", "FireSimulator", "SimulationPlan"],
     "overrideableByStrategy": true
   },
 
@@ -261,7 +455,7 @@
     "label": "Rebalancing convention",
     "unit": "enum",
     "default": "none",
-    "usedBy": ["AssumptionsHub"],
+    "usedBy": ["AssumptionsHub", "SimulationInvest"],
     "overrideableByStrategy": true
   },
 
@@ -271,7 +465,7 @@
     "label": "Exemption card limit (DKK/year)",
     "unit": "dkkPerYear",
     "default": 51600,
-    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "TaxOptimizer", "Explore", "Tutorial"],
     "overrideableByStrategy": true
   },
   {
@@ -280,7 +474,7 @@
     "label": "Exemption card yearly increase (DKK/year)",
     "unit": "dkkPerYear",
     "default": 1000,
-    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "TaxOptimizer", "Explore", "Tutorial"],
     "overrideableByStrategy": true
   },
   {
@@ -289,7 +483,7 @@
     "label": "Stock exemption tax rate (%/year)",
     "unit": "pct",
     "default": 27,
-    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "TaxOptimizer", "Explore", "Tutorial"],
     "overrideableByStrategy": true
   },
   {
@@ -298,7 +492,7 @@
     "label": "Stock exemption limit (DKK/year)",
     "unit": "dkkPerYear",
     "default": 67500,
-    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "TaxOptimizer", "Explore", "Tutorial"],
     "overrideableByStrategy": true
   },
   {
@@ -307,7 +501,7 @@
     "label": "Stock exemption yearly increase (DKK/year)",
     "unit": "dkkPerYear",
     "default": 1000,
-    "usedBy": ["AssumptionsHub", "Simulation", "Explore", "Tutorial"],
+    "usedBy": ["AssumptionsHub", "Simulation", "FireSimulator", "TaxOptimizer", "Explore", "Tutorial"],
     "overrideableByStrategy": true
   },
 
