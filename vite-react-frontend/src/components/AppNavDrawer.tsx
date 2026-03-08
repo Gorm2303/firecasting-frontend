@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Salary Taxator', to: '/salary-after-tax', isActive: (p) => p === '/salary-after-tax' },
       { label: 'Money Perspectivator', to: '/money-perspective', isActive: (p) => p === '/money-perspective' },
+      { label: 'Tax Optimizer', to: '/simulation-start-tax', isActive: (p) => p === '/simulation-start-tax' || p === '/simulation-tax-exemptions' },
       { label: 'Time Accounting Dashboard', to: '/time-accounting', isActive: (p) => p === '/time-accounting' },
       {
         label: 'Fixed vs Flexible Spending Analyzer',
@@ -63,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     to: '/category/plan',
     items: [
       { label: 'Scenario Library', to: '/scenario-library', isActive: (p) => p === '/scenario-library' },
+      { label: 'Simulation Plan', to: '/simulation-plan', isActive: (p) => p === '/simulation-plan' },
       { label: 'FIRE Milestones', to: '/fire-milestones', isActive: (p) => p === '/fire-milestones' },
       { label: 'Confidence Funnel', to: '/confidence-funnel', isActive: (p) => p === '/confidence-funnel' },
       { label: 'Goal Planner', to: '/goal-planner', isActive: (p) => p === '/goal-planner' },
@@ -76,6 +78,8 @@ export const NAV_GROUPS: NavGroup[] = [
     to: '/category/model-build',
     items: [
       { label: 'Policy Builder', to: '/policy-builder', isActive: (p) => p === '/policy-builder' },
+      { label: 'Simulation Invest', to: '/simulation-invest', isActive: (p) => p === '/simulation-invest' },
+      { label: 'Simulation Engine', to: '/simulation-engine', isActive: (p) => p === '/simulation-engine' },
       { label: 'Deposit Strategy', to: '/deposit-strategy', isActive: (p) => p === '/deposit-strategy' },
       { label: 'Withdrawal Strategy', to: '/withdrawal-strategy', isActive: (p) => p === '/withdrawal-strategy' },
     ],
@@ -90,7 +94,8 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/tutorial',
         isActive: (p) => p.startsWith('/tutorial') || p.startsWith('/simulation/tutorial'),
       },
-      { label: 'FIRE Simulator', to: '/simulation', isActive: (p) => p === '/simulation' },
+      { label: 'FIRE Simulator', to: '/fire-simulator', isActive: (p) => p === '/fire-simulator' },
+      { label: 'Legacy Simulator', to: '/simulation', isActive: (p) => p === '/simulation' },
       {
         label: 'Comparator',
         to: '/diff-scenarios',
@@ -147,7 +152,13 @@ const LIVE_PATHS = new Set<string>([
   '/diff-scenarios',
   '/salary-after-tax',
   '/money-perspective',
+  '/simulation-start-tax',
+  '/simulation-tax-exemptions',
   '/simulation',
+  '/fire-simulator',
+  '/simulation-invest',
+  '/simulation-engine',
+  '/simulation-plan',
   '/explore',
   '/decision-journal',
   '/no-spend-challenge-arena',

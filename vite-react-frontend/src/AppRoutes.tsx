@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import ExplorePage from './pages/ExplorePage';
 import DecisionJournalPage from './pages/DecisionJournalPage';
 import CategoryLandingPage from './pages/CategoryLandingPage';
+import FireSimulatorPage from './pages/FireSimulatorPage';
 import InfoPage from './pages/InfoPage';
 import LandingPage from './pages/LandingPage';
 import MoneyPerspectivePage from './pages/MoneyPerspectivePage';
@@ -17,6 +18,12 @@ import DepositStrategyPage from './pages/DepositStrategyPage';
 import TutorialLandingPage from './pages/TutorialLandingPage';
 import TutorialPage from './pages/TutorialPage';
 import WithdrawalStrategyPage from './pages/WithdrawalStrategyPage';
+import {
+  SimulationEnginePage,
+  SimulationInvestPage,
+  SimulationPlanPage,
+  SimulationStartTaxPage,
+} from './pages/SimulationSetupPages';
 
 import SkeletonPage, { type SkeletonSection } from './pages/skeleton/SkeletonPage';
 import FeedbackPage from './pages/FeedbackPage';
@@ -1355,13 +1362,19 @@ const AppRoutes: React.FC = () => {
       <Route path="/tutorial/:mode" element={<TutorialPage />} />
       <Route path="/diff-scenarios" element={<RunDiffPage />} />
       <Route path="/salary-after-tax" element={<SalaryAfterTaxPage />} />
+      <Route path="/simulation-start-tax" element={<SimulationStartTaxPage />} />
+      <Route path="/simulation-tax-exemptions" element={<Navigate to="/simulation-start-tax" replace />} />
       <Route path="/money-perspective" element={<MoneyPerspectivePage />} />
       <Route path="/progress-tracker" element={<ProgressTrackerPage />} />
+      <Route path="/fire-simulator" element={<FireSimulatorPage />} />
       <Route path="/simulation" element={<SimulationPage />} />
       <Route path="/simulation/tutorial" element={<TutorialLandingPage />} />
       <Route path="/simulation/tutorial/:mode" element={<TutorialPage />} />
       <Route path="/simulation/diff" element={<RunDiffPage />} />
       <Route path="/policy-builder" element={<PolicyBuilderPage />} />
+      <Route path="/simulation-invest" element={<SimulationInvestPage />} />
+      <Route path="/simulation-engine" element={<SimulationEnginePage />} />
+      <Route path="/simulation-plan" element={<SimulationPlanPage />} />
       <Route path="/deposit-strategy" element={<DepositStrategyPage />} />
       <Route path="/withdrawal-strategy" element={<WithdrawalStrategyPage />} />
       <Route path="/explore" element={<ExplorePage />} />

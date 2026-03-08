@@ -32,6 +32,14 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: 'Translate gross salary into net cashflow and marginal effects (tax intuition builder).',
     preview: { kind: 'chart', label: 'Net vs gross' },
   },
+  '/simulation-start-tax': {
+    description: 'Tax Optimizer for the new FIRE Simulator: top-level tax rule plus shared exemption defaults.',
+    preview: { kind: 'table', label: 'Tax optimizer' },
+  },
+  '/simulation-tax-exemptions': {
+    description: 'Legacy alias route that now redirects to Tax Optimizer.',
+    preview: { kind: 'table', label: 'Redirect' },
+  },
   '/money-perspective': {
     description: 'Convert money into meaning: time, freedom, and trade-offs for purchases and lifestyle choices.',
     preview: { kind: 'chart', label: 'Perspective curve' },
@@ -108,6 +116,14 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: 'Deposit-plan skeleton covering presets, schedules, escalation, one-offs, routing, and preview placeholders.',
     preview: { kind: 'table', label: 'Deposit preview' },
   },
+  '/simulation-invest': {
+    description: 'A focused investing assumptions page for the new FIRE Simulator: inflation, fees, market defaults, and return engine choices.',
+    preview: { kind: 'table', label: 'Invest assumptions' },
+  },
+  '/simulation-engine': {
+    description: 'Execution settings for the new FIRE Simulator: paths, batch size, and seed mode.',
+    preview: { kind: 'table', label: 'Engine settings' },
+  },
   '/withdrawal-strategy': {
     description: 'Withdrawal-plan skeleton covering timing, guardrails, income blending, routing, bad-year playbooks, and preview placeholders.',
     preview: { kind: 'chart', label: 'Withdrawals' },
@@ -119,6 +135,14 @@ export const PAGE_META: Record<string, PageMeta> = {
   '/simulation': {
     description: 'Run simulations, view distributions, and iterate on inputs (core engine UI).',
     preview: { kind: 'chart', label: 'Distribution' },
+  },
+  '/fire-simulator': {
+    description: 'New simulator shell that mirrors the legacy flow more closely while running directly from shared assumptions.',
+    preview: { kind: 'chart', label: 'Run + results' },
+  },
+  '/simulation-plan': {
+    description: 'Build the shared FIRE Simulator phase list in a dedicated plan editor.',
+    preview: { kind: 'timeline', label: 'Phase plan' },
   },
   '/diff-scenarios': {
     description: 'Compare scenarios and runs side-by-side, including metadata and inputs.',
