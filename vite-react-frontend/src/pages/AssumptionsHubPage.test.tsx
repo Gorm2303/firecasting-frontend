@@ -191,6 +191,50 @@ describe('AssumptionsHubPage', () => {
     expect(screen.queryByText('Income modeling')).not.toBeInTheDocument();
   });
 
+  it('shows a page-specific assumptions view grouped by hub domains', () => {
+    renderHub();
+
+    fireEvent.click(screen.getByRole('button', { name: /page view/i }));
+
+    expect(screen.queryByRole('tablist', { name: /assumptions hub sections/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Page')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Money Perspective' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Salary Taxator' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Page'), { target: { value: 'MoneyPerspective' } });
+
+    expect(screen.getByText(/^Income$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Expense$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Invest$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Tax$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Deposit$/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Reference net salary')).toBeInTheDocument();
+    expect(screen.getByLabelText('Core expense (DKK/month)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Expected return (%/year)')).toBeInTheDocument();
+    expect(screen.queryByText(/^Placeholder$/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps page-view fields disabled when the baseline is locked', () => {
+    const assumptions = getDefaultAssumptions();
+    window.localStorage.setItem(
+      ASSUMPTIONS_STORAGE_KEY,
+      JSON.stringify({ current: assumptions, draft: assumptions })
+    );
+    window.localStorage.setItem(
+      GOVERNANCE_STORAGE_KEY,
+      JSON.stringify({ sourceNote: '', lockBaseline: true, updatedAt: '2026-03-08T00:00:00.000Z' })
+    );
+
+    renderHub();
+
+    fireEvent.click(screen.getByRole('button', { name: /page view/i }));
+    fireEvent.change(screen.getByLabelText('Page'), { target: { value: 'SalaryTaxator' } });
+
+    expect(screen.getByLabelText('Page')).toBeEnabled();
+    expect(screen.getByLabelText('Reference gross salary')).toBeDisabled();
+    expect(screen.getByLabelText('Default municipality id')).toBeDisabled();
+  });
+
   it('imports and exports assumptions through browser-style interactions', async () => {
     const originalCreateObjectUrl = URL.createObjectURL;
     const originalRevokeObjectUrl = URL.revokeObjectURL;

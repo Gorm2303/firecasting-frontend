@@ -36,7 +36,18 @@ type HubTabId =
   | 'conventions'
   | 'preview';
 
-type HubViewMode = 'basic' | 'advanced';
+type BaselineHubTabId =
+  | 'tax'
+  | 'income'
+  | 'expense'
+  | 'invest'
+  | 'deposit'
+  | 'withdrawal'
+  | 'policy'
+  | 'milestones'
+  | 'goals';
+
+type HubViewMode = 'basic' | 'advanced' | 'page';
 
 type DiffRow = {
   keyPath: string;
@@ -51,6 +62,12 @@ type HubFieldSection = {
   title: string;
   description?: string;
   keyPaths: string[];
+};
+
+type SectionedBaselineItems = {
+  sections: Array<HubFieldSection & { items: AssumptionRegistryItem[] }>;
+  additionalFields: AssumptionRegistryItem[];
+  placeholders: AssumptionRegistryItem[];
 };
 
 const cardStyle: React.CSSProperties = {
@@ -113,6 +130,15 @@ const HUB_TABS: Array<{ id: HubTabId; label: string; isBaseline?: boolean }> = [
   { id: 'conventions', label: 'Conventions' },
   { id: 'preview', label: 'Preview' },
 ];
+
+const BASELINE_HUB_TABS: Array<{ id: BaselineHubTabId; label: string; isBaseline: true }> = HUB_TABS.filter(
+  (tab): tab is { id: BaselineHubTabId; label: string; isBaseline: true } => Boolean(tab.isBaseline)
+);
+
+const PAGE_VIEW_LABEL_OVERRIDES: Record<string, string> = {
+  MoneyPerspective: 'Money Perspective',
+  SalaryTaxator: 'Salary Taxator',
+};
 
 const BASIC_KEY_PATHS: Record<Exclude<HubTabId, 'overview' | 'conventions' | 'preview'>, string[]> = {
   tax: [
@@ -467,9 +493,56 @@ const renderDiffCards = (rows: DiffRow[]) => {
   );
 };
 
+const formatPageViewLabel = (label: string): string => {
+  const overridden = PAGE_VIEW_LABEL_OVERRIDES[label];
+  if (overridden) return overridden;
+  return String(label)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const buildSectionedBaselineItems = (
+  tabId: BaselineHubTabId,
+  visibleItems: AssumptionRegistryItem[],
+  options?: { includePlaceholders?: boolean }
+): SectionedBaselineItems => {
+  const includePlaceholders = options?.includePlaceholders ?? true;
+  const sectionDefs = HUB_FIELD_SECTIONS[tabId] ?? [];
+  const itemByPath = new Map(visibleItems.map((item) => [item.keyPath, item]));
+  const assigned = new Set<string>();
+  const isPlaceholderItem = (item: AssumptionRegistryItem) => filterUsedByForAssumptionsHub(item.usedBy).length === 0;
+
+  const sections = sectionDefs
+    .map((section) => {
+      const items = section.keyPaths
+        .map((keyPath) => itemByPath.get(keyPath))
+        .filter((item): item is AssumptionRegistryItem => {
+          if (!item) return false;
+          return !isPlaceholderItem(item);
+        });
+      items.forEach((item) => assigned.add(item.keyPath));
+      return { ...section, items };
+    })
+    .filter((section) => section.items.length > 0);
+
+  const additionalFields = visibleItems
+    .filter((item) => !assigned.has(item.keyPath) && !isPlaceholderItem(item))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const placeholders = includePlaceholders
+    ? visibleItems
+        .filter((item) => !assigned.has(item.keyPath) && isPlaceholderItem(item))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    : [];
+
+  return { sections, additionalFields, placeholders };
+};
+
 const AssumptionsHubPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<HubTabId>('income');
   const [viewMode, setViewMode] = useState<HubViewMode>('advanced');
+  const [selectedPageView, setSelectedPageView] = useState('');
   const [showAssumptionsChangeLog, setShowAssumptionsChangeLog] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
@@ -764,35 +837,59 @@ const AssumptionsHubPage: React.FC = () => {
     return allItems.filter((item) => allowed.has(item.keyPath));
   }, [activeTab, activeTabMeta?.isBaseline, registryByTab, viewMode]);
 
+  const pageViewOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        BASELINE_HUB_TABS.flatMap((tab) =>
+          (registryByTab[tab.id] ?? []).flatMap((item) => filterUsedByForAssumptionsHub(item.usedBy))
+        )
+      )
+    )
+      .sort((left, right) => formatPageViewLabel(left).localeCompare(formatPageViewLabel(right)))
+      .map((value) => ({ value, label: formatPageViewLabel(value) }));
+  }, [registryByTab]);
+
+  const effectiveSelectedPageView = useMemo(() => {
+    if (pageViewOptions.length === 0) return '';
+    if (pageViewOptions.some((option) => option.value === selectedPageView)) return selectedPageView;
+    return pageViewOptions[0].value;
+  }, [pageViewOptions, selectedPageView]);
+
+  const selectedPageViewOption = useMemo(
+    () => pageViewOptions.find((option) => option.value === effectiveSelectedPageView) ?? null,
+    [effectiveSelectedPageView, pageViewOptions]
+  );
+
   const sectionedBaselineItems = useMemo(() => {
-    const sectionDefs = HUB_FIELD_SECTIONS[activeTab] ?? [];
-    const itemByPath = new Map(visibleBaselineItems.map((item) => [item.keyPath, item]));
-    const assigned = new Set<string>();
-    const isPlaceholderItem = (item: AssumptionRegistryItem) => filterUsedByForAssumptionsHub(item.usedBy).length === 0;
-
-    const sections = sectionDefs
-      .map((section) => {
-        const items = section.keyPaths
-          .map((keyPath) => itemByPath.get(keyPath))
-          .filter((item): item is AssumptionRegistryItem => {
-            if (!item) return false;
-            return !isPlaceholderItem(item);
-          });
-        items.forEach((item) => assigned.add(item.keyPath));
-        return { ...section, items };
-      })
-      .filter((section) => section.items.length > 0);
-
-    const additionalFields = visibleBaselineItems
-      .filter((item) => !assigned.has(item.keyPath) && !isPlaceholderItem(item))
-      .sort((a, b) => a.label.localeCompare(b.label));
-
-    const placeholders = visibleBaselineItems
-      .filter((item) => !assigned.has(item.keyPath) && isPlaceholderItem(item))
-      .sort((a, b) => a.label.localeCompare(b.label));
-
-    return { sections, additionalFields, placeholders };
+    if (!activeTabMeta?.isBaseline) {
+      return { sections: [], additionalFields: [], placeholders: [] } satisfies SectionedBaselineItems;
+    }
+    return buildSectionedBaselineItems(activeTab as BaselineHubTabId, visibleBaselineItems);
   }, [activeTab, visibleBaselineItems]);
+
+  const pageViewGroups = useMemo(() => {
+    if (viewMode !== 'page' || !effectiveSelectedPageView) return [];
+
+    return BASELINE_HUB_TABS.map((tab) => {
+      const items = (registryByTab[tab.id] ?? []).filter((item) =>
+        filterUsedByForAssumptionsHub(item.usedBy).includes(effectiveSelectedPageView)
+      );
+      if (items.length === 0) return null;
+      return {
+        id: tab.id,
+        label: tab.label,
+        groupedItems: buildSectionedBaselineItems(tab.id, items, { includePlaceholders: false }),
+      };
+    }).filter(
+      (
+        group
+      ): group is {
+        id: BaselineHubTabId;
+        label: string;
+        groupedItems: SectionedBaselineItems;
+      } => Boolean(group)
+    );
+  }, [effectiveSelectedPageView, registryByTab, viewMode]);
 
   const renderBaselineRegistryField = (item: AssumptionRegistryItem) => {
     const inputId = `assumptions-${item.keyPath.replace(/\./g, '-')}`;
@@ -989,7 +1086,9 @@ const AssumptionsHubPage: React.FC = () => {
   const viewModeDescription =
     viewMode === 'basic'
       ? 'Basic view keeps each tab focused on the currently aligned assumptions.'
-      : 'Advanced view exposes the full registry-backed editor, including placeholder fields that are not fully wired yet.';
+      : viewMode === 'advanced'
+        ? 'Advanced view exposes the full registry-backed editor, including placeholder fields that are not fully wired yet.'
+        : 'Page view lists only the assumptions used by a selected page, grouped by Hub domain instead of tabs.';
 
   return (
     <PageLayout variant="constrained">
@@ -1000,7 +1099,7 @@ const AssumptionsHubPage: React.FC = () => {
             Single source of truth for the app’s baseline assumptions, with draft editing and preview tooling stored locally for now.
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            {(['basic', 'advanced'] as HubViewMode[]).map((mode) => {
+            {(['basic', 'advanced', 'page'] as HubViewMode[]).map((mode) => {
               const isActive = mode === viewMode;
               return (
                 <button
@@ -1025,25 +1124,109 @@ const AssumptionsHubPage: React.FC = () => {
           {baselineLocked && <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Baseline is locked.</div>}
         </div>
 
-        <div role="tablist" aria-label="Assumptions Hub sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {HUB_TABS.map((tab) => {
-            const isActive = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setActiveTab(tab.id)}
-                style={{ padding: '8px 10px', fontWeight: isActive ? 850 : 700, opacity: isActive ? 1 : 0.82 }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {viewMode !== 'page' && (
+          <div role="tablist" aria-label="Assumptions Hub sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {HUB_TABS.map((tab) => {
+              const isActive = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{ padding: '8px 10px', fontWeight: isActive ? 850 : 700, opacity: isActive ? 1 : 0.82 }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        {activeTabMeta?.isBaseline && (
+        {viewMode === 'page' && (
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 850, fontSize: 18 }}>Page assumptions</div>
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>Current (saved): {baselineSummary}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={saveDraft} disabled={baselineLocked || !isDraftDirty}>Save</button>
+                <button type="button" onClick={resetDraftToCurrent} disabled={baselineLocked || !isDraftDirty}>Cancel</button>
+                <button type="button" onClick={resetDraftToDefaults} disabled={baselineLocked}>Reset to defaults</button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.82 }}>
+              {baselineLocked
+                ? 'Baseline edits remain disabled while locked, but you can still inspect assumptions by page.'
+                : 'Choose a page to list every shared baseline assumption it uses, grouped by Hub domain.'}
+            </div>
+
+            <div style={{ ...fieldRowStyle, marginTop: 12 }}>
+              <label htmlFor="assumptions-page-view" style={{ fontWeight: 700 }}>Page</label>
+              <select
+                className="fc-themed-select"
+                id="assumptions-page-view"
+                aria-label="Page"
+                value={effectiveSelectedPageView}
+                onChange={(event) => setSelectedPageView(event.target.value)}
+                style={selectStyle}
+              >
+                {pageViewOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedPageViewOption && (
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.82 }}>
+                Showing assumptions used by {selectedPageViewOption.label}.
+              </div>
+            )}
+
+            {pageViewGroups.length === 0 ? (
+              <div style={{ marginTop: 14, fontSize: 13, opacity: 0.8 }}>No shared baseline assumptions are registered for this page yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 14 }}>
+                {pageViewGroups.map((group) => (
+                  <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontWeight: 850, fontSize: 18 }}>{group.label}</div>
+
+                    {group.groupedItems.sections.map((section) => (
+                      <div key={`${group.id}-${section.title}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 16 }}>{section.title}</div>
+                          {section.description && <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{section.description}</div>}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {section.items.map(renderBaselineRegistryField)}
+                        </div>
+                      </div>
+                    ))}
+
+                    {group.groupedItems.additionalFields.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 16 }}>Additional fields</div>
+                          <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                            These fields are used by this page but do not fit a curated section yet.
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {group.groupedItems.additionalFields.map(renderBaselineRegistryField)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {viewMode !== 'page' && activeTabMeta?.isBaseline && (
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div>
@@ -1109,7 +1292,7 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'overview' && (
+        {viewMode !== 'page' && activeTab === 'overview' && (
           <>
             <div style={cardStyle}>
               <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 10 }}>Assumption profiles</div>
@@ -1307,7 +1490,7 @@ const AssumptionsHubPage: React.FC = () => {
           </>
         )}
 
-        {activeTab === 'execution' && (
+        {viewMode !== 'page' && activeTab === 'execution' && (
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ fontWeight: 850, fontSize: 18 }}>Execution defaults</div>
@@ -1323,7 +1506,7 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'conventions' && (
+        {viewMode !== 'page' && activeTab === 'conventions' && (
           <div style={cardStyle}>
             <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 6 }}>Simulation conventions</div>
             <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13 }}>Fixed modeling conventions used by the UI. These are descriptive, not editable, in this pass.</div>
@@ -1343,7 +1526,7 @@ const AssumptionsHubPage: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'preview' && (
+        {viewMode !== 'page' && activeTab === 'preview' && (
           <div style={cardStyle}>
             <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 8 }}>Preview</div>
             <div style={{ opacity: 0.82, fontSize: 13, marginBottom: 10 }}>Draft changes are shown as current → draft. Execution defaults are shown as default → current.</div>
