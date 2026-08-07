@@ -1,6 +1,12 @@
 import type { PhaseRequest, SimulationRequest } from '../models/types';
 import { createDefaultSimulationRequest, normalizePhase } from '../config/simulationDefaults';
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
+import {
+  hasMeaningfulAssumptionsOverride,
+  normalizeAssumptionsOverride,
+  type AssumptionsOverride,
+} from '../state/assumptions';
+import type { StrategyProfileAttachments } from '../pages/strategy/strategyProfiles';
 
 type PhaseType = PhaseRequest['phaseType'];
 type TaxRule = NonNullable<PhaseRequest['taxRules']>[number];
@@ -60,49 +66,95 @@ const fromBase64Url = (b64url: string): string => {
   return padded + '='.repeat(padLength);
 };
 
-export function encodeScenarioToShareParam(request: SimulationRequest): string {
+const stripUndefinedPhaseFields = (value: PhaseRequest): PhaseRequest => {
+  const cleaned: Partial<PhaseRequest> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (entryValue !== undefined) {
+      (cleaned as Record<string, unknown>)[key] = entryValue;
+    }
+  }
+  return cleaned as PhaseRequest;
+};
+
+export type SharedScenarioPayload = {
+  request: SimulationRequest;
+  assumptionsOverride?: AssumptionsOverride | null;
+  strategyProfileAttachments?: StrategyProfileAttachments | null;
+};
+
+const isSharedScenarioPayload = (decoded: unknown): decoded is { request: unknown; assumptionsOverride?: unknown; strategyProfileAttachments?: unknown } => {
+  return isRecord(decoded) && 'request' in decoded;
+};
+
+const normalizeDecodedSharedScenario = (decoded: unknown): SharedScenarioPayload | null => {
+  if (isSharedScenarioPayload(decoded)) {
+    const request = normalizeDecodedScenario(decoded.request);
+    if (!request) return null;
+    return {
+      request,
+      assumptionsOverride: normalizeAssumptionsOverride(decoded.assumptionsOverride as AssumptionsOverride | null | undefined),
+      strategyProfileAttachments: (decoded.strategyProfileAttachments ?? null) as StrategyProfileAttachments | null,
+    };
+  }
+
+  const request = normalizeDecodedScenario(decoded);
+  if (!request) return null;
+  return { request, assumptionsOverride: null, strategyProfileAttachments: null };
+};
+
+export function encodeScenarioToShareParam(
+  request: SimulationRequest,
+  assumptionsOverride?: AssumptionsOverride | null,
+  strategyProfileAttachments?: StrategyProfileAttachments | null
+): string {
   // Normalize before encoding so the share format stays stable.
-  const normalized: SimulationRequest = {
+  const normalizedRequest: SimulationRequest = {
     ...request,
     phases: (request.phases ?? []).map((p) => ({ ...p, taxRules: toTaxRules((p as any).taxRules) })),
   };
-  const json = JSON.stringify(normalized);
+  const hasStrategyAttachments = Boolean(strategyProfileAttachments && Object.keys(strategyProfileAttachments).length > 0);
+  const payload = hasMeaningfulAssumptionsOverride(assumptionsOverride) || hasStrategyAttachments
+    ? {
+        request: normalizedRequest,
+        assumptionsOverride: normalizeAssumptionsOverride(assumptionsOverride),
+        ...(hasStrategyAttachments ? { strategyProfileAttachments } : {}),
+      }
+    : normalizedRequest;
+  const json = JSON.stringify(payload);
   // Prefix so we can decode unambiguously and keep backward compat.
   return `z:${compressToEncodedURIComponent(json)}`;
 }
 
-export function decodeScenarioFromShareParam(param: string): SimulationRequest | null {
+export function decodeSharedScenarioFromShareParam(param: string): SharedScenarioPayload | null {
   try {
     const raw = typeof param === 'string' ? param : '';
     const withoutPrefix = raw.startsWith('z:') || raw.startsWith('b:') ? raw.slice(2) : raw;
 
-    // New format: lz-string compressed, URI-safe
     if (raw.startsWith('z:')) {
       const decompressed = decompressFromEncodedURIComponent(withoutPrefix);
       if (typeof decompressed === 'string' && decompressed.length > 0) {
-        const parsed = JSON.parse(decompressed) as unknown;
-        return normalizeDecodedScenario(parsed);
+        return normalizeDecodedSharedScenario(JSON.parse(decompressed) as unknown);
       }
       return null;
     }
 
-    // Legacy format: base64url JSON
     try {
       const json = base64Decode(fromBase64Url(withoutPrefix));
-      const parsed = JSON.parse(json) as unknown;
-      return normalizeDecodedScenario(parsed);
+      return normalizeDecodedSharedScenario(JSON.parse(json) as unknown);
     } catch {
-      // Best-effort fallback: accept unprefixed compressed strings
       const decompressed = decompressFromEncodedURIComponent(withoutPrefix);
       if (typeof decompressed === 'string' && decompressed.length > 0) {
-        const parsed = JSON.parse(decompressed) as unknown;
-        return normalizeDecodedScenario(parsed);
+        return normalizeDecodedSharedScenario(JSON.parse(decompressed) as unknown);
       }
       return null;
     }
   } catch {
     return null;
   }
+}
+
+export function decodeScenarioFromShareParam(param: string): SimulationRequest | null {
+  return decodeSharedScenarioFromShareParam(param)?.request ?? null;
 }
 
 export function normalizeDecodedScenario(decoded: unknown): SimulationRequest | null {
@@ -127,7 +179,7 @@ export function normalizeDecodedScenario(decoded: unknown): SimulationRequest | 
       if (!isRecord(p)) return null;
       if (!isPhaseType(p.phaseType)) return null;
 
-      return normalizePhase({
+      const normalizedPhase = normalizePhase({
         phaseType: p.phaseType,
         durationInMonths: toNumberOrUndefined(p.durationInMonths),
         initialDeposit: toNumberOrUndefined(p.initialDeposit),
@@ -139,6 +191,7 @@ export function normalizeDecodedScenario(decoded: unknown): SimulationRequest | 
         upperVariationPercentage: toNumberOrUndefined(p.upperVariationPercentage),
         taxRules: toTaxRules(p.taxRules),
       });
+      return stripUndefinedPhaseFields(normalizedPhase);
     })
     .filter((p): p is PhaseRequest => p !== null);
 

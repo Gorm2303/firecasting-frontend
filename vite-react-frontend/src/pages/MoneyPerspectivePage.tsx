@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import PageLayout from "../components/PageLayout";
 import {
   defaultMoneyPerspectiveSettings,
@@ -20,6 +20,10 @@ import {
   purchaseYearlyEquivalent,
   type PurchaseAmountType,
 } from "../lib/moneyPerspective/purchases";
+import {
+  convertSalaryAmountBetweenPeriods,
+  monthlyEquivalentFromSalaryAmount,
+} from "../lib/income/sharedSalary";
 import {
   deleteExpenseList,
   findExpenseListById,
@@ -572,39 +576,6 @@ function asPurchaseItemArray(v: unknown): PurchaseItem[] | null {
   return items;
 }
 
-function periodToMonthlyEquivalent(
-  amount: number,
-  period: MoneyPerspectiveSalaryPeriod,
-): number {
-  switch (period) {
-    case "hourly":
-      return amount;
-    case "daily":
-      return amount * DAYS_PER_MONTH;
-    case "weekly":
-      return (amount * 52) / 12;
-    case "monthly":
-      return amount;
-    case "yearly":
-      return amount / 12;
-  }
-}
-
-function salaryAmountFromEffectiveHourly(
-  effectiveHourly: number,
-  workingHoursPerMonth: number,
-  period: MoneyPerspectiveSalaryPeriod,
-): number {
-  if (!(effectiveHourly > 0) || !(workingHoursPerMonth > 0)) return 0;
-  if (period === "hourly") return effectiveHourly;
-
-  const monthlyIncome = effectiveHourly * workingHoursPerMonth;
-  if (period === "daily") return monthlyIncome / DAYS_PER_MONTH;
-  if (period === "weekly") return (monthlyIncome * 12) / 52;
-  if (period === "monthly") return monthlyIncome;
-  return monthlyIncome * 12;
-}
-
 function effectiveHourlyFromSalarySettings(
   comp: MoneyPerspectiveSettingsV3["compensation"],
 ): number | null {
@@ -620,7 +591,7 @@ function effectiveHourlyFromSalarySettings(
     )
   )
     return null;
-  const monthlyEq = periodToMonthlyEquivalent(amount, period);
+  const monthlyEq = monthlyEquivalentFromSalaryAmount(amount, period, workingHoursPerMonth);
   return monthlyEq / workingHoursPerMonth;
 }
 
@@ -693,7 +664,6 @@ function setCoreExpenseForSource(
 
 const MoneyPerspectivePage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { currentAssumptions } = useAssumptions();
 
   const [settings, setSettings] = useState<MoneyPerspectiveSettingsV3>(() =>
@@ -978,17 +948,22 @@ const MoneyPerspectivePage: React.FC = () => {
 
   // Assumptions Hub is the authority for baseline economics + profile defaults.
   useEffect(() => {
+    const income = currentAssumptions.incomeSetupDefaults;
     const mp = currentAssumptions.moneyPerspectiveDefaults;
     const next = {
       currency: currentAssumptions.currency,
-      payRaisePct: mp.payRaisePct,
+      salaryPeriod: income.referenceSalaryPeriod as MoneyPerspectiveSalaryPeriod,
+      netSalaryAmount: income.referenceNetSalaryAmount,
+      salaryGrowthPct: income.salaryGrowthPct,
+      workingHoursPerMonth: income.workingHoursPerMonth,
       coreExpenseMonthlyDkk: mp.coreExpenseMonthlyDkk,
       annualReturnPct: currentAssumptions.expectedReturnPct,
       inflationPct: currentAssumptions.inflationPct,
       feeDragPct: currentAssumptions.yearlyFeePct,
     };
 
-    setPayRaiseDraft(toDraft(next.payRaisePct));
+    setNetSalaryDraft(toDraft(next.netSalaryAmount));
+    setPayRaiseDraft(toDraft(next.salaryGrowthPct));
     setCoreExpensesDraft(toDraft(next.coreExpenseMonthlyDkk));
     setAnnualReturnDraft(toDraft(next.annualReturnPct));
     setInflationDraft(toDraft(next.inflationPct));
@@ -1001,8 +976,10 @@ const MoneyPerspectivePage: React.FC = () => {
         currency: next.currency,
         compensation: {
           ...prev.compensation,
-          workingHoursPerMonth: mp.workingHoursPerMonth,
-          payRaisePct: next.payRaisePct,
+          period: next.salaryPeriod,
+          amount: next.netSalaryAmount,
+          workingHoursPerMonth: next.workingHoursPerMonth,
+          payRaisePct: next.salaryGrowthPct,
         },
         coreExpenses: nextCore,
         investing: {
@@ -1017,6 +994,8 @@ const MoneyPerspectivePage: React.FC = () => {
 
       const unchanged =
         prev.currency === nextSettings.currency &&
+        prev.compensation.period === nextSettings.compensation.period &&
+        prev.compensation.amount === nextSettings.compensation.amount &&
         prev.compensation.workingHoursPerMonth === nextSettings.compensation.workingHoursPerMonth &&
         prev.compensation.payRaisePct === nextSettings.compensation.payRaisePct &&
         prev.investing.annualReturnPct === nextSettings.investing.annualReturnPct &&
@@ -1738,20 +1717,17 @@ const MoneyPerspectivePage: React.FC = () => {
                 const next = e.target.value as MoneyPerspectiveSalaryPeriod;
                 const current = settings.compensation;
                 if (next === current.period) return;
-                const effectiveHourly =
-                  effectiveHourlyFromSalarySettings(current);
-                if (effectiveHourly == null) {
-                  const nextComp = { ...current, period: next };
-                  setSettings((s) => ({ ...s, compensation: nextComp }));
-                  return;
-                }
-
                 const hours =
                   current.workingHoursPerMonth > 0
                     ? current.workingHoursPerMonth
                     : 160;
                 const amount = roundTo1Decimal(
-                  salaryAmountFromEffectiveHourly(effectiveHourly, hours, next),
+                  convertSalaryAmountBetweenPeriods(
+                    current.amount,
+                    current.period,
+                    next,
+                    hours,
+                  ),
                 );
                 const nextComp = {
                   ...current,
@@ -1774,6 +1750,7 @@ const MoneyPerspectivePage: React.FC = () => {
               <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
             </select>
@@ -4771,23 +4748,16 @@ const MoneyPerspectivePage: React.FC = () => {
                     const next = e.target.value as MoneyPerspectiveSalaryPeriod;
                     const current = settings.compensation;
                     if (next === current.period) return;
-                    const effectiveHourly =
-                      effectiveHourlyFromSalarySettings(current);
-                    if (effectiveHourly == null) {
-                      const nextComp = { ...current, period: next };
-                      setSettings((s) => ({ ...s, compensation: nextComp }));
-                      return;
-                    }
-
                     const hours =
                       current.workingHoursPerMonth > 0
                         ? current.workingHoursPerMonth
                         : 160;
                     const amount = roundTo1Decimal(
-                      salaryAmountFromEffectiveHourly(
-                        effectiveHourly,
-                        hours,
+                      convertSalaryAmountBetweenPeriods(
+                        current.amount,
+                        current.period,
                         next,
+                        hours,
                       ),
                     );
                     const nextComp = {
@@ -4805,6 +4775,7 @@ const MoneyPerspectivePage: React.FC = () => {
                   <option value="hourly">Hourly</option>
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
+                  <option value="biweekly">Biweekly</option>
                   <option value="monthly">Monthly</option>
                   <option value="yearly">Yearly</option>
                 </select>
@@ -4907,11 +4878,6 @@ const MoneyPerspectivePage: React.FC = () => {
                   Net annual return: {formatNumber(netAnnualReturnPct, 2)}%
                 </div>
 
-                <div style={{ gridColumn: "1 / span 3" }}>
-                  <button type="button" style={btn()} onClick={() => navigate("/assumptions")}>
-                    Edit assumptions in Assumptions Hub
-                  </button>
-                </div>
                 <div
                   style={{
                     ...subtleTextStyle,
@@ -4921,6 +4887,7 @@ const MoneyPerspectivePage: React.FC = () => {
                 >
                   Compounding: 12 times a year (monthly)
                 </div>
+
               </div>
 
               <div style={{ ...subtleTextStyle, fontSize: 13 }}>

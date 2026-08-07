@@ -32,6 +32,14 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: 'Translate gross salary into net cashflow and marginal effects (tax intuition builder).',
     preview: { kind: 'chart', label: 'Net vs gross' },
   },
+  '/simulation-start-tax': {
+    description: 'Tax Optimizer for the new FIRE Simulator: top-level tax rule plus shared exemption defaults.',
+    preview: { kind: 'table', label: 'Tax optimizer' },
+  },
+  '/simulation-tax-exemptions': {
+    description: 'Legacy alias route that now redirects to Tax Optimizer.',
+    preview: { kind: 'table', label: 'Redirect' },
+  },
   '/money-perspective': {
     description: 'Convert money into meaning: time, freedom, and trade-offs for purchases and lifestyle choices.',
     preview: { kind: 'chart', label: 'Perspective curve' },
@@ -101,15 +109,23 @@ export const PAGE_META: Record<string, PageMeta> = {
     preview: { kind: 'table', label: 'Executive summary' },
   },
   '/policy-builder': {
-    description: 'Define IF/THEN guardrails so behavior is predictable under stress (placeholder).',
+    description: 'Adaptive IF/THEN guardrail skeleton with placeholder rule authoring and trigger simulation blocks.',
     preview: { kind: 'table', label: 'Policies' },
   },
   '/deposit-strategy': {
-    description: 'Build deposit schedules: presets, escalation, one-offs, routing priorities.',
+    description: 'Deposit-plan skeleton covering presets, schedules, escalation, one-offs, routing, and preview placeholders.',
     preview: { kind: 'table', label: 'Deposit preview' },
   },
+  '/simulation-invest': {
+    description: 'A focused investing assumptions page for the new FIRE Simulator: inflation, fees, market defaults, and return engine choices.',
+    preview: { kind: 'table', label: 'Invest assumptions' },
+  },
+  '/simulation-engine': {
+    description: 'Execution settings for the new FIRE Simulator: paths, batch size, and seed mode.',
+    preview: { kind: 'table', label: 'Engine settings' },
+  },
   '/withdrawal-strategy': {
-    description: 'Withdrawal guardrails, blending income, routing and buffer policy.',
+    description: 'Withdrawal-plan skeleton covering timing, guardrails, income blending, routing, bad-year playbooks, and preview placeholders.',
     preview: { kind: 'chart', label: 'Withdrawals' },
   },
   '/tutorial': {
@@ -119,6 +135,14 @@ export const PAGE_META: Record<string, PageMeta> = {
   '/simulation': {
     description: 'Run simulations, view distributions, and iterate on inputs (core engine UI).',
     preview: { kind: 'chart', label: 'Distribution' },
+  },
+  '/fire-simulator': {
+    description: 'New simulator shell that mirrors the legacy flow more closely while running directly from shared assumptions.',
+    preview: { kind: 'chart', label: 'Run + results' },
+  },
+  '/simulation-plan': {
+    description: 'Build the shared FIRE Simulator phase list in a dedicated plan editor.',
+    preview: { kind: 'timeline', label: 'Phase plan' },
   },
   '/diff-scenarios': {
     description: 'Compare scenarios and runs side-by-side, including metadata and inputs.',
@@ -187,6 +211,7 @@ export function getPageMeta(to: string, label: string, groupTitle: string): Page
   );
 }
 
+/** @deprecated use the `Card` primitive from `src/components/ui` instead. */
 export const cardStyle: React.CSSProperties = {
   background: 'var(--fc-card-bg)',
   color: 'var(--fc-card-text)',
@@ -195,58 +220,44 @@ export const cardStyle: React.CSSProperties = {
   padding: 14,
 };
 
-const miniPreviewStyle: React.CSSProperties = {
-  marginTop: 10,
-  border: '1px dashed var(--fc-card-border)',
-  borderRadius: 12,
-  background: 'var(--fc-subtle-bg)',
-  padding: 10,
-  minHeight: 74,
-};
+const miniPreviewClass = 'mt-2.5 min-h-[74px] rounded-xl border border-dashed border-card-border bg-subtle p-2.5';
+const barClass = 'rounded-lg border border-card-border opacity-70';
 
 export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ kind, label }) => {
   const header = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-      <div style={{ fontWeight: 850 }}>{label}</div>
-      <div style={{ opacity: 0.75, fontSize: 12 }}>{kind}</div>
+    <div className="flex items-center justify-between gap-2.5">
+      <div className="font-extrabold">{label}</div>
+      <div className="text-xs opacity-75">{kind}</div>
     </div>
   );
 
   if (kind === 'chart') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini chart preview">
+      <div className={miniPreviewClass} aria-label="Mini chart preview">
         {header}
-        <div style={{ height: 36, marginTop: 8, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.7 }} />
+        <div className={[barClass, 'mt-2 h-9'].join(' ')} />
       </div>
     );
   }
   if (kind === 'timeline') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini timeline preview">
+      <div className={miniPreviewClass} aria-label="Mini timeline preview">
         {header}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '90%' }} />
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '75%' }} />
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '82%' }} />
+        <div className="mt-2 flex flex-col gap-1.5">
+          <div className={[barClass, 'h-2.5 w-[90%] opacity-65'].join(' ')} />
+          <div className={[barClass, 'h-2.5 w-[75%] opacity-65'].join(' ')} />
+          <div className={[barClass, 'h-2.5 w-[82%] opacity-65'].join(' ')} />
         </div>
       </div>
     );
   }
   if (kind === 'calendar') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini calendar preview">
+      <div className={miniPreviewClass} aria-label="Mini calendar preview">
         {header}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+        <div className="mt-2 grid grid-cols-6 gap-1.5">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                height: 12,
-                borderRadius: 6,
-                border: '1px solid var(--fc-card-border)',
-                opacity: 0.6,
-              }}
-            />
+            <div key={i} className={[barClass, 'h-3 opacity-60'].join(' ')} />
           ))}
         </div>
       </div>
@@ -254,19 +265,11 @@ export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ ki
   }
   if (kind === 'cards') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini cards preview">
+      <div className={miniPreviewClass} aria-label="Mini cards preview">
         {header}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                height: 16,
-                borderRadius: 10,
-                border: '1px solid var(--fc-card-border)',
-                opacity: 0.6,
-              }}
-            />
+            <div key={i} className={[barClass, 'h-4 opacity-60'].join(' ')} />
           ))}
         </div>
       </div>
@@ -275,19 +278,11 @@ export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ ki
 
   // table
   return (
-    <div style={miniPreviewStyle} aria-label="Mini table preview">
+    <div className={miniPreviewClass} aria-label="Mini table preview">
       {header}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+      <div className="mt-2 flex flex-col gap-1.5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              height: 10,
-              borderRadius: 10,
-              border: '1px solid var(--fc-card-border)',
-              opacity: 0.6,
-            }}
-          />
+          <div key={i} className={[barClass, 'h-2.5 opacity-60'].join(' ')} />
         ))}
       </div>
     </div>

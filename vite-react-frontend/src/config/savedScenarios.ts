@@ -1,7 +1,15 @@
 import type { SimulationRequest } from '../models/types';
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
 import { advancedToNormalRequest, normalToAdvancedWithDefaults } from '../models/advancedSimulation';
-import { loadCurrentAssumptionsFromStorage } from '../state/assumptions';
+import {
+  applyAssumptionsOverride,
+  hasMeaningfulAssumptionsOverride,
+  loadCurrentAssumptionsFromStorage,
+  normalizeAssumptionsOverride,
+  type Assumptions,
+  type AssumptionsOverride,
+} from '../state/assumptions';
+import type { StrategyProfileAttachments } from '../pages/strategy/strategyProfiles';
 import { normalizeTaxRules } from '../utils/taxRules';
 
 function isFiniteNumber(v: unknown): v is number {
@@ -55,6 +63,11 @@ export type SavedScenario = {
   id: string;
   name: string;
   savedAt: string;
+  /** Optional per-scenario overlay on top of the current baseline assumptions.
+   * Used to model scenario-specific world-model tweaks without mutating the global baseline.
+   */
+  assumptionsOverride?: AssumptionsOverride | null;
+  strategyProfileAttachments?: StrategyProfileAttachments | null;
   /** Canonical scenario footprint used for reruns/diff and to match backend persistence. */
   advancedRequest: AdvancedSimulationRequest;
   /** Backward-compatible subset for older UI flows / share links. */
@@ -73,6 +86,18 @@ export type SavedScenario = {
     modelJavaVersion?: string | null;
   };
 };
+
+export function scenarioHasAssumptionsOverride(
+  scenario: Pick<SavedScenario, 'assumptionsOverride'> | null | undefined
+): boolean {
+  return hasMeaningfulAssumptionsOverride(scenario?.assumptionsOverride);
+}
+
+export function formatSavedScenarioLabel(
+  scenario: Pick<SavedScenario, 'name' | 'assumptionsOverride'>
+): string {
+  return `${scenario.name}${scenarioHasAssumptionsOverride(scenario) ? ' (overrides)' : ''}`;
+}
 
 const STORAGE_KEY = 'firecasting:savedScenarios:v2';
 
@@ -112,6 +137,51 @@ function normalizeAdvancedRequestTaxRules(req: AdvancedSimulationRequest): Advan
   return { ...req, phases };
 }
 
+export function materializeSavedScenarioForRun(
+  scenario: SavedScenario,
+  baselineAssumptions: Assumptions
+): {
+  advancedRequest: AdvancedSimulationRequest;
+  assumptionsUsed: Assumptions;
+} {
+  const assumptionsUsed = applyAssumptionsOverride(baselineAssumptions, scenario.assumptionsOverride ?? null);
+  const normalizedAdvanced = normalizeAdvancedRequestTaxRules(scenario.advancedRequest);
+
+  const hasAnyTaxRules = (normalizedAdvanced.phases ?? []).some((p: any) => (p?.taxRules?.length ?? 0) > 0);
+  const cfg = normalizedAdvanced.taxExemptionConfig;
+  const hasExplicitTaxExemptionConfig =
+    cfg?.exemptionCard?.limit !== undefined ||
+    cfg?.exemptionCard?.yearlyIncrease !== undefined ||
+    cfg?.stockExemption?.taxRate !== undefined ||
+    cfg?.stockExemption?.limit !== undefined ||
+    cfg?.stockExemption?.yearlyIncrease !== undefined;
+
+  if (!hasAnyTaxRules || hasExplicitTaxExemptionConfig) {
+    return {
+      advancedRequest: normalizedAdvanced,
+      assumptionsUsed,
+    };
+  }
+
+  return {
+    advancedRequest: {
+      ...normalizedAdvanced,
+      taxExemptionConfig: {
+        exemptionCard: {
+          limit: assumptionsUsed.taxExemptionDefaults.exemptionCardLimit,
+          yearlyIncrease: assumptionsUsed.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        },
+        stockExemption: {
+          taxRate: assumptionsUsed.taxExemptionDefaults.stockExemptionTaxRate,
+          limit: assumptionsUsed.taxExemptionDefaults.stockExemptionLimit,
+          yearlyIncrease: assumptionsUsed.taxExemptionDefaults.stockExemptionYearlyIncrease,
+        },
+      },
+    },
+    assumptionsUsed,
+  };
+}
+
 export function listSavedScenarios(): SavedScenario[] {
   if (typeof window === 'undefined') return [];
   const raw = safeParse(window.localStorage.getItem(STORAGE_KEY));
@@ -124,10 +194,14 @@ export function listSavedScenarios(): SavedScenario[] {
     let changed = false;
     const v2 = v2Raw.map((s) => {
       const normalizedAdvanced = normalizeAdvancedRequestTaxRules(s.advancedRequest);
+      const normalizedOverride = normalizeAssumptionsOverride(s.assumptionsOverride);
       if (normalizedAdvanced !== s.advancedRequest) changed = true;
+      if (normalizedOverride !== (s.assumptionsOverride ?? null)) changed = true;
       const normalizedRequest = advancedToNormalRequest(normalizedAdvanced);
       return {
         ...s,
+        assumptionsOverride: normalizedOverride,
+        strategyProfileAttachments: (s.strategyProfileAttachments ?? null) as StrategyProfileAttachments | null,
         advancedRequest: normalizedAdvanced,
         request: normalizedRequest,
       };
@@ -182,7 +256,9 @@ export function saveScenario(
   advancedRequest: AdvancedSimulationRequest,
   id?: string,
   runId?: string | null,
-  lastRunMeta?: SavedScenario['lastRunMeta']
+  lastRunMeta?: SavedScenario['lastRunMeta'],
+  assumptionsOverride?: SavedScenario['assumptionsOverride'],
+  strategyProfileAttachments?: SavedScenario['strategyProfileAttachments']
 ): SavedScenario {
   if (typeof window === 'undefined') throw new Error('Cannot save scenario outside browser');
 
@@ -193,11 +269,14 @@ export function saveScenario(
   const now = new Date().toISOString();
 
   const normalizedAdvanced = normalizeAdvancedRequestTaxRules(advancedRequest);
+  const normalizedOverride = normalizeAssumptionsOverride(assumptionsOverride);
 
   const scenario: SavedScenario = {
     id: id ?? newId(),
     name: trimmed,
     savedAt: now,
+    ...(assumptionsOverride !== undefined ? { assumptionsOverride: normalizedOverride } : {}),
+    ...(strategyProfileAttachments !== undefined ? { strategyProfileAttachments: strategyProfileAttachments ?? null } : {}),
     advancedRequest: normalizedAdvanced,
     request: advancedToNormalRequest(normalizedAdvanced),
     runId: runId ?? undefined,

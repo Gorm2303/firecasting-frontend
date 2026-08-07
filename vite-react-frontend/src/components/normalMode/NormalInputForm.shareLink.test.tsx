@@ -20,8 +20,10 @@ vi.mock('qrcode.react', () => {
 
 import { startAdvancedSimulation } from '../../api/simulation';
 import SimulationForm, { type NormalInputFormHandle } from './NormalInputForm';
-import { encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
+import { decodeSharedScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { ExecutionDefaultsProvider } from '../../state/executionDefaults';
+
+const WITHDRAWAL_STORAGE_KEY = 'firecasting:strategyProfiles:withdrawalStrategy:v1';
 
 describe('NormalInputForm share links', () => {
   it('creates a share link for a saved scenario', async () => {
@@ -29,6 +31,28 @@ describe('NormalInputForm share links', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     window.localStorage.clear();
+    window.localStorage.setItem(
+      WITHDRAWAL_STORAGE_KEY,
+      JSON.stringify({
+        draft: {
+          title: 'Guardrail bridge',
+          baseMonthlySpending: 28000,
+        },
+        draftSavedAt: '2026-03-08T00:00:00.000Z',
+        activeProfileId: 'withdrawal-profile-1',
+        profiles: [
+          {
+            id: 'withdrawal-profile-1',
+            name: 'Guardrail bridge',
+            data: {
+              title: 'Guardrail bridge',
+              baseMonthlySpending: 28000,
+            },
+            savedAt: '2026-03-08T00:00:00.000Z',
+          },
+        ],
+      })
+    );
 
     const ref = React.createRef<NormalInputFormHandle>();
     render(
@@ -73,6 +97,17 @@ describe('NormalInputForm share links', () => {
 
     const scenarioParam = new URL(shareLinkInput.value).searchParams.get('scenario');
     expect(scenarioParam).toMatch(/^z:/);
+    expect(decodeSharedScenarioFromShareParam(scenarioParam ?? '')?.strategyProfileAttachments).toEqual({
+      withdrawalStrategy: {
+        id: 'withdrawal-profile-1',
+        name: 'Guardrail bridge',
+        savedAt: '2026-03-08T00:00:00.000Z',
+        data: {
+          title: 'Guardrail bridge',
+          baseMonthlySpending: 28000,
+        },
+      },
+    });
 
     promptSpy.mockRestore();
     confirmSpy.mockRestore();
@@ -97,7 +132,17 @@ describe('NormalInputForm share links', () => {
       ],
     };
 
-    const param = encodeScenarioToShareParam(request);
+    const param = encodeScenarioToShareParam(request, undefined, {
+      withdrawalStrategy: {
+        id: 'withdrawal-profile-99',
+        name: 'Shared guardrails',
+        savedAt: '2026-03-08T00:00:00.000Z',
+        data: {
+          title: 'Shared guardrails',
+          baseMonthlySpending: 29000,
+        },
+      },
+    });
     window.history.pushState({}, '', `/simulation?scenario=${param}`);
 
     render(
@@ -115,6 +160,14 @@ describe('NormalInputForm share links', () => {
         startDate: { date: '2033-02-03' },
       })
     );
+
+    const savedProfileState = JSON.parse(window.localStorage.getItem(WITHDRAWAL_STORAGE_KEY) ?? '{}') as {
+      activeProfileId?: string;
+      draft?: { title?: string; baseMonthlySpending?: number };
+    };
+    expect(savedProfileState.activeProfileId).toBe('withdrawal-profile-99');
+    expect(savedProfileState.draft?.title).toBe('Shared guardrails');
+    expect(savedProfileState.draft?.baseMonthlySpending).toBe(29000);
 
     // It should have populated the form as well
     expect((screen.getByLabelText(/^Start Date:?$/i) as HTMLInputElement).value).toBe('2033-02-03');

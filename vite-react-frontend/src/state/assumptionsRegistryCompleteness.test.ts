@@ -36,6 +36,7 @@ const normalizeUsedBy = (usedBy: unknown): string[] => {
 
 const assertUnitMatchesDefaultType = (unit: AssumptionUnitId, def: unknown) => {
   const numericUnits: ReadonlySet<AssumptionUnitId> = new Set([
+    'decimal',
     'pct',
     'dkk',
     'dkkPerMonth',
@@ -63,6 +64,12 @@ const assertUnitMatchesDefaultType = (unit: AssumptionUnitId, def: unknown) => {
     expect(typeof def).toBe('number');
     expect(Number.isFinite(def as number)).toBe(true);
     if (integerUnits.has(unit)) expect(Number.isInteger(def as number)).toBe(true);
+    return;
+  }
+
+  if (unit === 'json') {
+    expect(def !== undefined).toBe(true);
+    expect(typeof def === 'object').toBe(true);
     return;
   }
 

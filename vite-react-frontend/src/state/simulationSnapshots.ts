@@ -1,5 +1,5 @@
 import type { AdvancedSimulationRequest } from '../models/advancedSimulation';
-import type { Assumptions } from './assumptions';
+import type { Assumptions, AssumptionsOverride } from './assumptions';
 
 export type SimulationSnapshot = {
   /** Local snapshot id (not the simulationId). */
@@ -7,7 +7,10 @@ export type SimulationSnapshot = {
   /** The backend simulation run id. */
   runId: string;
   createdAt: string;
+  /** The effective assumptions actually used for the run (baseline + optional overrides). */
   assumptions: Assumptions;
+  /** Optional scenario-level overlay that was applied on top of the baseline assumptions. */
+  assumptionsOverride?: AssumptionsOverride | null;
   advancedRequest: AdvancedSimulationRequest;
 };
 

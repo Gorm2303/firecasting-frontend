@@ -1,60 +1,40 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageLayout from '../components/PageLayout';
-
-const card: React.CSSProperties = {
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 12,
-  padding: 16,
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-};
-
-const btn = (variant: 'primary' | 'ghost'): React.CSSProperties => {
-  const base: React.CSSProperties = {
-    padding: '10px 14px',
-    borderRadius: 10,
-    border: '1px solid var(--fc-subtle-border)',
-    cursor: 'pointer',
-    fontSize: 16,
-    fontWeight: 750,
-  };
-  if (variant === 'primary') return { ...base, background: '#2e2e2e', color: '#fff', borderColor: '#2e2e2e' };
-  return { ...base, background: 'transparent', color: 'var(--fc-card-text)' };
-};
+import { Button, Card } from '../components/ui';
 
 const TutorialLandingPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
     <PageLayout variant="constrained" maxWidthPx={900}>
-      <h1 style={{ textAlign: 'center' }}>Tutor</h1>
+      <h1 className="text-center text-3xl font-extrabold">Tutor</h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginTop: 18 }}>
-        <div style={card}>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Normal tutorial</div>
-          <div style={{ opacity: 0.9, marginBottom: 12 }}>
+      <div className="mt-4.5 grid gap-3">
+        <Card>
+          <div className="mb-1.5 text-lg font-extrabold">Normal tutorial</div>
+          <div className="mb-3 opacity-90">
             Great first run: pick start date, add/edit phases, and run a simulation.
           </div>
-          <button type="button" onClick={() => navigate('/simulation/tutorial/normal')} style={btn('primary')}>
+          <Button variant="primary" onClick={() => navigate('/simulation/tutorial/normal')}>
             Start normal tutorial
-          </button>
-        </div>
+          </Button>
+        </Card>
 
-        <div style={card}>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Advanced tutorial</div>
-          <div style={{ opacity: 0.9, marginBottom: 12 }}>
+        <Card>
+          <div className="mb-1.5 text-lg font-extrabold">Advanced tutorial</div>
+          <div className="mb-3 opacity-90">
             Dive into seeds, paths/batch size, inflation/fees, tax exemptions, and return models.
           </div>
-          <button type="button" onClick={() => navigate('/simulation/tutorial/advanced')} style={btn('primary')}>
+          <Button variant="primary" onClick={() => navigate('/simulation/tutorial/advanced')}>
             Start advanced tutorial
-          </button>
-        </div>
+          </Button>
+        </Card>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-          <button type="button" onClick={() => navigate('/simulation')} style={btn('ghost')}>
+        <div className="mt-1 flex justify-center">
+          <Button variant="ghost" onClick={() => navigate('/simulation')}>
             Back to simulation
-          </button>
+          </Button>
         </div>
       </div>
     </PageLayout>

@@ -14,22 +14,26 @@ import {
   deleteScenario,
   findScenarioById,
   findScenarioByName,
+  formatSavedScenarioLabel,
   isRandomSeedRequested,
   listSavedScenarios,
+  materializeSavedScenarioForRun,
   materializeRandomSeedIfNeeded,
   saveScenario,
+  scenarioHasAssumptionsOverride,
   type SavedScenario,
 } from '../../config/savedScenarios';
 import { deepEqual } from '../../utils/deepEqual';
-import { decodeScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
-import { normalizeTaxRules } from '../../utils/taxRules';
+import { decodeSharedScenarioFromShareParam, encodeScenarioToShareParam } from '../../utils/shareScenarioLink';
 import { getTimelineSegments, summarizeScenario } from '../../utils/summarizeScenario';
 import { draftToIntOrZero, draftToNumberOrZero, isValidDecimalDraft, isValidIntegerDraft, parseLocaleNumber } from '../../utils/numberInput';
 import { QRCodeSVG } from 'qrcode.react';
 import InfoTooltip from '../InfoTooltip';
-import { useAssumptions } from '../../state/assumptions';
+import { applyAssumptionsOverride, normalizeAssumptionsOverride, useAssumptions, type Assumptions, type AssumptionsOverride } from '../../state/assumptions';
 import { getDefaultExecutionDefaults, useExecutionDefaults } from '../../state/executionDefaults';
 import { appendSimulationSnapshot } from '../../state/simulationSnapshots';
+import { applyStrategyProfileAttachments, captureActiveStrategyProfileAttachments } from '../../pages/strategy/strategyProfiles';
+import ScenarioOverrideEditor from './ScenarioOverrideEditor';
 
 const ADVANCED_OPTIONS_KEY = 'firecasting:advancedOptions:v1';
 const NORMAL_DRAFT_KEY = 'firecasting:normalDraft:v1';
@@ -688,7 +692,7 @@ ref
       // Returner
       returnType: DEFAULT_RETURN_TYPE as ReturnType,
       seedMode: executionDefaults.seedMode as MasterSeedMode,
-      seed: String(DEFAULT_MASTER_SEED),
+      seed: String(executionDefaults.customSeed),
       simpleAveragePercentage: '7',
       distributionType: 'normal' as DistributionType,
       normalMean: '0.07',
@@ -728,6 +732,7 @@ ref
     };
   }, [
     executionDefaults.batchSize,
+    executionDefaults.customSeed,
     executionDefaults.paths,
     executionDefaults.seedMode,
     currentAssumptions.inflationPct,
@@ -1049,6 +1054,7 @@ ref
   const [compareScenarioId, setCompareScenarioId] = useState<string>('');
   const [showScenarioCompare, setShowScenarioCompare] = useState(false);
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
+  const [scenarioOverrideDraft, setScenarioOverrideDraft] = useState<AssumptionsOverride | null>(null);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [didCopyShareUrl, setDidCopyShareUrl] = useState(false);
   const [simulateInProgress, setSimulateInProgress] = useState(false);
@@ -1746,6 +1752,7 @@ ref
     setDidCopyShareUrl(false);
     setCompareScenarioId('');
     setShowScenarioCompare(false);
+    setScenarioOverrideDraft(null);
     setIsScenarioModalOpen(true);
   }, [refreshSavedScenarios]);
 
@@ -1881,6 +1888,7 @@ ref
 
   const closeScenarioModal = useCallback(() => {
     setIsScenarioModalOpen(false);
+    setScenarioOverrideDraft(null);
     setShareUrl('');
     setDidCopyShareUrl(false);
     setCompareScenarioId('');
@@ -1890,11 +1898,25 @@ ref
   const scenarioA = useMemo(() => savedScenarios.find((s) => s.id === selectedScenarioId), [savedScenarios, selectedScenarioId]);
   const scenarioB = useMemo(() => savedScenarios.find((s) => s.id === compareScenarioId), [savedScenarios, compareScenarioId]);
   const scenarioASummary = useMemo(
-    () => (scenarioA ? summarizeScenario(scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest), currentAssumptions) : null),
+    () => (
+      scenarioA
+        ? summarizeScenario(
+            scenarioA.request ?? advancedToNormalRequest(scenarioA.advancedRequest),
+            applyAssumptionsOverride(currentAssumptions, scenarioA.assumptionsOverride ?? null)
+          )
+        : null
+    ),
     [currentAssumptions, scenarioA]
   );
   const scenarioBSummary = useMemo(
-    () => (scenarioB ? summarizeScenario(scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest), currentAssumptions) : null),
+    () => (
+      scenarioB
+        ? summarizeScenario(
+            scenarioB.request ?? advancedToNormalRequest(scenarioB.advancedRequest),
+            applyAssumptionsOverride(currentAssumptions, scenarioB.assumptionsOverride ?? null)
+          )
+        : null
+    ),
     [currentAssumptions, scenarioB]
   );
 
@@ -1915,6 +1937,11 @@ ref
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [closeScenarioModal, isScenarioModalOpen]);
+
+  useEffect(() => {
+    if (!isScenarioModalOpen) return;
+    setScenarioOverrideDraft(normalizeAssumptionsOverride(scenarioA?.assumptionsOverride ?? null));
+  }, [isScenarioModalOpen, scenarioA]);
 
   const handleSaveScenario = useCallback(async () => {
     const name = window.prompt('Scenario name?');
@@ -1994,19 +2021,32 @@ ref
         requestToSave,
         existing.id,
         resolvedRunId ?? (keepExistingRunId ? existing.runId : undefined),
-        metaToStore ?? existing.lastRunMeta
+        metaToStore ?? existing.lastRunMeta,
+        existing.id === selectedScenarioId ? scenarioOverrideDraft ?? existing.assumptionsOverride : existing.assumptionsOverride,
+        captureActiveStrategyProfileAttachments()
       );
       refreshSavedScenarios();
       setSelectedScenarioId(saved.id);
       return;
     }
 
-    const saved = saveScenario(name, requestToSave, undefined, resolvedRunId ?? undefined, metaToStore);
+    const saved = saveScenario(
+      name,
+      requestToSave,
+      undefined,
+      resolvedRunId ?? undefined,
+      metaToStore,
+      undefined,
+      captureActiveStrategyProfileAttachments()
+    );
     refreshSavedScenarios();
     setSelectedScenarioId(saved.id);
-  }, [currentAdvancedRequest, refreshSavedScenarios, lastCompletedRun]);
+  }, [currentAdvancedRequest, refreshSavedScenarios, lastCompletedRun, scenarioOverrideDraft, selectedScenarioId]);
 
-  const runSimulationWithRequest = useCallback(async (req: AdvancedSimulationRequest) => {
+  const runSimulationWithRequest = useCallback(async (
+    req: AdvancedSimulationRequest,
+    snapshot?: { assumptionsUsed?: Assumptions; assumptionsOverride?: AssumptionsOverride | null }
+  ) => {
     const total = (req.phases ?? []).reduce((s, p: any) => s + (Number(p.durationInMonths) || 0), 0);
     if (total > MAX_MONTHS) {
       alert(`Total duration must be ≤ ${MAX_YEARS} years (you have ${formatYearsMonths(total)}).`);
@@ -2022,10 +2062,12 @@ ref
       lastRunRequestRef.current = req;
 
       const started = await startAdvancedSimulation(req);
+      const assumptionsUsed = snapshot?.assumptionsUsed ?? currentAssumptions;
       appendSimulationSnapshot({
         runId: started.id,
         createdAt: started.createdAt ?? new Date().toISOString(),
-        assumptions: currentAssumptions,
+        assumptions: assumptionsUsed,
+        ...(snapshot?.assumptionsOverride !== undefined ? { assumptionsOverride: snapshot.assumptionsOverride } : {}),
         advancedRequest: req,
       });
       lastStartedRunMetaRef.current = started;
@@ -2047,46 +2089,37 @@ ref
       if (!ok) return;
     }
     const reqForForm = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
+    applyStrategyProfileAttachments(scenario.strategyProfileAttachments ?? null);
     applyRequestToForm(reqForForm);
     setSelectedScenarioId(scenario.id);
 
-    const normalizedAdvanced: AdvancedSimulationRequest = {
-      ...scenario.advancedRequest,
-      phases: (scenario.advancedRequest.phases ?? []).map((p: any) => ({
-        ...p,
-        taxRules: normalizeTaxRules(p?.taxRules),
-      })),
-    };
+    const { advancedRequest: requestToRun, assumptionsUsed } = materializeSavedScenarioForRun(scenario, currentAssumptions);
 
-    const hasAnyTaxRules = (normalizedAdvanced.phases ?? []).some((p: any) => (p?.taxRules?.length ?? 0) > 0);
-    const cfg = normalizedAdvanced.taxExemptionConfig;
-    const hasExplicitTaxExemptionConfig =
-      cfg?.exemptionCard?.limit !== undefined ||
-      cfg?.exemptionCard?.yearlyIncrease !== undefined ||
-      cfg?.stockExemption?.taxRate !== undefined ||
-      cfg?.stockExemption?.limit !== undefined ||
-      cfg?.stockExemption?.yearlyIncrease !== undefined;
-
-    const assumptionsTaxExemptionConfig = {
-      exemptionCard: {
-        limit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
-        yearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
-      },
-      stockExemption: {
-        taxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
-        limit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
-        yearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
-      },
-    };
-
-    const requestToRun =
-      hasAnyTaxRules && !hasExplicitTaxExemptionConfig
-        ? { ...normalizedAdvanced, taxExemptionConfig: assumptionsTaxExemptionConfig }
-        : normalizedAdvanced;
-
-    void runSimulationWithRequest(requestToRun);
+    void runSimulationWithRequest(requestToRun, {
+      assumptionsUsed,
+      assumptionsOverride: scenario.assumptionsOverride ?? null,
+    });
     closeScenarioModal();
-  }, [applyRequestToForm, closeScenarioModal, currentAssumptions.taxExemptionDefaults, isDirty, runSimulationWithRequest]);
+  }, [applyRequestToForm, closeScenarioModal, currentAssumptions, isDirty, runSimulationWithRequest]);
+
+  const handleSaveScenarioOverrides = useCallback(() => {
+    if (!scenarioA) return;
+    const saved = saveScenario(
+      scenarioA.name,
+      scenarioA.advancedRequest,
+      scenarioA.id,
+      scenarioA.runId ?? undefined,
+      scenarioA.lastRunMeta,
+      scenarioOverrideDraft,
+      scenarioA.strategyProfileAttachments ?? captureActiveStrategyProfileAttachments()
+    );
+    refreshSavedScenarios();
+    setSelectedScenarioId(saved.id);
+  }, [refreshSavedScenarios, scenarioA, scenarioOverrideDraft]);
+
+  const handleClearScenarioOverrides = useCallback(() => {
+    setScenarioOverrideDraft(null);
+  }, []);
 
   const handleShareScenario = useCallback(() => {
     if (!selectedScenarioId) return;
@@ -2094,12 +2127,18 @@ ref
     if (!scenario) return;
 
     const ok = window.confirm(
-      'This share link encodes your full scenario inputs in the URL. Anyone with the link can view/decode them. Continue?'
+      scenarioHasAssumptionsOverride(scenario) || Boolean(scenario.strategyProfileAttachments && Object.keys(scenario.strategyProfileAttachments).length > 0)
+        ? 'This share link encodes your full scenario inputs plus any scenario-specific assumption overrides and attached strategy presets in the URL. Anyone with the link can view/decode them. Continue?'
+        : 'This share link encodes your full scenario inputs in the URL. Global assumptions still come from the receiver unless overrides or attached strategy presets are included. Continue?'
     );
     if (!ok) return;
 
     const reqForShare = scenario.request ?? advancedToNormalRequest(scenario.advancedRequest);
-    const param = encodeScenarioToShareParam(reqForShare);
+    const param = encodeScenarioToShareParam(
+      reqForShare,
+      scenario.assumptionsOverride ?? null,
+      scenario.strategyProfileAttachments ?? null
+    );
     const url = new URL(window.location.href);
     url.pathname = '/simulation';
     url.searchParams.set('scenario', param);
@@ -2481,6 +2520,7 @@ ref
       paths: Math.trunc(Number(adv.paths)),
       batchSize: Math.trunc(Number(adv.batchSize)),
       seedMode: adv.seedMode,
+      customSeed: Math.max(1, Math.trunc(Number(adv.seed))),
     });
 
     setPaths(String(adv.paths));
@@ -2630,7 +2670,7 @@ ref
     if (hasAppliedScenarioFromUrlRef.current) return;
     if (!scenarioParamOnLoad) return;
 
-    const decoded = decodeScenarioFromShareParam(scenarioParamOnLoad);
+    const decoded = decodeSharedScenarioFromShareParam(scenarioParamOnLoad);
     if (!decoded) {
       hasAppliedScenarioFromUrlRef.current = true;
       window.alert('Invalid or corrupted share link.');
@@ -2655,19 +2695,24 @@ ref
       }
     }
 
-    applyRequestToForm(decoded);
+    applyStrategyProfileAttachments(decoded.strategyProfileAttachments ?? null);
+    applyRequestToForm(decoded.request);
     setSelectedScenarioId('');
-    void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded, {
-      inflationPct: currentAssumptions.inflationPct,
-      yearlyFeePct: currentAssumptions.yearlyFeePct,
+    const assumptionsUsed = applyAssumptionsOverride(currentAssumptions, decoded.assumptionsOverride ?? null);
+    void runSimulationWithRequest(normalToAdvancedWithDefaults(decoded.request, {
+      inflationPct: assumptionsUsed.inflationPct,
+      yearlyFeePct: assumptionsUsed.yearlyFeePct,
       taxExemptionDefaults: {
-        exemptionCardLimit: currentAssumptions.taxExemptionDefaults.exemptionCardLimit,
-        exemptionCardYearlyIncrease: currentAssumptions.taxExemptionDefaults.exemptionCardYearlyIncrease,
-        stockExemptionTaxRate: currentAssumptions.taxExemptionDefaults.stockExemptionTaxRate,
-        stockExemptionLimit: currentAssumptions.taxExemptionDefaults.stockExemptionLimit,
-        stockExemptionYearlyIncrease: currentAssumptions.taxExemptionDefaults.stockExemptionYearlyIncrease,
+        exemptionCardLimit: assumptionsUsed.taxExemptionDefaults.exemptionCardLimit,
+        exemptionCardYearlyIncrease: assumptionsUsed.taxExemptionDefaults.exemptionCardYearlyIncrease,
+        stockExemptionTaxRate: assumptionsUsed.taxExemptionDefaults.stockExemptionTaxRate,
+        stockExemptionLimit: assumptionsUsed.taxExemptionDefaults.stockExemptionLimit,
+        stockExemptionYearlyIncrease: assumptionsUsed.taxExemptionDefaults.stockExemptionYearlyIncrease,
       },
-    }));
+    }), {
+      assumptionsUsed,
+      assumptionsOverride: decoded.assumptionsOverride ?? null,
+    });
     hasAppliedScenarioFromUrlRef.current = true;
 
     // If this scenario came from an internal navigation (e.g. Explore -> Clone to form),
@@ -2769,7 +2814,7 @@ ref
                       if (!isTutorial) updateExecutionDefaults({ seedMode: next });
                       if (next === 'custom') {
                         const n = toNumOrUndef(seed);
-                        if (!n || n <= 0) setSeed(String(DEFAULT_MASTER_SEED));
+                        if (!n || n <= 0) setSeed(String(executionDefaults.customSeed));
                       }
                     }}
                     disabled={simulateInProgress}
@@ -2799,6 +2844,10 @@ ref
                         if (!isValidIntegerDraft(next)) return;
                         markUserEdited();
                         setSeed(next);
+                        const parsed = Number(next);
+                        if (!isTutorial && Number.isFinite(parsed) && parsed > 0) {
+                          updateExecutionDefaults({ customSeed: Math.trunc(parsed) });
+                        }
                       }}
                       disabled={simulateInProgress}
                       style={inputStyle}
@@ -3851,7 +3900,7 @@ ref
                 <option value="">— Select —</option>
                 {savedScenarios.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {formatSavedScenarioLabel(s)}
                   </option>
                 ))}
               </select>
@@ -3872,11 +3921,30 @@ ref
                 <option value="">— Select —</option>
                 {savedScenarios.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {formatSavedScenarioLabel(s)}
                   </option>
                 ))}
               </select>
             </label>
+
+            {scenarioA && (
+              <ScenarioOverrideEditor
+                baselineAssumptions={currentAssumptions}
+                overrideDraft={scenarioOverrideDraft}
+                disabled={simulateInProgress}
+                onChange={(next) => setScenarioOverrideDraft(normalizeAssumptionsOverride(next))}
+                onSave={handleSaveScenarioOverrides}
+                onClear={handleClearScenarioOverrides}
+                onOpenAssumptionsHub={() => {
+                  closeScenarioModal();
+                  navigate('/assumptions');
+                }}
+              />
+            )}
+
+            <div style={{ fontSize: 12, opacity: 0.76 }}>
+              Shared links carry scenario overrides when present. Without an override, the receiver uses their current baseline assumptions.
+            </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button

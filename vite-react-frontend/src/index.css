@@ -1,3 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Semantic color tokens — resolve through the --fc-* custom properties below,
+     so light/dark switching (prefers-color-scheme) keeps working for Tailwind
+     utilities (bg-card, text-card-fg, border-card, ...) the same way it already
+     works for legacy inline styles. */
+  --color-bg: var(--fc-bg);
+  --color-fg: var(--fc-fg);
+  --color-card: var(--fc-card-bg);
+  --color-card-fg: var(--fc-card-text);
+  --color-card-border: var(--fc-card-border);
+  --color-card-muted: var(--fc-card-muted);
+  --color-subtle: var(--fc-subtle-bg);
+  --color-subtle-border: var(--fc-subtle-border);
+  --color-accent: #646cff;
+  --color-accent-hover: #535bf2;
+  --color-success: var(--fc-success);
+  --color-warning: var(--fc-warning);
+  --color-danger: var(--fc-danger);
+
+  --radius-md: 0.625rem;   /* 10px — inputs, buttons, small controls */
+  --radius-lg: 0.875rem;   /* 14px — cards, panels */
+  --radius-xl: 1rem;       /* 16px — larger surfaces */
+}
+
+/* Tailwind's Preflight reset strips list markers/margins from bare <ul>/<ol>. Pages not yet
+   migrated to explicit Tailwind classes (see firecasting/docs/frontend-ui-plan.md Phase 7)
+   still rely on browser-default bullets/numbering for unclassed prose lists (e.g. InfoPage's
+   glossary), so restore that default scoped to elements with no class — anything that opts
+   into Tailwind list utilities (list-disc, list-none, etc.) is unaffected. */
+@layer base {
+  ul:not([class]),
+  ol:not([class]) {
+    list-style: revert;
+    margin: revert;
+    padding: revert;
+  }
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -7,7 +49,9 @@
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
-  /* Firecasting UI tokens (used by inline-styled components) */
+  /* Firecasting UI tokens (used by inline-styled components and Tailwind's @theme above) */
+  --fc-bg: #242424;
+  --fc-fg: rgba(255, 255, 255, 0.87);
   --fc-card-bg: #2a2a2a;
   --fc-card-border: #aaaaaa33;
   --fc-card-text: rgba(255, 255, 255, 0.92);
@@ -15,6 +59,9 @@
   --fc-subtle-bg: #2e2e2e;
   --fc-subtle-border: #6e6e6e;
   --fc-phase-border: #ccc;
+  --fc-success: #4ade80;
+  --fc-warning: #facc15;
+  --fc-danger: #f87171;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -65,6 +112,8 @@ button:focus-visible {
     color: #213547;
     background-color: #ffffff;
 
+    --fc-bg: #ffffff;
+    --fc-fg: #213547;
     --fc-card-bg: #fdfdfd;
     --fc-card-border: #cccccc;
     --fc-card-text: #111827;
@@ -72,6 +121,9 @@ button:focus-visible {
     --fc-subtle-bg: #f8f8f8;
     --fc-subtle-border: #c5c7cb;
     --fc-phase-border: #333;
+    --fc-success: #16a34a;
+    --fc-warning: #ca8a04;
+    --fc-danger: #dc2626;
   }
   a:hover {
     color: #747bff;
@@ -91,6 +143,12 @@ button:focus-visible {
     border-color: #646cff;    
     filter: brightness(1.05);  
   }
+}
+
+.fc-themed-select,
+.fc-themed-select option {
+  background: var(--fc-card-bg);
+  color: var(--fc-card-text);
 }
 
 /* Bottom page tabs (inherits your light/dark media queries) */

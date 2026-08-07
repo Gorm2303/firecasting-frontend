@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageLayout from '../components/PageLayout';
+import { Button, Card, Input, PageHeader, Textarea } from '../components/ui';
 
-type DecisionStatus = 'open' | 'resolved';
+export type DecisionStatus = 'open' | 'resolved';
 
-type DecisionJournalEntry = {
+export type DecisionJournalEntry = {
   id: string;
   createdAt: string; // ISO
   decision: string;
@@ -15,7 +16,8 @@ type DecisionJournalEntry = {
   status: DecisionStatus;
 };
 
-const STORAGE_KEY = 'firecasting:decisionJournal:v1';
+export const DECISION_JOURNAL_STORAGE_KEY = 'firecasting:decisionJournal:v1';
+const STORAGE_KEY = DECISION_JOURNAL_STORAGE_KEY;
 
 function safeParseEntries(raw: string | null): DecisionJournalEntry[] {
   if (!raw) return [];
@@ -27,6 +29,15 @@ function safeParseEntries(raw: string | null): DecisionJournalEntry[] {
     return [];
   }
 }
+
+export const listDecisionJournalEntries = (): DecisionJournalEntry[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    return safeParseEntries(window.localStorage.getItem(DECISION_JOURNAL_STORAGE_KEY));
+  } catch {
+    return [];
+  }
+};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -45,11 +56,8 @@ function newId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-const tableCell: React.CSSProperties = {
-  borderTop: '1px solid var(--fc-card-border)',
-  padding: '10px 8px',
-  verticalAlign: 'top',
-};
+const fieldLabelClass = 'flex flex-col gap-1.5';
+const fieldLabelTextClass = 'font-bold';
 
 const DecisionJournalPage: React.FC = () => {
   const [entries, setEntries] = useState<DecisionJournalEntry[]>(() => {
@@ -121,36 +129,24 @@ const DecisionJournalPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <header>
-          <h1 style={{ margin: 0 }}>Decision Journal</h1>
-          <div style={{ opacity: 0.8, marginTop: 6 }}>
-            Local-only decision log with check-in dates (no backend).
-          </div>
-        </header>
+      <div className="flex flex-col gap-3">
+        <PageHeader title="Decision Journal" subtitle="Local-only decision log with check-in dates (no backend)." />
 
-        <section
-          style={{
-            background: 'var(--fc-card-bg)',
-            border: '1px solid var(--fc-card-border)',
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 16 }}>New entry</div>
-          <div style={{ opacity: 0.8, marginTop: 6, lineHeight: 1.35 }}>
-            Capture the decision, why you believe it’s correct, and what would falsify it. Review later.
+        <Card>
+          <div className="text-base font-black">New entry</div>
+          <div className="mt-1.5 leading-snug opacity-80">
+            Capture the decision, why you believe it's correct, and what would falsify it. Review later.
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginTop: 12 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 700 }}>Decision</div>
-              <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="What are you deciding?" />
+          <div className="mt-3 grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+            <label className={fieldLabelClass}>
+              <div className={fieldLabelTextClass}>Decision</div>
+              <Input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="What are you deciding?" />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 700 }}>Confidence (%)</div>
-              <input
+            <label className={fieldLabelClass}>
+              <div className={fieldLabelTextClass}>Confidence (%)</div>
+              <Input
                 type="number"
                 min={1}
                 max={99}
@@ -159,14 +155,14 @@ const DecisionJournalPage: React.FC = () => {
               />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 700 }}>Check-in date</div>
-              <input type="date" value={checkInDate} onChange={(e) => setCheckInDate(e.target.value)} />
+            <label className={fieldLabelClass}>
+              <div className={fieldLabelTextClass}>Check-in date</div>
+              <Input type="date" value={checkInDate} onChange={(e) => setCheckInDate(e.target.value)} />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-              <div style={{ fontWeight: 700 }}>Thesis</div>
-              <textarea
+            <label className={fieldLabelClass + ' col-span-full'}>
+              <div className={fieldLabelTextClass}>Thesis</div>
+              <Textarea
                 value={thesis}
                 onChange={(e) => setThesis(e.target.value)}
                 placeholder="Why is this likely correct? What evidence supports it?"
@@ -174,9 +170,9 @@ const DecisionJournalPage: React.FC = () => {
               />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-              <div style={{ fontWeight: 700 }}>Expected outcome</div>
-              <textarea
+            <label className={fieldLabelClass + ' col-span-full'}>
+              <div className={fieldLabelTextClass}>Expected outcome</div>
+              <Textarea
                 value={expectedOutcome}
                 onChange={(e) => setExpectedOutcome(e.target.value)}
                 placeholder="What do you expect to happen? How will you know it worked?"
@@ -184,85 +180,78 @@ const DecisionJournalPage: React.FC = () => {
               />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-              <div style={{ fontWeight: 700 }}>Key risk / falsifier</div>
-              <textarea
+            <label className={fieldLabelClass + ' col-span-full'}>
+              <div className={fieldLabelTextClass}>Key risk / falsifier</div>
+              <Textarea
                 value={keyRisk}
                 onChange={(e) => setKeyRisk(e.target.value)}
-                placeholder="What would make this decision wrong? What’s the biggest risk?"
+                placeholder="What would make this decision wrong? What's the biggest risk?"
                 rows={2}
               />
             </label>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            <button type="button" onClick={addEntry} disabled={!canAdd}>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={addEntry} disabled={!canAdd}>
               Add entry
-            </button>
-            <button type="button" onClick={clearAll} disabled={entries.length === 0}>
+            </Button>
+            <Button variant="secondary" onClick={clearAll} disabled={entries.length === 0}>
               Clear all
-            </button>
-            <div style={{ marginLeft: 'auto', opacity: 0.8, alignSelf: 'center' }}>
+            </Button>
+            <div className="ml-auto self-center opacity-80">
               {entries.length} total · {openCount} open
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section
-          style={{
-            background: 'var(--fc-card-bg)',
-            border: '1px solid var(--fc-card-border)',
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 16 }}>Entries</div>
+        <Card>
+          <div className="text-base font-black">Entries</div>
 
           {sorted.length === 0 ? (
-            <div style={{ marginTop: 10, opacity: 0.8 }}>No entries yet.</div>
+            <div className="mt-2.5 opacity-80">No entries yet.</div>
           ) : (
-            <div style={{ overflowX: 'auto', marginTop: 10 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 840 }}>
+            <div className="mt-2.5 overflow-x-auto">
+              <table className="w-full min-w-210 border-collapse">
                 <thead>
-                  <tr style={{ textAlign: 'left', opacity: 0.85 }}>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Status</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Decision</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Confidence</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Check-in</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Thesis</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Risk</th>
-                    <th style={{ padding: '0 8px 8px 8px' }}>Actions</th>
+                  <tr className="text-left opacity-85">
+                    <th className="px-2 pb-2">Status</th>
+                    <th className="px-2 pb-2">Decision</th>
+                    <th className="px-2 pb-2">Confidence</th>
+                    <th className="px-2 pb-2">Check-in</th>
+                    <th className="px-2 pb-2">Thesis</th>
+                    <th className="px-2 pb-2">Risk</th>
+                    <th className="px-2 pb-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.map((e) => (
                     <tr key={e.id}>
-                      <td style={tableCell}>{e.status}</td>
-                      <td style={tableCell}>
-                        <div style={{ fontWeight: 800 }}>{e.decision}</div>
-                        <div style={{ opacity: 0.75, fontSize: 12, marginTop: 4 }}>
+                      <td className="border-t border-card-border p-2.5 align-top">{e.status}</td>
+                      <td className="border-t border-card-border p-2.5 align-top">
+                        <div className="font-extrabold">{e.decision}</div>
+                        <div className="mt-1 text-xs opacity-75">
                           Created {new Date(e.createdAt).toLocaleString()}
                         </div>
                         {e.expectedOutcome ? (
-                          <div style={{ opacity: 0.85, marginTop: 6 }}>{e.expectedOutcome}</div>
+                          <div className="mt-1.5 opacity-85">{e.expectedOutcome}</div>
                         ) : null}
                       </td>
-                      <td style={tableCell}>{e.confidencePct}%</td>
-                      <td style={tableCell}>{e.checkInDate || '—'}</td>
-                      <td style={tableCell}>
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{e.thesis}</div>
+                      <td className="border-t border-card-border p-2.5 align-top">{e.confidencePct}%</td>
+                      <td className="border-t border-card-border p-2.5 align-top">{e.checkInDate || '—'}</td>
+                      <td className="border-t border-card-border p-2.5 align-top">
+                        <div className="whitespace-pre-wrap">{e.thesis}</div>
                       </td>
-                      <td style={tableCell}>
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{e.keyRisk || '—'}</div>
+                      <td className="border-t border-card-border p-2.5 align-top">
+                        <div className="whitespace-pre-wrap">{e.keyRisk || '—'}</div>
                       </td>
-                      <td style={tableCell}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => toggleResolved(e.id)}>
+                      <td className="border-t border-card-border p-2.5 align-top">
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="secondary" onClick={() => toggleResolved(e.id)}>
                             {e.status === 'open' ? 'Mark resolved' : 'Re-open'}
-                          </button>
-                          <button type="button" onClick={() => removeEntry(e.id)}>
+                          </Button>
+                          <Button variant="secondary" onClick={() => removeEntry(e.id)}>
                             Delete
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -271,7 +260,7 @@ const DecisionJournalPage: React.FC = () => {
               </table>
             </div>
           )}
-        </section>
+        </Card>
       </div>
     </PageLayout>
   );

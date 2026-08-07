@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultPhase, createDefaultSimulationRequest, DEFAULT_TAX_PERCENTAGE } from '../config/simulationDefaults';
-import { decodeScenarioFromShareParam, encodeScenarioToShareParam, normalizeDecodedScenario } from './shareScenarioLink';
+import { decodeScenarioFromShareParam, decodeSharedScenarioFromShareParam, encodeScenarioToShareParam, normalizeDecodedScenario } from './shareScenarioLink';
 
 const toBase64Url = (json: string): string => {
   const bytes = new TextEncoder().encode(json);
@@ -46,6 +46,82 @@ describe('shareScenarioLink', () => {
     const decoded = decodeScenarioFromShareParam(param);
 
     expect(decoded).toEqual(request);
+  });
+
+  it('round-trips a scenario override payload when present', () => {
+    const request = {
+      startDate: { date: '2040-01-01' },
+      overallTaxRule: 'NOTIONAL' as const,
+      taxPercentage: 30,
+      phases: [
+        {
+          ...createDefaultPhase('DEPOSIT'),
+          durationInMonths: 12,
+          initialDeposit: 100,
+          monthlyDeposit: 10,
+          yearlyIncreaseInPercentage: 1,
+          taxRules: ['exemptioncard'],
+        },
+      ],
+    };
+
+    const param = encodeScenarioToShareParam(request, {
+      inflationPct: 3,
+      taxExemptionDefaults: {
+        stockExemptionLimit: 70000,
+      },
+    });
+
+    const normalizedRequest = decodeScenarioFromShareParam(param);
+    expect(normalizedRequest).toEqual(request);
+    expect(decodeSharedScenarioFromShareParam(param)).toEqual({
+      request: normalizedRequest,
+      assumptionsOverride: {
+        inflationPct: 3,
+        taxExemptionDefaults: {
+          stockExemptionLimit: 70000,
+        },
+      },
+      strategyProfileAttachments: null,
+    });
+  });
+
+  it('round-trips strategy profile attachments when present', () => {
+    const request = {
+      startDate: { date: '2040-01-01' },
+      overallTaxRule: 'NOTIONAL' as const,
+      taxPercentage: 30,
+      phases: [
+        {
+          ...createDefaultPhase('DEPOSIT'),
+          durationInMonths: 12,
+          initialDeposit: 100,
+          monthlyDeposit: 10,
+          yearlyIncreaseInPercentage: 1,
+          taxRules: ['exemptioncard'],
+        },
+      ],
+    };
+
+    const attachments = {
+      withdrawalStrategy: {
+        id: 'withdrawal-profile-1',
+        name: 'Guardrail bridge',
+        savedAt: '2026-03-08T00:00:00.000Z',
+        data: {
+          title: 'Guardrail bridge',
+          baseMonthlySpending: 28000,
+        },
+      },
+    };
+
+    const param = encodeScenarioToShareParam(request, undefined, attachments);
+
+    expect(decodeSharedScenarioFromShareParam(param)).toEqual({
+      request,
+      assumptionsOverride: null,
+      strategyProfileAttachments: attachments,
+    });
   });
 
   it('normalizes legacy tax rule spellings when encoding/decoding', () => {

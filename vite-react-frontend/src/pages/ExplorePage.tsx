@@ -12,6 +12,7 @@ import MultiPhaseOverview from '../MultiPhaseOverview';
 import { METRIC_COLORS, moneyStoryStepColor } from '../utils/metricColors';
 import { toIsoDateString } from '../utils/backendDate';
 import { useAssumptions } from '../state/assumptions';
+import { findSnapshotByRunId } from '../state/simulationSnapshots';
 import {
   exportSimulationCsv,
   getRunInput,
@@ -1123,7 +1124,8 @@ const ExplorePage: React.FC = () => {
       const input = inputByRunId[run.id];
       if (!input) throw new Error('Missing run input');
       const normalReq = advancedToNormalRequest(input);
-      const param = encodeScenarioToShareParam(normalReq);
+      const snapshot = findSnapshotByRunId(run.id);
+      const param = encodeScenarioToShareParam(normalReq, snapshot?.assumptionsOverride ?? null);
       const search = new URLSearchParams({ scenario: param, scenarioAuto: '1' }).toString();
       navigate(`/simulation?${search}`);
     },
@@ -1154,7 +1156,8 @@ const ExplorePage: React.FC = () => {
           modelBuildTime: run.modelBuildTime ?? undefined,
           modelSpringBootVersion: run.modelSpringBootVersion ?? undefined,
           modelJavaVersion: run.modelJavaVersion ?? undefined,
-        }
+        },
+        findSnapshotByRunId(run.id)?.assumptionsOverride ?? null
       );
       window.alert('Saved to Scenarios.');
     },
