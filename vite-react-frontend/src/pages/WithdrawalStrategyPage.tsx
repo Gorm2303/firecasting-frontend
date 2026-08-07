@@ -20,6 +20,7 @@ import {
   saveStrategyProfileState,
   type StrategyProfileState,
 } from './strategy/strategyProfiles';
+import { Card, Chip, Input, Select, Textarea, chipButtonClass } from '../components/ui';
 
 type WithdrawalRule = 'fixedPct' | 'fixedReal' | 'guardrails';
 type RoutingOrder = 'cash>taxable>wrappers>pension' | 'cash>wrappers>taxable>pension';
@@ -61,22 +62,6 @@ type PreviewRow = {
   supplementalIncome: number;
   withdrawals: number;
   bufferMonths: number;
-};
-
-const cardStyle: React.CSSProperties = {
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 16,
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  padding: 16,
-};
-
-const chipStyle: React.CSSProperties = {
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 999,
-  padding: '2px 8px',
-  fontSize: 12,
-  opacity: 0.9,
 };
 
 const asNumber = (value: unknown, fallback: number): number => {
@@ -187,6 +172,11 @@ const formatValue = (value: unknown): string => {
   return '—';
 };
 
+const statPanelClass = 'rounded-xl border border-card-border bg-card p-4';
+const fieldLabelClass = 'grid gap-1.5';
+const fieldLabelTextClass = 'font-semibold';
+const miniStatClass = 'rounded-lg border border-card-border p-3';
+
 const WithdrawalStrategyPage: React.FC = () => {
   const { currentAssumptions } = useAssumptions();
   const registryItems = useMemo(() => listStrategyRegistryItems('withdrawalStrategy'), []);
@@ -225,67 +215,67 @@ const WithdrawalStrategyPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ maxWidth: 1320, margin: '0 auto', display: 'grid', gap: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={chipStyle}>Withdrawal editor</span>
-              <span style={chipStyle}>Defaults tab: {ASSUMPTIONS_TAB_LABELS.withdrawalStrategy}</span>
-              <span style={chipStyle}>{isDirty ? 'Unsaved draft' : 'Saved draft'}</span>
-              <span style={chipStyle}>Profiles: {profileState.profiles.length}</span>
+      <div className="mx-auto grid max-w-330 gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-1.5">
+            <div className="flex flex-wrap gap-2">
+              <Chip>Withdrawal editor</Chip>
+              <Chip>Defaults tab: {ASSUMPTIONS_TAB_LABELS.withdrawalStrategy}</Chip>
+              <Chip>{isDirty ? 'Unsaved draft' : 'Saved draft'}</Chip>
+              <Chip>Profiles: {profileState.profiles.length}</Chip>
             </div>
-            <h1 style={{ margin: 0 }}>Withdrawal Strategy</h1>
-            <div style={{ opacity: 0.8, maxWidth: 900 }}>
+            <h1 className="m-0 text-2xl font-extrabold">Withdrawal Strategy</h1>
+            <div className="max-w-225 opacity-80">
               Define retirement timing, guardrails, income blending, routing, and bad-year actions with a live preview of withdrawals over the first years.
             </div>
-            <div style={{ fontSize: 12, opacity: 0.72 }}>Local draft persistence: {lastSavedLabel}</div>
+            <div className="text-xs opacity-70">Local draft persistence: {lastSavedLabel}</div>
           </div>
 
-          <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+          <div className="grid justify-items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="grid gap-1 text-xs">
                 <span>Profile</span>
-                <select aria-label="Withdrawal profile" value={selectedProfileId} onChange={(event) => {
+                <Select aria-label="Withdrawal profile" value={selectedProfileId} onChange={(event) => {
                   const nextId = event.target.value;
                   setSelectedProfileId(nextId);
                   setProfileName(profileState.profiles.find((profile) => profile.id === nextId)?.name ?? '');
-                }} style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }}>
+                }} className="min-w-55">
                   <option value="">Scratch draft</option>
                   {profileState.profiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>{profile.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+              <label className="grid gap-1 text-xs">
                 <span>Profile name</span>
-                <input aria-label="Profile name" type="text" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="e.g. Guardrails with pension bridge" style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }} />
+                <Input aria-label="Profile name" type="text" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="e.g. Guardrails with pension bridge" className="min-w-55" />
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => persistState(persistStrategyDraft(profileState, draft))} style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}>Save draft</button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => persistState(persistStrategyDraft(profileState, draft))} className={chipButtonClass}>Save draft</button>
               <button type="button" disabled={!profileName.trim()} onClick={() => {
                 const next = saveStrategyProfile(profileState, { id: selectedProfileId || null, name: profileName, data: draft });
                 persistState(next);
                 setSelectedProfileId(next.activeProfileId ?? '');
                 setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? profileName);
-              }} style={{ ...chipStyle, cursor: profileName.trim() ? 'pointer' : 'default', background: 'transparent' }}>{selectedProfileId ? 'Update profile' : 'Save as profile'}</button>
+              }} className={chipButtonClass}>{selectedProfileId ? 'Update profile' : 'Save as profile'}</button>
               <button type="button" disabled={!selectedProfileId} onClick={() => {
                 if (!selectedProfileId) return;
                 const next = applyStrategyProfile(profileState, selectedProfileId);
                 persistState(next);
                 setDraft(next.draft);
                 setProfileName(next.profiles.find((profile) => profile.id === selectedProfileId)?.name ?? '');
-              }} style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}>Load selected</button>
+              }} className={chipButtonClass}>Load selected</button>
               <button type="button" disabled={!selectedProfileId} onClick={() => {
                 if (!selectedProfileId) return;
                 const next = deleteStrategyProfile(profileState, selectedProfileId);
                 persistState(next);
                 setSelectedProfileId(next.activeProfileId ?? '');
                 setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? '');
-              }} style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}>Delete profile</button>
-              <button type="button" onClick={() => exportStrategyProfilesJson('withdrawalStrategy', { ...profileState, draft })} style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}>Export profiles</button>
-              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <input type="file" accept="application/json" style={{ display: 'none' }} onChange={(event) => {
+              }} className={chipButtonClass}>Delete profile</button>
+              <button type="button" onClick={() => exportStrategyProfilesJson('withdrawalStrategy', { ...profileState, draft })} className={chipButtonClass}>Export profiles</button>
+              <label className="inline-flex items-center">
+                <input type="file" accept="application/json" className="hidden" onChange={(event) => {
                   const file = event.target.files && event.target.files.length ? event.target.files[0] : null;
                   void importStrategyProfilesJson(file, emptyDraft, (value) => normalizeWithdrawalDraft(value, currentAssumptions)).then((next) => {
                     if (!next) {
@@ -302,142 +292,142 @@ const WithdrawalStrategyPage: React.FC = () => {
                   });
                   event.target.value = '';
                 }} />
-                <span style={{ ...chipStyle, cursor: 'pointer' }}>Import profiles</span>
+                <span className={chipButtonClass}>Import profiles</span>
               </label>
-              <button type="button" disabled={!isDirty} onClick={() => setDraft(profileState.draft)} style={{ ...chipStyle, cursor: isDirty ? 'pointer' : 'default', background: 'transparent' }}>Reset to saved</button>
+              <button type="button" disabled={!isDirty} onClick={() => setDraft(profileState.draft)} className={chipButtonClass}>Reset to saved</button>
               <button type="button" onClick={() => {
                 const next = clearStrategyDraft(profileState, emptyDraft);
                 persistState(next);
                 setDraft(next.draft);
                 setSelectedProfileId('');
                 setProfileName('');
-              }} style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}>Clear draft</button>
-              <Link to="/assumptions" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Open Assumptions Hub</Link>
-              <Link to="/simulation" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Back to simulator</Link>
+              }} className={chipButtonClass}>Clear draft</button>
+              <Link to="/assumptions" className={chipButtonClass}>Open Assumptions Hub</Link>
+              <Link to="/simulation" className={chipButtonClass}>Back to simulator</Link>
             </div>
-            {importStatus && <div style={{ fontSize: 12, opacity: 0.78 }}>{importStatus}</div>}
+            {importStatus && <div className="text-xs opacity-80">{importStatus}</div>}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-          <div style={cardStyle}><div style={{ fontSize: 12, opacity: 0.75 }}>Initial withdrawal</div><div style={{ fontSize: 28, fontWeight: 800 }}>{initialWithdrawal} DKK</div></div>
-          <div style={cardStyle}><div style={{ fontSize: 12, opacity: 0.75 }}>Floor / ceiling band</div><div style={{ fontSize: 20, fontWeight: 800 }}>{draft.spendingFloor} - {draft.spendingCeiling}</div></div>
-          <div style={cardStyle}><div style={{ fontSize: 12, opacity: 0.75 }}>Cash buffer months</div><div style={{ fontSize: 28, fontWeight: 800 }}>{draft.cashBufferTargetMonths}</div></div>
-          <div style={cardStyle}><div style={{ fontSize: 12, opacity: 0.75 }}>Connected pages</div><div style={{ fontSize: 28, fontWeight: 800 }}>{usedByCount}</div></div>
+        <div className="grid grid-cols-4 gap-3">
+          <div className={statPanelClass}><div className="text-xs opacity-75">Initial withdrawal</div><div className="text-3xl font-extrabold">{initialWithdrawal} DKK</div></div>
+          <div className={statPanelClass}><div className="text-xs opacity-75">Floor / ceiling band</div><div className="text-xl font-extrabold">{draft.spendingFloor} - {draft.spendingCeiling}</div></div>
+          <div className={statPanelClass}><div className="text-xs opacity-75">Cash buffer months</div><div className="text-3xl font-extrabold">{draft.cashBufferTargetMonths}</div></div>
+          <div className={statPanelClass}><div className="text-xs opacity-75">Connected pages</div><div className="text-3xl font-extrabold">{usedByCount}</div></div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(360px, 0.85fr)', gap: 16, alignItems: 'start' }}>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Strategy header</div>
-              <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Strategy title</span><input aria-label="Strategy title" type="text" value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-              <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Description</span><textarea aria-label="Strategy description" rows={3} value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} style={{ padding: '10px 12px', borderRadius: 10, resize: 'vertical' }} /></label>
-            </div>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+          <div className="grid gap-3">
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Strategy header</div>
+              <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Strategy title</span><Input aria-label="Strategy title" type="text" value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} /></label>
+              <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Description</span><Textarea aria-label="Strategy description" rows={3} value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} /></label>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Retirement timing</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Withdrawal start age</span><input aria-label="Withdrawal start age" type="number" value={draft.withdrawalStartAge} onChange={(event) => setDraft((prev) => ({ ...prev, withdrawalStartAge: clampInt(event.target.value, prev.withdrawalStartAge, 18, 90) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Horizon years</span><input aria-label="Horizon years" type="number" value={draft.horizonYears} onChange={(event) => setDraft((prev) => ({ ...prev, horizonYears: clampInt(event.target.value, prev.horizonYears, 1, 80) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Retirement timing</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Withdrawal start age</span><Input aria-label="Withdrawal start age" type="number" value={draft.withdrawalStartAge} onChange={(event) => setDraft((prev) => ({ ...prev, withdrawalStartAge: clampInt(event.target.value, prev.withdrawalStartAge, 18, 90) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Horizon years</span><Input aria-label="Horizon years" type="number" value={draft.horizonYears} onChange={(event) => setDraft((prev) => ({ ...prev, horizonYears: clampInt(event.target.value, prev.horizonYears, 1, 80) }))} /></label>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Base withdrawal rule</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Rule</span><select aria-label="Withdrawal rule" value={draft.withdrawalRule} onChange={(event) => setDraft((prev) => ({ ...prev, withdrawalRule: event.target.value as WithdrawalRule }))} style={{ padding: '10px 12px', borderRadius: 10 }}><option value="fixedPct">Fixed %</option><option value="fixedReal">Fixed real spending</option><option value="guardrails">Guardrails</option></select></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Base monthly spending</span><input aria-label="Base monthly spending" type="number" value={draft.baseMonthlySpending} onChange={(event) => setDraft((prev) => ({ ...prev, baseMonthlySpending: Math.max(0, asNumber(event.target.value, prev.baseMonthlySpending)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}><input aria-label="Inflation adjust spending" type="checkbox" checked={draft.inflationAdjust} onChange={(event) => setDraft((prev) => ({ ...prev, inflationAdjust: event.target.checked }))} />Inflation adjust</label>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Base withdrawal rule</div>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Rule</span><Select aria-label="Withdrawal rule" value={draft.withdrawalRule} onChange={(event) => setDraft((prev) => ({ ...prev, withdrawalRule: event.target.value as WithdrawalRule }))}><option value="fixedPct">Fixed %</option><option value="fixedReal">Fixed real spending</option><option value="guardrails">Guardrails</option></Select></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Base monthly spending</span><Input aria-label="Base monthly spending" type="number" value={draft.baseMonthlySpending} onChange={(event) => setDraft((prev) => ({ ...prev, baseMonthlySpending: Math.max(0, asNumber(event.target.value, prev.baseMonthlySpending)) }))} /></label>
+                <label className="flex items-center gap-2 font-semibold"><input aria-label="Inflation adjust spending" type="checkbox" checked={draft.inflationAdjust} onChange={(event) => setDraft((prev) => ({ ...prev, inflationAdjust: event.target.checked }))} />Inflation adjust</label>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Guardrails & limits</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Spending floor</span><input aria-label="Spending floor" type="number" value={draft.spendingFloor} onChange={(event) => setDraft((prev) => ({ ...prev, spendingFloor: Math.max(0, asNumber(event.target.value, prev.spendingFloor)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Spending ceiling</span><input aria-label="Spending ceiling" type="number" value={draft.spendingCeiling} onChange={(event) => setDraft((prev) => ({ ...prev, spendingCeiling: Math.max(0, asNumber(event.target.value, prev.spendingCeiling)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Max cut / year %</span><input aria-label="Max cut per year" type="number" value={draft.maxCutPerYearPct} onChange={(event) => setDraft((prev) => ({ ...prev, maxCutPerYearPct: Math.max(0, asNumber(event.target.value, prev.maxCutPerYearPct)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Trigger percentile</span><input aria-label="Trigger percentile" type="number" value={draft.triggerPercentile} onChange={(event) => setDraft((prev) => ({ ...prev, triggerPercentile: clampInt(event.target.value, prev.triggerPercentile, 1, 99) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Trigger drawdown %</span><input aria-label="Trigger drawdown" type="number" value={draft.triggerDrawdownPct} onChange={(event) => setDraft((prev) => ({ ...prev, triggerDrawdownPct: Math.max(0, asNumber(event.target.value, prev.triggerDrawdownPct)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Guardrails & limits</div>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Spending floor</span><Input aria-label="Spending floor" type="number" value={draft.spendingFloor} onChange={(event) => setDraft((prev) => ({ ...prev, spendingFloor: Math.max(0, asNumber(event.target.value, prev.spendingFloor)) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Spending ceiling</span><Input aria-label="Spending ceiling" type="number" value={draft.spendingCeiling} onChange={(event) => setDraft((prev) => ({ ...prev, spendingCeiling: Math.max(0, asNumber(event.target.value, prev.spendingCeiling)) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Max cut / year %</span><Input aria-label="Max cut per year" type="number" value={draft.maxCutPerYearPct} onChange={(event) => setDraft((prev) => ({ ...prev, maxCutPerYearPct: Math.max(0, asNumber(event.target.value, prev.maxCutPerYearPct)) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Trigger percentile</span><Input aria-label="Trigger percentile" type="number" value={draft.triggerPercentile} onChange={(event) => setDraft((prev) => ({ ...prev, triggerPercentile: clampInt(event.target.value, prev.triggerPercentile, 1, 99) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Trigger drawdown %</span><Input aria-label="Trigger drawdown" type="number" value={draft.triggerDrawdownPct} onChange={(event) => setDraft((prev) => ({ ...prev, triggerDrawdownPct: Math.max(0, asNumber(event.target.value, prev.triggerDrawdownPct)) }))} /></label>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Income blending</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}><input aria-label="Include pension" type="checkbox" checked={draft.includePension} onChange={(event) => setDraft((prev) => ({ ...prev, includePension: event.target.checked }))} />Include pension</label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}><input aria-label="Include part-time" type="checkbox" checked={draft.includePartTime} onChange={(event) => setDraft((prev) => ({ ...prev, includePartTime: event.target.checked }))} />Include part-time</label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}><input aria-label="Include side hustle" type="checkbox" checked={draft.includeSideHustle} onChange={(event) => setDraft((prev) => ({ ...prev, includeSideHustle: event.target.checked }))} />Include side hustle</label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Supplemental monthly income</span><input aria-label="Supplemental monthly income" type="number" value={draft.supplementalIncomeMonthly} onChange={(event) => setDraft((prev) => ({ ...prev, supplementalIncomeMonthly: Math.max(0, asNumber(event.target.value, prev.supplementalIncomeMonthly)) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Income blending</div>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <label className="flex items-center gap-2 font-semibold"><input aria-label="Include pension" type="checkbox" checked={draft.includePension} onChange={(event) => setDraft((prev) => ({ ...prev, includePension: event.target.checked }))} />Include pension</label>
+                <label className="flex items-center gap-2 font-semibold"><input aria-label="Include part-time" type="checkbox" checked={draft.includePartTime} onChange={(event) => setDraft((prev) => ({ ...prev, includePartTime: event.target.checked }))} />Include part-time</label>
+                <label className="flex items-center gap-2 font-semibold"><input aria-label="Include side hustle" type="checkbox" checked={draft.includeSideHustle} onChange={(event) => setDraft((prev) => ({ ...prev, includeSideHustle: event.target.checked }))} />Include side hustle</label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Supplemental monthly income</span><Input aria-label="Supplemental monthly income" type="number" value={draft.supplementalIncomeMonthly} onChange={(event) => setDraft((prev) => ({ ...prev, supplementalIncomeMonthly: Math.max(0, asNumber(event.target.value, prev.supplementalIncomeMonthly)) }))} /></label>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Withdrawal routing & buffer</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Routing order</span><select aria-label="Routing order" value={draft.routingOrder} onChange={(event) => setDraft((prev) => ({ ...prev, routingOrder: event.target.value as RoutingOrder }))} style={{ padding: '10px 12px', borderRadius: 10 }}><option value="cash>taxable>wrappers>pension">cash → taxable → wrappers → pension</option><option value="cash>wrappers>taxable>pension">cash → wrappers → taxable → pension</option></select></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Cash buffer target</span><input aria-label="Cash buffer target" type="number" value={draft.cashBufferTargetMonths} onChange={(event) => setDraft((prev) => ({ ...prev, cashBufferTargetMonths: clampInt(event.target.value, prev.cashBufferTargetMonths, 0, 36) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Refill threshold</span><input aria-label="Refill threshold" type="number" value={draft.refillThresholdMonths} onChange={(event) => setDraft((prev) => ({ ...prev, refillThresholdMonths: clampInt(event.target.value, prev.refillThresholdMonths, 0, 36) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Withdrawal routing & buffer</div>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Routing order</span><Select aria-label="Routing order" value={draft.routingOrder} onChange={(event) => setDraft((prev) => ({ ...prev, routingOrder: event.target.value as RoutingOrder }))}><option value="cash>taxable>wrappers>pension">cash → taxable → wrappers → pension</option><option value="cash>wrappers>taxable>pension">cash → wrappers → taxable → pension</option></Select></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Cash buffer target</span><Input aria-label="Cash buffer target" type="number" value={draft.cashBufferTargetMonths} onChange={(event) => setDraft((prev) => ({ ...prev, cashBufferTargetMonths: clampInt(event.target.value, prev.cashBufferTargetMonths, 0, 36) }))} /></label>
+                <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Refill threshold</span><Input aria-label="Refill threshold" type="number" value={draft.refillThresholdMonths} onChange={(event) => setDraft((prev) => ({ ...prev, refillThresholdMonths: clampInt(event.target.value, prev.refillThresholdMonths, 0, 36) }))} /></label>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Bad-year playbook</div>
-              <div style={{ display: 'grid', gap: 10 }}>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Bad-year playbook</div>
+              <div className="grid gap-2.5">
                 {draft.playbook.map((card, index) => (
-                  <div key={card.id} style={{ display: 'grid', gridTemplateColumns: '110px 150px 150px minmax(0, 1fr) auto', gap: 10, alignItems: 'end' }}>
-                    <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Percentile</span><select aria-label={`Playbook ${index + 1} percentile`} value={card.percentile} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, percentile: event.target.value as PlaybookCard['percentile'] } : item) }))} style={{ padding: '10px 12px', borderRadius: 10 }}><option value="P10">P10</option><option value="P25">P25</option><option value="P50">P50</option><option value="P75">P75</option><option value="P90">P90</option></select></label>
-                    <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Spending adj. %</span><input aria-label={`Playbook ${index + 1} spending adjustment`} type="number" value={card.spendingAdjustmentPct} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, spendingAdjustmentPct: asNumber(event.target.value, item.spendingAdjustmentPct) } : item) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                    <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Deposit adj. %</span><input aria-label={`Playbook ${index + 1} deposit adjustment`} type="number" value={card.depositAdjustmentPct} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, depositAdjustmentPct: asNumber(event.target.value, item.depositAdjustmentPct) } : item) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                    <label style={{ display: 'grid', gap: 6 }}><span style={{ fontWeight: 600 }}>Note</span><input aria-label={`Playbook ${index + 1} note`} type="text" value={card.note} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, note: event.target.value } : item) }))} style={{ padding: '10px 12px', borderRadius: 10 }} /></label>
-                    <button type="button" onClick={() => setDraft((prev) => ({ ...prev, playbook: prev.playbook.filter((item) => item.id !== card.id) }))}>Remove</button>
+                  <div key={card.id} className="grid grid-cols-[110px_150px_150px_minmax(0,1fr)_auto] items-end gap-2.5">
+                    <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Percentile</span><Select aria-label={`Playbook ${index + 1} percentile`} value={card.percentile} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, percentile: event.target.value as PlaybookCard['percentile'] } : item) }))}><option value="P10">P10</option><option value="P25">P25</option><option value="P50">P50</option><option value="P75">P75</option><option value="P90">P90</option></Select></label>
+                    <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Spending adj. %</span><Input aria-label={`Playbook ${index + 1} spending adjustment`} type="number" value={card.spendingAdjustmentPct} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, spendingAdjustmentPct: asNumber(event.target.value, item.spendingAdjustmentPct) } : item) }))} /></label>
+                    <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Deposit adj. %</span><Input aria-label={`Playbook ${index + 1} deposit adjustment`} type="number" value={card.depositAdjustmentPct} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, depositAdjustmentPct: asNumber(event.target.value, item.depositAdjustmentPct) } : item) }))} /></label>
+                    <label className={fieldLabelClass}><span className={fieldLabelTextClass}>Note</span><Input aria-label={`Playbook ${index + 1} note`} type="text" value={card.note} onChange={(event) => setDraft((prev) => ({ ...prev, playbook: prev.playbook.map((item) => item.id === card.id ? { ...item, note: event.target.value } : item) }))} /></label>
+                    <button type="button" onClick={() => setDraft((prev) => ({ ...prev, playbook: prev.playbook.filter((item) => item.id !== card.id) }))} className={chipButtonClass}>Remove</button>
                   </div>
                 ))}
               </div>
-              <div><button type="button" onClick={() => setDraft((prev) => ({ ...prev, playbook: [...prev.playbook, { id: buildPlaybookId(), percentile: 'P25', spendingAdjustmentPct: -5, depositAdjustmentPct: 0, note: '' }] }))}>Add playbook card</button></div>
-            </div>
+              <div><button type="button" onClick={() => setDraft((prev) => ({ ...prev, playbook: [...prev.playbook, { id: buildPlaybookId(), percentile: 'P25', spendingAdjustmentPct: -5, depositAdjustmentPct: 0, note: '' }] }))} className={chipButtonClass}>Add playbook card</button></div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Preview</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                <div style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12 }}><div style={{ fontSize: 12, opacity: 0.72 }}>Initial withdrawal</div><div style={{ fontWeight: 800 }}>{initialWithdrawal} DKK</div></div>
-                <div style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12 }}><div style={{ fontSize: 12, opacity: 0.72 }}>Floor / ceiling band</div><div style={{ fontWeight: 800 }}>{draft.spendingFloor} / {draft.spendingCeiling}</div></div>
-                <div style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12 }}><div style={{ fontSize: 12, opacity: 0.72 }}>Buffer months</div><div style={{ fontWeight: 800 }}>{draft.cashBufferTargetMonths}</div></div>
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Preview</div>
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className={miniStatClass}><div className="text-xs opacity-70">Initial withdrawal</div><div className="font-extrabold">{initialWithdrawal} DKK</div></div>
+                <div className={miniStatClass}><div className="text-xs opacity-70">Floor / ceiling band</div><div className="font-extrabold">{draft.spendingFloor} / {draft.spendingCeiling}</div></div>
+                <div className={miniStatClass}><div className="text-xs opacity-70">Buffer months</div><div className="font-extrabold">{draft.cashBufferTargetMonths}</div></div>
               </div>
-              <div style={{ display: 'grid', gap: 6 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 120px', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.78 }}>
+              <div className="grid gap-1.5">
+                <div className="grid grid-cols-[90px_1fr_1fr_1fr_120px] gap-2 text-xs font-bold opacity-80">
                   <div>Year</div><div>Target spending</div><div>Income</div><div>Withdrawals</div><div>Buffer months</div>
                 </div>
                 {previewRows.map((row) => (
-                  <div key={row.year} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 120px', gap: 8, fontSize: 12 }}>
+                  <div key={row.year} className="grid grid-cols-[90px_1fr_1fr_1fr_120px] gap-2 text-xs">
                     <div>{row.year}</div><div>{row.targetSpending}</div><div>{row.supplementalIncome}</div><div>{row.withdrawals}</div><div>{row.bufferMonths}</div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
 
-          <div style={{ ...cardStyle, display: 'grid', gap: 12, position: 'sticky', top: 16 }}>
+          <Card className="sticky top-4 grid gap-3">
             <div>
-              <div style={{ fontWeight: 800 }}>Inherited defaults from assumptions</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Withdrawal profiles sit on top of the assumptions authority layer for guardrails, cash-buffer conventions, and baseline rule defaults.</div>
+              <div className="font-extrabold">Inherited defaults from assumptions</div>
+              <div className="text-xs opacity-75">Withdrawal profiles sit on top of the assumptions authority layer for guardrails, cash-buffer conventions, and baseline rule defaults.</div>
             </div>
-            <div style={{ display: 'grid', gap: 10 }}>
+            <div className="grid gap-2.5">
               {registryItems.map((item) => {
                 const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
                 return (
-                  <div key={item.keyPath} style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 700 }}>{item.label}</div>
-                      <span style={chipStyle}>{formatValue(getByPath(currentAssumptions, item.keyPath))}</span>
+                  <div key={item.keyPath} className="grid gap-1.5 rounded-lg border border-card-border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold">{item.label}</div>
+                      <Chip>{formatValue(getByPath(currentAssumptions, item.keyPath))}</Chip>
                     </div>
-                    {usedBy.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{usedBy.map((label) => <span key={label} style={chipStyle}>Used by: {label}</span>)}</div>}
-                    <div style={{ fontSize: 12, opacity: 0.72 }}>{item.keyPath}</div>
+                    {usedBy.length > 0 && <div className="flex flex-wrap gap-1.5">{usedBy.map((label) => <Chip key={label}>Used by: {label}</Chip>)}</div>}
+                    <div className="text-xs opacity-70">{item.keyPath}</div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     </PageLayout>

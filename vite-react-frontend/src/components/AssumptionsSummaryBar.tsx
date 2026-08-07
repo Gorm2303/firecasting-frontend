@@ -9,30 +9,19 @@ const AssumptionsSummaryBar: React.FC = () => {
     <div
       role="note"
       aria-label="Current assumptions"
-      style={{
-        background: 'var(--fc-subtle-bg)',
-        border: '1px solid var(--fc-subtle-border)',
-        borderRadius: 12,
-        padding: '10px 12px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-      }}
+      className="flex items-center justify-between gap-2.5 rounded-xl border border-subtle-border bg-subtle px-3 py-2.5"
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 13, opacity: 0.92 }}>
-        <span style={{ fontWeight: 800 }}>Assumptions</span>
+      <div className="flex flex-wrap gap-2.5 text-xs text-card-fg/90">
+        <span className="font-extrabold">Assumptions</span>
         <span>Currency: {currentAssumptions.currency}</span>
         <span>Inflation: {currentAssumptions.inflationPct}%</span>
         <span>Fee: {currentAssumptions.yearlyFeePct}%</span>
         <span>Return: {currentAssumptions.expectedReturnPct}%</span>
         <span>SWR: {currentAssumptions.safeWithdrawalPct}%</span>
-        {isDraftDirty && (
-          <span style={{ fontWeight: 750, opacity: 0.9 }}>(Draft differs)</span>
-        )}
+        {isDraftDirty && <span className="font-bold text-card-fg/90">(Draft differs)</span>}
       </div>
 
-      <Link to="/assumptions" style={{ whiteSpace: 'nowrap' }}>
+      <Link to="/assumptions" className="whitespace-nowrap">
         Edit
       </Link>
     </div>

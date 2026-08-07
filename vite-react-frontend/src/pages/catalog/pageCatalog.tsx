@@ -211,6 +211,7 @@ export function getPageMeta(to: string, label: string, groupTitle: string): Page
   );
 }
 
+/** @deprecated use the `Card` primitive from `src/components/ui` instead. */
 export const cardStyle: React.CSSProperties = {
   background: 'var(--fc-card-bg)',
   color: 'var(--fc-card-text)',
@@ -219,58 +220,44 @@ export const cardStyle: React.CSSProperties = {
   padding: 14,
 };
 
-const miniPreviewStyle: React.CSSProperties = {
-  marginTop: 10,
-  border: '1px dashed var(--fc-card-border)',
-  borderRadius: 12,
-  background: 'var(--fc-subtle-bg)',
-  padding: 10,
-  minHeight: 74,
-};
+const miniPreviewClass = 'mt-2.5 min-h-[74px] rounded-xl border border-dashed border-card-border bg-subtle p-2.5';
+const barClass = 'rounded-lg border border-card-border opacity-70';
 
 export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ kind, label }) => {
   const header = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-      <div style={{ fontWeight: 850 }}>{label}</div>
-      <div style={{ opacity: 0.75, fontSize: 12 }}>{kind}</div>
+    <div className="flex items-center justify-between gap-2.5">
+      <div className="font-extrabold">{label}</div>
+      <div className="text-xs opacity-75">{kind}</div>
     </div>
   );
 
   if (kind === 'chart') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini chart preview">
+      <div className={miniPreviewClass} aria-label="Mini chart preview">
         {header}
-        <div style={{ height: 36, marginTop: 8, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.7 }} />
+        <div className={[barClass, 'mt-2 h-9'].join(' ')} />
       </div>
     );
   }
   if (kind === 'timeline') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini timeline preview">
+      <div className={miniPreviewClass} aria-label="Mini timeline preview">
         {header}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '90%' }} />
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '75%' }} />
-          <div style={{ height: 10, borderRadius: 10, border: '1px solid var(--fc-card-border)', opacity: 0.65, width: '82%' }} />
+        <div className="mt-2 flex flex-col gap-1.5">
+          <div className={[barClass, 'h-2.5 w-[90%] opacity-65'].join(' ')} />
+          <div className={[barClass, 'h-2.5 w-[75%] opacity-65'].join(' ')} />
+          <div className={[barClass, 'h-2.5 w-[82%] opacity-65'].join(' ')} />
         </div>
       </div>
     );
   }
   if (kind === 'calendar') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini calendar preview">
+      <div className={miniPreviewClass} aria-label="Mini calendar preview">
         {header}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+        <div className="mt-2 grid grid-cols-6 gap-1.5">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                height: 12,
-                borderRadius: 6,
-                border: '1px solid var(--fc-card-border)',
-                opacity: 0.6,
-              }}
-            />
+            <div key={i} className={[barClass, 'h-3 opacity-60'].join(' ')} />
           ))}
         </div>
       </div>
@@ -278,19 +265,11 @@ export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ ki
   }
   if (kind === 'cards') {
     return (
-      <div style={miniPreviewStyle} aria-label="Mini cards preview">
+      <div className={miniPreviewClass} aria-label="Mini cards preview">
         {header}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                height: 16,
-                borderRadius: 10,
-                border: '1px solid var(--fc-card-border)',
-                opacity: 0.6,
-              }}
-            />
+            <div key={i} className={[barClass, 'h-4 opacity-60'].join(' ')} />
           ))}
         </div>
       </div>
@@ -299,19 +278,11 @@ export const MiniPreview: React.FC<{ kind: PreviewKind; label: string }> = ({ ki
 
   // table
   return (
-    <div style={miniPreviewStyle} aria-label="Mini table preview">
+    <div className={miniPreviewClass} aria-label="Mini table preview">
       {header}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+      <div className="mt-2 flex flex-col gap-1.5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              height: 10,
-              borderRadius: 10,
-              border: '1px solid var(--fc-card-border)',
-              opacity: 0.6,
-            }}
-          />
+          <div key={i} className={[barClass, 'h-2.5 opacity-60'].join(' ')} />
         ))}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import PageLayout from '../../components/PageLayout';
 import { SkeletonWidgets, type SkeletonWidget } from './SkeletonWidgets';
+import { Button, Card, PageHeader, Textarea } from '../../components/ui';
 
 export type SkeletonSection = {
   title: string;
@@ -16,85 +17,39 @@ type Props = {
   sections?: SkeletonSection[];
 };
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 14,
-  padding: 14,
-};
-
 const SkeletonPage: React.FC<Props> = ({ title, subtitle, sections = [] }) => {
   return (
     <PageLayout variant="constrained">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{title}</h1>
-          <div style={{ opacity: 0.78, marginTop: 6 }}>
-            {subtitle ?? 'Skeleton page: UI outline only (no backend calls yet).'}
-          </div>
-        </div>
+      <div className="flex flex-col gap-3">
+        <PageHeader title={title} subtitle={subtitle ?? 'Skeleton page: UI outline only (no backend calls yet).'} />
 
         {sections.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="flex flex-col gap-3">
             {sections.map((s) => (
-              <section key={s.title} style={cardStyle} aria-label={s.title}>
-                <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 8 }}>{s.title}</div>
+              <Card key={s.title} aria-label={s.title}>
+                <div className="mb-2 text-lg font-extrabold">{s.title}</div>
                 {s.bullets && s.bullets.length > 0 ? (
-                  <ul style={{ margin: 0, paddingLeft: 18, opacity: 0.9 }}>
+                  <ul className="m-0 list-disc pl-4.5 opacity-90">
                     {s.bullets.map((b, idx) => (
                       <li key={idx}>{b}</li>
                     ))}
                   </ul>
-
                 ) : null}
 
                 {s.fields && s.fields.length > 0 && (
-                  <div style={{ marginTop: s.bullets && s.bullets.length > 0 ? 12 : 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className={['flex flex-col gap-2.5', s.bullets && s.bullets.length > 0 ? 'mt-3' : ''].join(' ')}>
                     {s.fields.map((f) => (
-                      <div
-                        key={f.label}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(160px, 0.9fr) minmax(0, 1.2fr)',
-                          gap: 10,
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, opacity: 0.95 }}>{f.label}</div>
+                      <div key={f.label} className="grid grid-cols-1 items-center gap-2.5 sm:grid-cols-[minmax(160px,0.9fr)_minmax(0,1.2fr)]">
+                        <div className="font-bold opacity-95">{f.label}</div>
                         {f.multiline ? (
-                          <textarea
-                            value=""
-                            readOnly
-                            placeholder={f.placeholder}
-                            aria-label={f.label}
-                            rows={3}
-                            style={{
-                              width: '100%',
-                              padding: '10px 12px',
-                              borderRadius: 10,
-                              border: '1px solid var(--fc-card-border)',
-                              background: 'transparent',
-                              color: 'inherit',
-                              boxSizing: 'border-box',
-                              resize: 'vertical',
-                            }}
-                          />
+                          <Textarea value="" readOnly placeholder={f.placeholder} aria-label={f.label} className="bg-transparent" />
                         ) : (
                           <input
                             value=""
                             readOnly
                             placeholder={f.placeholder}
                             aria-label={f.label}
-                            style={{
-                              width: '100%',
-                              padding: '10px 12px',
-                              borderRadius: 10,
-                              border: '1px solid var(--fc-card-border)',
-                              background: 'transparent',
-                              color: 'inherit',
-                              boxSizing: 'border-box',
-                            }}
+                            className="w-full box-border rounded-md border border-card-border bg-transparent px-3 py-2.5 text-sm text-card-fg placeholder:text-card-muted"
                           />
                         )}
                       </div>
@@ -103,34 +58,32 @@ const SkeletonPage: React.FC<Props> = ({ title, subtitle, sections = [] }) => {
                 )}
 
                 {s.widgets && s.widgets.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
+                  <div className="mt-3">
                     <SkeletonWidgets widgets={s.widgets} />
                   </div>
                 )}
 
                 {s.actions && s.actions.length > 0 && (
-                  <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {s.actions.map((a) => (
-                      <button key={a} type="button" disabled style={{ opacity: 0.65 }}>
+                      <Button key={a} disabled className="opacity-65">
                         {a}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 )}
 
                 {!s.bullets?.length && !s.fields?.length && !s.actions?.length && !s.widgets?.length && (
-                  <div style={{ opacity: 0.8 }}>Placeholder content.</div>
+                  <div className="opacity-80">Placeholder content.</div>
                 )}
-              </section>
+              </Card>
             ))}
           </div>
         ) : (
-          <div style={cardStyle}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Coming soon</div>
-            <div style={{ opacity: 0.85 }}>
-              This page is intentionally a skeleton.
-            </div>
-          </div>
+          <Card>
+            <div className="mb-1.5 font-extrabold">Coming soon</div>
+            <div className="opacity-85">This page is intentionally a skeleton.</div>
+          </Card>
         )}
       </div>
     </PageLayout>

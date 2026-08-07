@@ -18,7 +18,7 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **inflationPct** — Inflation (%/year)
   - Default: 2 (pct)
-  - Used by: Explore, MoneyPerspective, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, MoneyPerspective, Simulation, SimulationInvest, Tutorial
   - Overrideable by strategy: no
 
 - **safeWithdrawalPct** — Safe withdrawal rate (%/year)
@@ -28,7 +28,7 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **yearlyFeePct** — Yearly fee (%/year)
   - Default: 0.5 (pct)
-  - Used by: MoneyPerspective, Simulation, Tutorial
+  - Used by: FireSimulator, MoneyPerspective, Simulation, SimulationInvest, Tutorial
   - Overrideable by strategy: no
 
 
@@ -36,21 +36,31 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **executionDefaults.batchSize** — Batch size
   - Default: 10000 (count)
-  - Used by: Simulation
+  - Used by: FireSimulator, Simulation, SimulationEngine
+  - Overrideable by strategy: yes
+
+- **executionDefaults.customSeed** — Custom master seed
+  - Default: 1 (count)
+  - Used by: FireSimulator, Simulation, SimulationEngine
   - Overrideable by strategy: yes
 
 - **executionDefaults.paths** — Paths (runs)
   - Default: 10000 (count)
-  - Used by: Simulation
+  - Used by: FireSimulator, Simulation, SimulationEngine
   - Overrideable by strategy: yes
 
 - **executionDefaults.seedMode** — Master seed mode
   - Default: "default" (enum)
-  - Used by: Simulation
+  - Used by: FireSimulator, Simulation, SimulationEngine
   - Overrideable by strategy: yes
 
 
 ## incomeSetup
+
+- **incomeSetupDefaults.autoDeriveReferenceNetSalary** — Auto-calculate reference net salary
+  - Default: true (boolean)
+  - Used by: MoneyPerspective, SalaryTaxator
+  - Overrideable by strategy: yes
 
 - **incomeSetupDefaults.bonusFrequency** — Bonus frequency
   - Default: "none" (enum)
@@ -67,24 +77,34 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
   - Used by: —
   - Overrideable by strategy: yes
 
-- **incomeSetupDefaults.payCadence** — Pay cadence
+- **incomeSetupDefaults.referenceGrossSalaryAmount** — Reference gross salary
+  - Default: 50000 (dkk)
+  - Used by: SalaryTaxator
+  - Overrideable by strategy: yes
+
+- **incomeSetupDefaults.referenceNetSalaryAmount** — Reference net salary
+  - Default: 32500 (dkk)
+  - Used by: MoneyPerspective
+  - Overrideable by strategy: yes
+
+- **incomeSetupDefaults.referenceSalaryPeriod** — Salary reference period
   - Default: "monthly" (enum)
-  - Used by: —
+  - Used by: MoneyPerspective, SalaryTaxator
   - Overrideable by strategy: yes
 
-- **incomeSetupDefaults.salaryGrowthRule** — Salary growth rule
-  - Default: "fixedPct" (enum)
-  - Used by: —
-  - Overrideable by strategy: yes
-
-- **incomeSetupDefaults.taxEnabled** — Tax enabled
-  - Default: true (boolean)
-  - Used by: —
+- **incomeSetupDefaults.salaryGrowthPct** — Salary growth (%/year)
+  - Default: 2 (pct)
+  - Used by: MoneyPerspective
   - Overrideable by strategy: yes
 
 - **incomeSetupDefaults.taxRegime** — Tax regime
   - Default: "DK" (enum)
   - Used by: —
+  - Overrideable by strategy: yes
+
+- **incomeSetupDefaults.workingHoursPerMonth** — Working hours per month
+  - Default: 160 (hoursPerMonth)
+  - Used by: MoneyPerspective, SalaryTaxator
   - Overrideable by strategy: yes
 
 
@@ -135,27 +155,27 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
 
 - **taxExemptionDefaults.exemptionCardLimit** — Exemption card limit (DKK/year)
   - Default: 51600 (dkkPerYear)
-  - Used by: Explore, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, Simulation, TaxOptimizer, Tutorial
   - Overrideable by strategy: yes
 
 - **taxExemptionDefaults.exemptionCardYearlyIncrease** — Exemption card yearly increase (DKK/year)
   - Default: 1000 (dkkPerYear)
-  - Used by: Explore, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, Simulation, TaxOptimizer, Tutorial
   - Overrideable by strategy: yes
 
 - **taxExemptionDefaults.stockExemptionLimit** — Stock exemption limit (DKK/year)
   - Default: 67500 (dkkPerYear)
-  - Used by: Explore, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, Simulation, TaxOptimizer, Tutorial
   - Overrideable by strategy: yes
 
 - **taxExemptionDefaults.stockExemptionTaxRate** — Stock exemption tax rate (%/year)
   - Default: 27 (pct)
-  - Used by: Explore, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, Simulation, TaxOptimizer, Tutorial
   - Overrideable by strategy: yes
 
 - **taxExemptionDefaults.stockExemptionYearlyIncrease** — Stock exemption yearly increase (DKK/year)
   - Default: 1000 (dkkPerYear)
-  - Used by: Explore, Simulation, Tutorial
+  - Used by: Explore, FireSimulator, Simulation, TaxOptimizer, Tutorial
   - Overrideable by strategy: yes
 
 
@@ -326,32 +346,105 @@ It documents the “authority layer” assumptions: keys, defaults, and consumer
   - Used by: MoneyPerspective
   - Overrideable by strategy: yes
 
-- **moneyPerspectiveDefaults.payRaisePct** — Pay raise (%/year)
-  - Default: 2 (pct)
-  - Used by: MoneyPerspective
-  - Overrideable by strategy: yes
-
 - **moneyPerspectiveDefaults.timeHorizonYears** — Time horizon (years)
   - Default: 10 (years)
   - Used by: MoneyPerspective
   - Overrideable by strategy: yes
 
-- **moneyPerspectiveDefaults.workingHoursPerMonth** — Working hours per month
-  - Default: 160 (hoursPerMonth)
-  - Used by: MoneyPerspective
+
+## fireSimulator
+
+- **fireSimulatorDefaults.overallTaxRule** — Overall tax rule
+  - Default: "CAPITAL" (enum)
+  - Used by: FireSimulator, TaxOptimizer
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.phases** — Phase list (JSON)
+  - Default: [] (json)
+  - Used by: FireSimulator, SimulationPlan
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.brownianDrift** — Brownian drift
+  - Default: 0.07 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.brownianVolatility** — Brownian volatility
+  - Default: 0.2 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.distributionType** — Distribution model
+  - Default: "normal" (enum)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.normalMean** — Normal mean
+  - Default: 0.07 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.normalStdDev** — Normal std dev
+  - Default: 0.2 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.regimes** — Regimes (JSON)
+  - Default: [{"distributionType":"normal","expectedDurationMonths":12,"switchWeights":{"toRegime0":0,"toRegime1":1,"toRegime2":1},"normalMean":0.07,"normalStdDev":0.2,"studentMu":0.042,"studentSigma":0.609,"studentNu":3.6},{"distributionType":"normal","expectedDurationMonths":12,"switchWeights":{"toRegime0":1,"toRegime1":0,"toRegime2":1},"normalMean":0.07,"normalStdDev":0.2,"studentMu":0.042,"studentSigma":0.609,"studentNu":3.6},{"distributionType":"normal","expectedDurationMonths":12,"switchWeights":{"toRegime0":1,"toRegime1":1,"toRegime2":0},"normalMean":0.07,"normalStdDev":0.2,"studentMu":0.042,"studentSigma":0.609,"studentNu":3.6}] (json)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.regimeTickMonths** — Regime tick months
+  - Default: 1 (count)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.returnType** — Return engine
+  - Default: "dataDrivenReturn" (enum)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.simpleAveragePercentage** — Return % / year
+  - Default: 7 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.studentMu** — Student-t mu
+  - Default: 0.042 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.studentNu** — Student-t nu
+  - Default: 3.6 (decimal)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.returnEngine.studentSigma** — Student-t sigma
+  - Default: 0.609 (pct)
+  - Used by: FireSimulator, SimulationInvest
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.startDate** — Start date (YYYY-MM-DD)
+  - Default: "2026-01-01" (string)
+  - Used by: FireSimulator, SimulationPlan
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.taxPercentage** — Simulation tax percentage
+  - Default: 42 (pct)
+  - Used by: FireSimulator, TaxOptimizer
+  - Overrideable by strategy: yes
+
+- **fireSimulatorDefaults.templateId** — Simulation template
+  - Default: "custom" (enum)
+  - Used by: FireSimulator, SimulationPlan
   - Overrideable by strategy: yes
 
 
 ## passiveStrategy
 
-- **passiveStrategyDefaults.cashDragPct** — Cash drag (%/year)
-  - Default: 0 (pct)
-  - Used by: —
-  - Overrideable by strategy: yes
-
 - **passiveStrategyDefaults.rebalancing** — Rebalancing convention
   - Default: "none" (enum)
-  - Used by: —
+  - Used by: SimulationInvest
   - Overrideable by strategy: yes
 
 - **passiveStrategyDefaults.returnModel** — Return model

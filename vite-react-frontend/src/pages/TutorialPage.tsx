@@ -652,9 +652,9 @@ const TutorialPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ maxWidth: 1500, margin: '0 auto' }}>
-        <h1 style={{ textAlign: 'center' }}>Tutor</h1>
-        <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 0 }}>
+      <div className="mx-auto max-w-375">
+        <h1 className="text-center text-3xl font-extrabold">Tutor</h1>
+        <p className="mt-0 text-center opacity-85">
           Learn by doing. Same components, guided steps.
         </p>
 
@@ -669,7 +669,7 @@ const TutorialPage: React.FC = () => {
         />
 
         {stats && stats.length > 0 && (
-          <div style={{ marginTop: 18 }}>
+          <div className="mt-4.5">
             <MultiPhaseOverview data={stats} timeline={timeline} />
           </div>
         )}

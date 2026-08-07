@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import MultiPhaseOverview from '../MultiPhaseOverview';
 import { startAdvancedSimulation } from '../api/simulation';
@@ -18,61 +17,7 @@ import type { YearlySummary } from '../models/YearlySummary';
 import { useAssumptions } from '../state/assumptions';
 import { useExecutionDefaults } from '../state/executionDefaults';
 import { appendSimulationSnapshot } from '../state/simulationSnapshots';
-
-const chipStyle: React.CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 999,
-  border: '1px solid var(--fc-card-border)',
-  background: 'transparent',
-  color: 'inherit',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 14,
-  padding: 16,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--fc-card-border)',
-  background: 'var(--fc-card-bg)',
-  color: 'inherit',
-  boxSizing: 'border-box',
-};
-
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 8,
-  alignItems: 'center',
-  flexWrap: 'wrap',
-};
-
-const actionLinkStyle: React.CSSProperties = {
-  ...chipStyle,
-  textDecoration: 'none',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  ...chipStyle,
-  background: 'var(--fc-card-text)',
-  color: 'var(--fc-card-bg)',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const fieldLabelStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: 6,
-  fontSize: 13,
-};
+import { Button, Card, Chip, Input, LinkButton, Select } from '../components/ui';
 
 const formatDuration = (totalMonths: number): string => {
   const years = Math.floor(totalMonths / 12);
@@ -83,6 +28,8 @@ const formatDuration = (totalMonths: number): string => {
 };
 
 const formatTaxRule = (rule: string): string => (rule === 'NOTIONAL' ? 'Notional gains' : 'Capital gains');
+
+const fieldLabelClass = 'grid gap-1.5 text-xs';
 
 const FireSimulatorPage: React.FC = () => {
   const { draftAssumptions, isDraftDirty, updateDraftAssumptions, setDraftAssumptions } = useAssumptions();
@@ -140,26 +87,27 @@ const FireSimulatorPage: React.FC = () => {
 
   return (
     <PageLayout variant="constrained">
-      <div style={{ maxWidth: 980, margin: '0 auto', display: 'grid', gap: 16 }}>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span style={chipStyle}>FIRE Simulator</span>
-            <span style={chipStyle}>{isDraftDirty ? 'Unsaved draft assumptions' : 'Saved baseline assumptions'}</span>
-            <span style={chipStyle}>{request.phases.length} phases</span>
-            <span style={chipStyle}>{formatDuration(totalMonths)}</span>
+      <div className="mx-auto grid max-w-245 gap-4">
+        <div className="grid gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Chip>FIRE Simulator</Chip>
+            <Chip>{isDraftDirty ? 'Unsaved draft assumptions' : 'Saved baseline assumptions'}</Chip>
+            <Chip>{request.phases.length} phases</Chip>
+            <Chip>{formatDuration(totalMonths)}</Chip>
           </div>
-          <h1 style={{ margin: 0 }}>FIRE Simulator</h1>
-          <div style={{ opacity: 0.8, maxWidth: 760 }}>
-            This simulator runs directly from the shared assumptions draft. General options stay here, while Tax Optimizer, Invest, Engine, and Plan pages own the broader setup flow.
+          <h1 className="m-0 text-2xl font-extrabold">FIRE Simulator</h1>
+          <div className="max-w-190 opacity-80">
+            This simulator runs directly from the shared assumptions draft. General options stay here, while Tax
+            Optimizer, Invest, Engine, and Plan pages own the broader setup flow.
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 16, maxWidth: 640 }}>
-          <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>General Options</div>
-            <label style={fieldLabelStyle}>
+        <div className="grid max-w-160 gap-4">
+          <Card className="grid gap-3">
+            <div className="text-lg font-extrabold">General Options</div>
+            <label className={fieldLabelClass}>
               <span>Template</span>
-              <select
+              <Select
                 aria-label="Simulation template"
                 value={draftAssumptions.fireSimulatorDefaults.templateId}
                 onChange={(event) => updateDraftAssumptions({
@@ -168,17 +116,16 @@ const FireSimulatorPage: React.FC = () => {
                     event.target.value as SimulationTemplateId
                   ),
                 })}
-                style={inputStyle}
               >
                 {SIMULATION_TEMPLATES.map((template) => (
                   <option key={template.id} value={template.id}>{template.label}</option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <div style={{ fontSize: 13, opacity: 0.78 }}>Presets now write directly into the shared simulator assumptions.</div>
-            <label style={fieldLabelStyle}>
+            <div className="text-xs opacity-78">Presets now write directly into the shared simulator assumptions.</div>
+            <label className={fieldLabelClass}>
               <span>Start Date</span>
-              <input
+              <Input
                 aria-label="Simulation start date"
                 type="date"
                 value={draftAssumptions.fireSimulatorDefaults.startDate}
@@ -189,15 +136,14 @@ const FireSimulatorPage: React.FC = () => {
                     startDate: event.target.value,
                   },
                 })}
-                style={inputStyle}
               />
             </label>
-          </div>
+          </Card>
 
-          <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Phase list</div>
+          <Card className="grid gap-3">
+            <div className="text-lg font-extrabold">Phase list</div>
             {request.phases.length === 0 ? (
-              <div style={{ opacity: 0.8 }}>No phases defined yet. Use the Plan page to add deposit, passive, and withdraw phases.</div>
+              <div className="opacity-80">No phases defined yet. Use the Plan page to add deposit, passive, and withdraw phases.</div>
             ) : (
               <NormalPhaseList
                 phases={request.phases}
@@ -214,39 +160,39 @@ const FireSimulatorPage: React.FC = () => {
                 }))}
               />
             )}
-            <div style={rowStyle}>
-              <Link to="/simulation-plan" style={actionLinkStyle}>Add phase</Link>
-              <span style={{ fontSize: 13, opacity: 0.76 }}>Manage the phase builder and template-free plan editing on the Plan page.</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <LinkButton to="/simulation-plan">Add phase</LinkButton>
+              <span className="text-xs opacity-76">Manage the phase builder and template-free plan editing on the Plan page.</span>
             </div>
-          </div>
+          </Card>
 
-          <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Run</div>
-            <div style={{ fontSize: 13, opacity: 0.82 }}>
+          <Card className="grid gap-3">
+            <div className="text-lg font-extrabold">Run</div>
+            <div className="text-xs opacity-82">
               {formatTaxRule(draftAssumptions.fireSimulatorDefaults.overallTaxRule)} at {draftAssumptions.fireSimulatorDefaults.taxPercentage}% tax · {draftAssumptions.fireSimulatorDefaults.returnEngine.returnType} · {executionDefaults.paths.toLocaleString()} paths · batch {executionDefaults.batchSize.toLocaleString()} · {executionDefaults.seedMode} seed mode{executionDefaults.seedMode === 'custom' ? ` (${executionDefaults.customSeed})` : ''}
             </div>
-            <div style={rowStyle}>
-              <button type="button" onClick={handleRun} style={primaryButtonStyle}>Run Simulation</button>
-              <Link to="/simulation-start-tax" style={actionLinkStyle}>Tax Optimizer</Link>
-              <Link to="/simulation-invest" style={actionLinkStyle}>Simulation Invest</Link>
-              <Link to="/simulation-engine" style={actionLinkStyle}>Simulation Engine</Link>
-              <Link to="/assumptions" style={actionLinkStyle}>Assumptions Hub</Link>
-              <Link to="/simulation" style={actionLinkStyle}>Legacy Simulator</Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="primary" onClick={handleRun}>Run Simulation</Button>
+              <LinkButton to="/simulation-start-tax">Tax Optimizer</LinkButton>
+              <LinkButton to="/simulation-invest">Simulation Invest</LinkButton>
+              <LinkButton to="/simulation-engine">Simulation Engine</LinkButton>
+              <LinkButton to="/assumptions">Assumptions Hub</LinkButton>
+              <LinkButton to="/simulation">Legacy Simulator</LinkButton>
             </div>
-            {error ? <div role="alert" style={{ color: '#b42318' }}>{error}</div> : null}
-          </div>
+            {error ? <div role="alert" className="text-danger">{error}</div> : null}
+          </Card>
         </div>
 
         {simulationId && !stats ? (
-          <div style={cardStyle}>
+          <Card>
             <SimulationProgress simulationId={simulationId} onComplete={(results) => setStats(results)} />
-          </div>
+          </Card>
         ) : null}
 
         {stats ? (
-          <div style={cardStyle}>
+          <Card>
             <MultiPhaseOverview data={stats} timeline={timeline} />
-          </div>
+          </Card>
         ) : null}
       </div>
     </PageLayout>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageLayout from '../components/PageLayout';
+import { Button, Card, Input, PageHeader, Select, Textarea } from '../components/ui';
 
 type NoSpendLog = {
   date: string; // YYYY-MM-DD
@@ -62,18 +63,9 @@ function clampInt(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--fc-card-bg)',
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 14,
-  padding: 14,
-};
-
-const tableCell: React.CSSProperties = {
-  borderTop: '1px solid var(--fc-card-border)',
-  padding: '10px 8px',
-  verticalAlign: 'top',
-};
+const fieldLabelClass = 'flex flex-col gap-1.5';
+const fieldLabelTextClass = 'font-bold';
+const noteBoxClass = 'rounded-xl border border-dashed border-card-border bg-subtle p-2.5';
 
 const NoSpendChallengeArenaPage: React.FC = () => {
   const [challenge, setChallenge] = useState<NoSpendChallenge | null>(() => {
@@ -203,28 +195,25 @@ const NoSpendChallengeArenaPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <header>
-          <h1 style={{ margin: 0 }}>No-Spend Challenge Arena</h1>
-          <div style={{ opacity: 0.8, marginTop: 6 }}>Local-only streak + daily log (no backend).</div>
-        </header>
+      <div className="flex flex-col gap-3">
+        <PageHeader title="No-Spend Challenge Arena" subtitle="Local-only streak + daily log (no backend)." />
 
         {!challenge ? (
-          <section style={cardStyle}>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>Start a challenge</div>
-            <div style={{ opacity: 0.8, marginTop: 6, lineHeight: 1.35 }}>
+          <Card>
+            <div className="text-base font-black">Start a challenge</div>
+            <div className="mt-1.5 leading-snug opacity-80">
               Define a simple no-spend sprint, then log each day. Everything stays in this browser.
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginTop: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ fontWeight: 700 }}>Start date</div>
-                <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+            <div className="mt-3 grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+              <label className={fieldLabelClass}>
+                <div className={fieldLabelTextClass}>Start date</div>
+                <Input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ fontWeight: 700 }}>Duration (days)</div>
-                <input
+              <label className={fieldLabelClass}>
+                <div className={fieldLabelTextClass}>Duration (days)</div>
+                <Input
                   type="number"
                   min={3}
                   max={60}
@@ -233,124 +222,124 @@ const NoSpendChallengeArenaPage: React.FC = () => {
                 />
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-                <div style={{ fontWeight: 700 }}>Rules</div>
-                <textarea value={rules} onChange={(e) => setRules(e.target.value)} rows={3} />
+              <label className={fieldLabelClass + ' col-span-full'}>
+                <div className={fieldLabelTextClass}>Rules</div>
+                <Textarea value={rules} onChange={(e) => setRules(e.target.value)} rows={3} />
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-                <div style={{ fontWeight: 700 }}>Reward framing</div>
-                <textarea value={rewardFraming} onChange={(e) => setRewardFraming(e.target.value)} rows={2} />
+              <label className={fieldLabelClass + ' col-span-full'}>
+                <div className={fieldLabelTextClass}>Reward framing</div>
+                <Textarea value={rewardFraming} onChange={(e) => setRewardFraming(e.target.value)} rows={2} />
               </label>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-              <button type="button" onClick={startChallenge}>Start</button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="primary" onClick={startChallenge}>Start</Button>
             </div>
-          </section>
+          </Card>
         ) : (
           <>
-            <section style={cardStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <Card>
+              <div className="flex flex-wrap justify-between gap-3">
                 <div>
-                  <div style={{ fontWeight: 900, fontSize: 16 }}>Challenge</div>
-                  <div style={{ opacity: 0.8, marginTop: 6 }}>
+                  <div className="text-base font-black">Challenge</div>
+                  <div className="mt-1.5 opacity-80">
                     {challenge.startedAt} → {endDate}
                   </div>
                 </div>
 
-                <div style={{ opacity: 0.85 }}>
+                <div className="opacity-85">
                   <div>
-                    Streak: <span style={{ fontWeight: 900 }}>{progress?.streak ?? 0}</span> days
+                    Streak: <span className="font-black">{progress?.streak ?? 0}</span> days
                   </div>
                   <div>
-                    Logged: <span style={{ fontWeight: 900 }}>{challenge.logs.length}</span> days
+                    Logged: <span className="font-black">{challenge.logs.length}</span> days
                   </div>
                   <div>
-                    Remaining: <span style={{ fontWeight: 900 }}>{progress?.daysRemaining ?? 0}</span>
+                    Remaining: <span className="font-black">{progress?.daysRemaining ?? 0}</span>
                   </div>
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-                <div style={{ border: '1px dashed var(--fc-card-border)', borderRadius: 12, padding: 10, background: 'var(--fc-subtle-bg)' }}>
-                  <div style={{ fontWeight: 800 }}>Rules</div>
-                  <div style={{ opacity: 0.85, marginTop: 6, whiteSpace: 'pre-wrap' }}>{challenge.rules || '—'}</div>
+              <div className="mt-2.5 grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+                <div className={noteBoxClass}>
+                  <div className="font-extrabold">Rules</div>
+                  <div className="mt-1.5 whitespace-pre-wrap opacity-85">{challenge.rules || '—'}</div>
                 </div>
-                <div style={{ border: '1px dashed var(--fc-card-border)', borderRadius: 12, padding: 10, background: 'var(--fc-subtle-bg)' }}>
-                  <div style={{ fontWeight: 800 }}>Reward</div>
-                  <div style={{ opacity: 0.85, marginTop: 6, whiteSpace: 'pre-wrap' }}>{challenge.rewardFraming || '—'}</div>
+                <div className={noteBoxClass}>
+                  <div className="font-extrabold">Reward</div>
+                  <div className="mt-1.5 whitespace-pre-wrap opacity-85">{challenge.rewardFraming || '—'}</div>
                 </div>
               </div>
 
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={endChallengeNow}>End & clear</button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={endChallengeNow}>End & clear</Button>
               </div>
-            </section>
+            </Card>
 
-            <section style={cardStyle}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Daily log</div>
-              <div style={{ opacity: 0.8, marginTop: 6, lineHeight: 1.35 }}>
-                Log the day. “Spent” breaks the streak. You can overwrite a day by logging it again.
+            <Card>
+              <div className="text-base font-black">Daily log</div>
+              <div className="mt-1.5 leading-snug opacity-80">
+                Log the day. "Spent" breaks the streak. You can overwrite a day by logging it again.
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginTop: 12 }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontWeight: 700 }}>Date</div>
-                  <input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
+              <div className="mt-3 grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+                <label className={fieldLabelClass}>
+                  <div className={fieldLabelTextClass}>Date</div>
+                  <Input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontWeight: 700 }}>Did you spend?</div>
-                  <select value={String(didSpend)} onChange={(e) => setDidSpend(e.target.value === 'true')}>
+                <label className={fieldLabelClass}>
+                  <div className={fieldLabelTextClass}>Did you spend?</div>
+                  <Select value={String(didSpend)} onChange={(e) => setDidSpend(e.target.value === 'true')}>
                     <option value="false">No (success day)</option>
                     <option value="true">Yes (break day)</option>
-                  </select>
+                  </Select>
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontWeight: 700 }}>Category (optional)</div>
-                  <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. coffee, delivery" />
+                <label className={fieldLabelClass}>
+                  <div className={fieldLabelTextClass}>Category (optional)</div>
+                  <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. coffee, delivery" />
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
-                  <div style={{ fontWeight: 700 }}>Note (optional)</div>
-                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What happened? What will you do tomorrow?" />
+                <label className={fieldLabelClass + ' col-span-full'}>
+                  <div className={fieldLabelTextClass}>Note (optional)</div>
+                  <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What happened? What will you do tomorrow?" />
                 </label>
               </div>
 
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={upsertLog}>Save log</button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="primary" onClick={upsertLog}>Save log</Button>
               </div>
-            </section>
+            </Card>
 
-            <section style={cardStyle}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Logs</div>
+            <Card>
+              <div className="text-base font-black">Logs</div>
               {logsSorted.length === 0 ? (
-                <div style={{ marginTop: 10, opacity: 0.8 }}>No logs yet.</div>
+                <div className="mt-2.5 opacity-80">No logs yet.</div>
               ) : (
-                <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                <div className="mt-2.5 overflow-x-auto">
+                  <table className="w-full min-w-190 border-collapse">
                     <thead>
-                      <tr style={{ textAlign: 'left', opacity: 0.85 }}>
-                        <th style={{ padding: '0 8px 8px 8px' }}>Date</th>
-                        <th style={{ padding: '0 8px 8px 8px' }}>Result</th>
-                        <th style={{ padding: '0 8px 8px 8px' }}>Category</th>
-                        <th style={{ padding: '0 8px 8px 8px' }}>Note</th>
-                        <th style={{ padding: '0 8px 8px 8px' }}>Actions</th>
+                      <tr className="text-left opacity-85">
+                        <th className="px-2 pb-2">Date</th>
+                        <th className="px-2 pb-2">Result</th>
+                        <th className="px-2 pb-2">Category</th>
+                        <th className="px-2 pb-2">Note</th>
+                        <th className="px-2 pb-2">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {logsSorted.map((l) => (
                         <tr key={l.date}>
-                          <td style={tableCell}>{l.date}</td>
-                          <td style={tableCell}>{l.didSpend ? 'Spent' : 'No-spend'}</td>
-                          <td style={tableCell}>{l.category || '—'}</td>
-                          <td style={tableCell}>
-                            <div style={{ whiteSpace: 'pre-wrap' }}>{l.note || '—'}</div>
+                          <td className="border-t border-card-border p-2.5 align-top">{l.date}</td>
+                          <td className="border-t border-card-border p-2.5 align-top">{l.didSpend ? 'Spent' : 'No-spend'}</td>
+                          <td className="border-t border-card-border p-2.5 align-top">{l.category || '—'}</td>
+                          <td className="border-t border-card-border p-2.5 align-top">
+                            <div className="whitespace-pre-wrap">{l.note || '—'}</div>
                           </td>
-                          <td style={tableCell}>
-                            <button type="button" onClick={() => removeLog(l.date)}>Delete</button>
+                          <td className="border-t border-card-border p-2.5 align-top">
+                            <Button variant="secondary" onClick={() => removeLog(l.date)}>Delete</Button>
                           </td>
                         </tr>
                       ))}
@@ -358,7 +347,7 @@ const NoSpendChallengeArenaPage: React.FC = () => {
                   </table>
                 </div>
               )}
-            </section>
+            </Card>
           </>
         )}
       </div>

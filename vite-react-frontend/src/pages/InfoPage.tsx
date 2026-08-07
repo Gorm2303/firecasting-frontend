@@ -12,11 +12,11 @@ const InfoSection: React.FC<{ title: string; children: React.ReactNode; defaultO
   defaultOpen = true,
 }) => {
   return (
-    <details className="info-section" open={defaultOpen}>
-      <summary className="info-section-summary">
-        <h2 tabIndex={-1}>{title}</h2>
+    <details className="group my-3 overflow-hidden rounded-2xl border border-card-border bg-card/40" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2.5 border-b border-card-border/60 bg-subtle px-3 py-2.5 marker:content-none after:flex-none after:opacity-80 after:transition-transform after:duration-150 after:content-['▸'] group-open:after:rotate-90">
+        <h2 tabIndex={-1} className="m-0 text-lg leading-tight">{title}</h2>
       </summary>
-      <div className="info-section-body">{children}</div>
+      <div className="p-3.5 pt-2.5 [&_p]:leading-relaxed">{children}</div>
     </details>
   );
 };
@@ -109,133 +109,51 @@ const InfoPage: React.FC = () => {
 
   return (
     <>
-      {/* Page-scoped styles for the burger + drawer (light/dark via media queries) */}
-      <style>{`
-        .info-burger-btn {
-          position: fixed; right: max(16px, calc((100vw - 1500px) / 2 + 16px));
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 10px 12px; border-radius: 10px; cursor: pointer;
-          border: 1px solid #444; background: #2e2e2e; color: #eee;
-        }
-        .info-burger-btn:hover { border-color: #646cff; filter: brightness(1.05); }
-
-        .info-drawer-backdrop {
-          position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1090;
-        }
-        .info-drawer {
-          position: fixed; top: 0;
-          right: max(0px, calc((100vw - 1500px) / 2));
-          height: 100%; width: min(84vw, 340px);
-          z-index: 1100; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-          border-left: 1px solid #3a3a3a; background: #1f1f1f; color: #eee;
-          transform: translateX(0); transition: transform 180ms ease-out;
-        }
-        .info-drawer header { display: flex; justify-content: space-between; align-items: center; }
-        .info-drawer h3 { margin: 0; font-size: 1rem; }
-        .info-drawer .info-list { margin: 4px 0 0; padding: 0; list-style: none; overflow: auto; }
-        .info-drawer .info-item-btn {
-          width: 100%; text-align: left; border: 1px solid transparent; padding: 8px 10px;
-          border-radius: 8px; background: transparent; color: inherit; cursor: pointer;
-        }
-        .info-drawer .info-item-btn:hover { border-color: #646cff; }
-
-        .info-close-btn {
-          border: 1px solid #444; background: transparent; color: inherit;
-          padding: 6px 10px; border-radius: 8px; cursor: pointer;
-        }
-        .info-close-btn:hover { border-color: #646cff; }
-
-        /* Focus ring */
-        .info-item-btn:focus, .info-close-btn:focus, .info-burger-btn:focus {
-          outline: 4px auto -webkit-focus-ring-color;
-        }
-
-        /* Light mode overrides (aligns with your existing CSS) */
-        @media (prefers-color-scheme: light) {
-          .info-burger-btn {
-            border-color: #e5e7eb; background: #ffffff; color: #213547;
-          }
-          .info-drawer {
-            border-left-color: #e5e7eb; background: #ffffff; color: #213547;
-          }
-          .info-close-btn { border-color: #e5e7eb; }
-        }
-
-        /* H2 sections as horizontal "cards" */
-        details.info-section {
-          border: 1px solid #3a3a3a;
-          border-radius: 14px;
-          overflow: hidden;
-          background: rgba(255,255,255,0.02);
-          margin: 12px 0;
-        }
-        details.info-section > summary.info-section-summary {
-          list-style: none;
-          cursor: pointer;
-          padding: 10px 12px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          background: linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-        }
-        details.info-section > summary.info-section-summary::-webkit-details-marker {
-          display: none;
-        }
-        details.info-section > summary.info-section-summary::after {
-          content: '▸';
-          opacity: 0.8;
-          transform: rotate(0deg);
-          transition: transform 140ms ease-out;
-          flex: 0 0 auto;
-        }
-        details.info-section[open] > summary.info-section-summary::after {
-          transform: rotate(90deg);
-        }
-        details.info-section > summary.info-section-summary h2 {
-          margin: 0;
-          font-size: 1.1rem;
-          line-height: 1.2;
-        }
-        .info-section-body {
-          padding: 10px 14px 14px 14px;
-        }
-        .info-section-body p { line-height: 1.6; }
-        .info-section-body details { marginTop: 10px; }
-      `}</style>
-
       <PageLayout variant="constrained">
       <div id="info-root">
-        <h1 style={{ textAlign: "center" }}>Explainer</h1>
+        <h1 className="text-center text-3xl font-extrabold">Explainer</h1>
       {/* Burger button */}
       {hasMenu && (
         <button
-          className="info-burger-btn"
+          className="fixed inline-flex items-center gap-2 rounded-lg border border-card-border bg-card px-3 py-2.5 text-card-fg hover:border-accent"
+          style={{ right: 'max(16px, calc((100vw - 1500px) / 2 + 16px))' }}
           aria-label="Open section menu"
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => setOpen(true)}
         >
-          ☰ <span style={{ fontSize: 14 }}>Sections</span>
+          ☰ <span className="text-sm">Sections</span>
         </button>
       )}
 
       {/* Drawer + backdrop */}
       {open && (
         <>
-          <div className="info-drawer-backdrop" onClick={() => setOpen(false)} />
-          <aside className="info-drawer" role="dialog" aria-modal="true" aria-label="Section navigation">
-            <header>
-              <h3>Jump to…</h3>
-              <button className="info-close-btn" onClick={() => setOpen(false)} aria-label="Close menu">
+          <div className="fixed inset-0 z-1090 bg-black/35" onClick={() => setOpen(false)} />
+          <aside
+            className="fixed top-0 z-1100 flex h-full w-[min(84vw,340px)] flex-col gap-3 border-l border-card-border bg-card p-4 text-card-fg"
+            style={{ right: 'max(0px, calc((100vw - 1500px) / 2))' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Section navigation"
+          >
+            <header className="flex items-center justify-between">
+              <h3 className="m-0 text-base">Jump to…</h3>
+              <button
+                className="rounded-lg border border-card-border px-2.5 py-1.5 text-card-fg hover:border-accent"
+                onClick={() => setOpen(false)}
+                aria-label="Close menu"
+              >
                 Close
               </button>
             </header>
-            <ul className="info-list">
+            <ul className="m-0 list-none overflow-auto p-0">
               {headings.map((h) => (
-                <li key={h.id} style={{ marginBottom: 4 }}>
-                  <button className="info-item-btn" onClick={() => onNavigate(h.id)}>
+                <li key={h.id} className="mb-1">
+                  <button
+                    className="w-full rounded-lg border border-transparent px-2.5 py-2 text-left text-card-fg hover:border-accent"
+                    onClick={() => onNavigate(h.id)}
+                  >
                     {h.text}
                   </button>
                 </li>

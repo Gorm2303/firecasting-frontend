@@ -20,6 +20,7 @@ import {
   saveStrategyProfileState,
   type StrategyProfileState,
 } from './strategy/strategyProfiles';
+import { Card, Chip, Input, Select, Textarea, chipButtonClass } from '../components/ui';
 
 type PolicyMetric = 'failureRiskPct' | 'fundedRatio' | 'portfolioPercentile' | 'drawdownPct';
 type PolicyOperator = '<=' | '<' | '>=' | '>';
@@ -48,22 +49,6 @@ type ScenarioSample = {
   id: string;
   label: string;
   values: Record<PolicyMetric, number>;
-};
-
-const cardStyle: React.CSSProperties = {
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 16,
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  padding: 16,
-};
-
-const chipStyle: React.CSSProperties = {
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 999,
-  padding: '2px 8px',
-  fontSize: 12,
-  opacity: 0.9,
 };
 
 const METRIC_OPTIONS: Array<{ value: PolicyMetric; label: string }> = [
@@ -193,6 +178,10 @@ const actionSummary = (rule: PolicyRule): string => {
   return config.usesValue ? `${config.label} by ${rule.actionValue}${config.unit}` : config.label;
 };
 
+const statPanelClass = 'rounded-xl border border-card-border bg-card p-4';
+const fieldLabelClass = 'grid gap-1.5';
+const fieldLabelTextClass = 'font-semibold';
+
 const PolicyBuilderPage: React.FC = () => {
   const { currentAssumptions } = useAssumptions();
   const registryItems = useMemo(() => listStrategyRegistryItems('policyBuilder'), []);
@@ -270,27 +259,27 @@ const PolicyBuilderPage: React.FC = () => {
 
   return (
     <PageLayout variant="wide">
-      <div style={{ maxWidth: 1320, margin: '0 auto', display: 'grid', gap: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={chipStyle}>Policy editor</span>
-              <span style={chipStyle}>Defaults tab: {ASSUMPTIONS_TAB_LABELS.policyBuilder}</span>
-              <span style={chipStyle}>{isDirty ? 'Unsaved draft' : 'Saved draft'}</span>
-              <span style={chipStyle}>Profiles: {profileState.profiles.length}</span>
+      <div className="mx-auto grid max-w-330 gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-1.5">
+            <div className="flex flex-wrap gap-2">
+              <Chip>Policy editor</Chip>
+              <Chip>Defaults tab: {ASSUMPTIONS_TAB_LABELS.policyBuilder}</Chip>
+              <Chip>{isDirty ? 'Unsaved draft' : 'Saved draft'}</Chip>
+              <Chip>Profiles: {profileState.profiles.length}</Chip>
             </div>
-            <h1 style={{ margin: 0 }}>Policy Builder</h1>
-            <div style={{ opacity: 0.8, maxWidth: 900 }}>
+            <h1 className="m-0 text-2xl font-extrabold">Policy Builder</h1>
+            <div className="max-w-225 opacity-80">
               Define adaptive IF/THEN guardrails, save named policy profiles, and preview which rules would fire under warning, stress, and recovery conditions.
             </div>
-            <div style={{ fontSize: 12, opacity: 0.72 }}>Local draft persistence: {lastSavedLabel}</div>
+            <div className="text-xs opacity-70">Local draft persistence: {lastSavedLabel}</div>
           </div>
 
-          <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+          <div className="grid justify-items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="grid gap-1 text-xs">
                 <span>Profile</span>
-                <select
+                <Select
                   aria-label="Policy profile"
                   value={selectedProfileId}
                   onChange={(event) => {
@@ -298,34 +287,34 @@ const PolicyBuilderPage: React.FC = () => {
                     setSelectedProfileId(nextId);
                     setProfileName(profileState.profiles.find((profile) => profile.id === nextId)?.name ?? '');
                   }}
-                  style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }}
+                  className="min-w-55"
                 >
                   <option value="">Scratch draft</option>
                   {profileState.profiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>{profile.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+              <label className="grid gap-1 text-xs">
                 <span>Profile name</span>
-                <input
+                <Input
                   aria-label="Profile name"
                   type="text"
                   value={profileName}
                   onChange={(event) => setProfileName(event.target.value)}
                   placeholder="e.g. Tight guardrails"
-                  style={{ minWidth: 220, padding: '8px 10px', borderRadius: 10 }}
+                  className="min-w-55"
                 />
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
                   const next = persistStrategyDraft(profileState, draft);
                   persistState(next);
                 }}
-                style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Save draft
               </button>
@@ -342,7 +331,7 @@ const PolicyBuilderPage: React.FC = () => {
                   setSelectedProfileId(next.activeProfileId ?? '');
                   setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? profileName);
                 }}
-                style={{ ...chipStyle, cursor: profileName.trim() ? 'pointer' : 'default', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 {selectedProfileId ? 'Update profile' : 'Save as profile'}
               </button>
@@ -356,7 +345,7 @@ const PolicyBuilderPage: React.FC = () => {
                   setDraft(next.draft);
                   setProfileName(next.profiles.find((profile) => profile.id === selectedProfileId)?.name ?? '');
                 }}
-                style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Load selected
               </button>
@@ -370,22 +359,22 @@ const PolicyBuilderPage: React.FC = () => {
                   setSelectedProfileId(next.activeProfileId ?? '');
                   setProfileName(next.profiles.find((profile) => profile.id === next.activeProfileId)?.name ?? '');
                 }}
-                style={{ ...chipStyle, cursor: selectedProfileId ? 'pointer' : 'default', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Delete profile
               </button>
               <button
                 type="button"
                 onClick={() => exportStrategyProfilesJson('policyBuilder', { ...profileState, draft })}
-                style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Export profiles
               </button>
-              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <label className="inline-flex items-center">
                 <input
                   type="file"
                   accept="application/json"
-                  style={{ display: 'none' }}
+                  className="hidden"
                   onChange={(event) => {
                     const file = event.target.files && event.target.files.length ? event.target.files[0] : null;
                     void importStrategyProfilesJson(file, emptyDraft, (value) => normalizePolicyDraft(value, currentAssumptions)).then((next) => {
@@ -404,13 +393,13 @@ const PolicyBuilderPage: React.FC = () => {
                     event.target.value = '';
                   }}
                 />
-                <span style={{ ...chipStyle, cursor: 'pointer' }}>Import profiles</span>
+                <span className={chipButtonClass}>Import profiles</span>
               </label>
               <button
                 type="button"
                 disabled={!isDirty}
                 onClick={() => setDraft(profileState.draft)}
-                style={{ ...chipStyle, cursor: isDirty ? 'pointer' : 'default', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Reset to saved
               </button>
@@ -423,77 +412,75 @@ const PolicyBuilderPage: React.FC = () => {
                   setSelectedProfileId('');
                   setProfileName('');
                 }}
-                style={{ ...chipStyle, cursor: 'pointer', background: 'transparent' }}
+                className={chipButtonClass}
               >
                 Clear draft
               </button>
-              <Link to="/assumptions" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Open Assumptions Hub</Link>
-              <Link to="/simulation" style={{ ...chipStyle, textDecoration: 'none', color: 'inherit' }}>Back to simulator</Link>
+              <Link to="/assumptions" className={chipButtonClass}>Open Assumptions Hub</Link>
+              <Link to="/simulation" className={chipButtonClass}>Back to simulator</Link>
             </div>
-            {importStatus && <div style={{ fontSize: 12, opacity: 0.78 }}>{importStatus}</div>}
+            {importStatus && <div className="text-xs opacity-80">{importStatus}</div>}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Enabled rules</div>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>{enabledRules.length}</div>
+        <div className="grid grid-cols-4 gap-3">
+          <div className={statPanelClass}>
+            <div className="text-xs opacity-75">Enabled rules</div>
+            <div className="text-3xl font-extrabold">{enabledRules.length}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Evaluation frequency</div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>{currentAssumptions.policyBuilderDefaults.evaluationFrequency}</div>
+          <div className={statPanelClass}>
+            <div className="text-xs opacity-75">Evaluation frequency</div>
+            <div className="text-xl font-extrabold">{currentAssumptions.policyBuilderDefaults.evaluationFrequency}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Conflict resolution</div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>{currentAssumptions.policyBuilderDefaults.conflictResolution}</div>
+          <div className={statPanelClass}>
+            <div className="text-xs opacity-75">Conflict resolution</div>
+            <div className="text-xl font-extrabold">{currentAssumptions.policyBuilderDefaults.conflictResolution}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Connected pages</div>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>{usedByCount}</div>
+          <div className={statPanelClass}>
+            <div className="text-xs opacity-75">Connected pages</div>
+            <div className="text-3xl font-extrabold">{usedByCount}</div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(360px, 0.85fr)', gap: 16, alignItems: 'start' }}>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 800 }}>Strategy header</div>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontWeight: 600 }}>Policy title</span>
-                <input
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+          <div className="grid gap-3">
+            <Card className="grid gap-3">
+              <div className="font-extrabold">Strategy header</div>
+              <label className={fieldLabelClass}>
+                <span className={fieldLabelTextClass}>Policy title</span>
+                <Input
                   aria-label="Policy title"
                   type="text"
                   value={draft.title}
                   onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
-                  style={{ padding: '10px 12px', borderRadius: 10 }}
                 />
               </label>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontWeight: 600 }}>Description</span>
-                <textarea
+              <label className={fieldLabelClass}>
+                <span className={fieldLabelTextClass}>Description</span>
+                <Textarea
                   aria-label="Policy description"
                   value={draft.description}
                   onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
                   rows={3}
-                  style={{ padding: '10px 12px', borderRadius: 10, resize: 'vertical' }}
                 />
               </label>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
+            <Card className="grid gap-3">
               <div>
-                <div style={{ fontWeight: 800 }}>Adaptive rules</div>
-                <div style={{ fontSize: 13, opacity: 0.78, marginTop: 4 }}>
+                <div className="font-extrabold">Adaptive rules</div>
+                <div className="mt-1 text-xs opacity-80">
                   These rules are evaluated against scenario metrics. The simulator below uses the current rule set and the assumptions defaults for warning and critical thresholds.
                 </div>
               </div>
               {draft.rules.map((rule, index) => {
                 const actionConfig = ACTION_OPTIONS.find((action) => action.value === rule.action) ?? ACTION_OPTIONS[0];
                 return (
-                  <div key={rule.id} style={{ border: '1px solid var(--fc-card-border)', borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700 }}>Rule {index + 1}</div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <div key={rule.id} className="grid gap-2.5 rounded-xl border border-card-border p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold">Rule {index + 1}</div>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 text-sm">
                           <input
                             aria-label={`Enable ${rule.name}`}
                             type="checkbox"
@@ -509,15 +496,16 @@ const PolicyBuilderPage: React.FC = () => {
                           type="button"
                           onClick={() => setDraft((prev) => ({ ...prev, rules: prev.rules.filter((item) => item.id !== rule.id) }))}
                           disabled={draft.rules.length <= 1}
+                          className={chipButtonClass}
                         >
                           Remove rule
                         </button>
                       </div>
                     </div>
 
-                    <label style={{ display: 'grid', gap: 6 }}>
-                      <span style={{ fontWeight: 600 }}>Rule name</span>
-                      <input
+                    <label className={fieldLabelClass}>
+                      <span className={fieldLabelTextClass}>Rule name</span>
+                      <Input
                         aria-label={`Rule ${index + 1} name`}
                         type="text"
                         value={rule.name}
@@ -525,47 +513,44 @@ const PolicyBuilderPage: React.FC = () => {
                           ...prev,
                           rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, name: event.target.value } : item)),
                         }))}
-                        style={{ padding: '10px 12px', borderRadius: 10 }}
                       />
                     </label>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={{ fontWeight: 600 }}>Metric</span>
-                        <select
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                      <label className={fieldLabelClass}>
+                        <span className={fieldLabelTextClass}>Metric</span>
+                        <Select
                           aria-label={`Rule ${index + 1} metric`}
                           value={rule.metric}
                           onChange={(event) => setDraft((prev) => ({
                             ...prev,
                             rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, metric: event.target.value as PolicyMetric } : item)),
                           }))}
-                          style={{ padding: '10px 12px', borderRadius: 10 }}
                         >
                           {METRIC_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
-                        </select>
+                        </Select>
                       </label>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={{ fontWeight: 600 }}>Operator</span>
-                        <select
+                      <label className={fieldLabelClass}>
+                        <span className={fieldLabelTextClass}>Operator</span>
+                        <Select
                           aria-label={`Rule ${index + 1} operator`}
                           value={rule.operator}
                           onChange={(event) => setDraft((prev) => ({
                             ...prev,
                             rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, operator: event.target.value as PolicyOperator } : item)),
                           }))}
-                          style={{ padding: '10px 12px', borderRadius: 10 }}
                         >
                           <option value=">=">≥</option>
                           <option value=">">&gt;</option>
                           <option value="<=">≤</option>
                           <option value="<">&lt;</option>
-                        </select>
+                        </Select>
                       </label>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={{ fontWeight: 600 }}>Threshold</span>
-                        <input
+                      <label className={fieldLabelClass}>
+                        <span className={fieldLabelTextClass}>Threshold</span>
+                        <Input
                           aria-label={`Rule ${index + 1} threshold`}
                           type="number"
                           value={rule.threshold}
@@ -573,12 +558,11 @@ const PolicyBuilderPage: React.FC = () => {
                             ...prev,
                             rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, threshold: asNumber(event.target.value, item.threshold) } : item)),
                           }))}
-                          style={{ padding: '10px 12px', borderRadius: 10 }}
                         />
                       </label>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={{ fontWeight: 600 }}>Cooldown (months)</span>
-                        <input
+                      <label className={fieldLabelClass}>
+                        <span className={fieldLabelTextClass}>Cooldown (months)</span>
+                        <Input
                           aria-label={`Rule ${index + 1} cooldown`}
                           type="number"
                           value={rule.cooldownMonths}
@@ -586,32 +570,30 @@ const PolicyBuilderPage: React.FC = () => {
                             ...prev,
                             rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, cooldownMonths: Math.max(0, Math.trunc(asNumber(event.target.value, item.cooldownMonths))) } : item)),
                           }))}
-                          style={{ padding: '10px 12px', borderRadius: 10 }}
                         />
                       </label>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: actionConfig.usesValue ? 'minmax(0, 1fr) 180px' : 'minmax(0, 1fr)', gap: 10 }}>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={{ fontWeight: 600 }}>Action</span>
-                        <select
+                    <div className={`grid gap-2.5 ${actionConfig.usesValue ? 'sm:grid-cols-[minmax(0,1fr)_180px]' : ''}`}>
+                      <label className={fieldLabelClass}>
+                        <span className={fieldLabelTextClass}>Action</span>
+                        <Select
                           aria-label={`Rule ${index + 1} action`}
                           value={rule.action}
                           onChange={(event) => setDraft((prev) => ({
                             ...prev,
                             rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, action: event.target.value as PolicyAction } : item)),
                           }))}
-                          style={{ padding: '10px 12px', borderRadius: 10 }}
                         >
                           {ACTION_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
-                        </select>
+                        </Select>
                       </label>
                       {actionConfig.usesValue && (
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          <span style={{ fontWeight: 600 }}>Action value ({actionConfig.unit})</span>
-                          <input
+                        <label className={fieldLabelClass}>
+                          <span className={fieldLabelTextClass}>Action value ({actionConfig.unit})</span>
+                          <Input
                             aria-label={`Rule ${index + 1} action value`}
                             type="number"
                             value={rule.actionValue}
@@ -619,15 +601,14 @@ const PolicyBuilderPage: React.FC = () => {
                               ...prev,
                               rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, actionValue: Math.max(0, asNumber(event.target.value, item.actionValue)) } : item)),
                             }))}
-                            style={{ padding: '10px 12px', borderRadius: 10 }}
                           />
                         </label>
                       )}
                     </div>
 
-                    <label style={{ display: 'grid', gap: 6 }}>
-                      <span style={{ fontWeight: 600 }}>Notes</span>
-                      <textarea
+                    <label className={fieldLabelClass}>
+                      <span className={fieldLabelTextClass}>Notes</span>
+                      <Textarea
                         aria-label={`Rule ${index + 1} notes`}
                         rows={2}
                         value={rule.notes}
@@ -635,14 +616,13 @@ const PolicyBuilderPage: React.FC = () => {
                           ...prev,
                           rules: prev.rules.map((item) => (item.id === rule.id ? { ...item, notes: event.target.value } : item)),
                         }))}
-                        style={{ padding: '10px 12px', borderRadius: 10, resize: 'vertical' }}
                       />
                     </label>
                   </div>
                 );
               })}
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setDraft((prev) => ({
@@ -655,31 +635,32 @@ const PolicyBuilderPage: React.FC = () => {
                       }),
                     ],
                   }))}
+                  className={chipButtonClass}
                 >
                   Add rule
                 </button>
               </div>
-            </div>
+            </Card>
 
-            <div style={{ ...cardStyle, display: 'grid', gap: 12 }}>
+            <Card className="grid gap-3">
               <div>
-                <div style={{ fontWeight: 800 }}>Policy simulator</div>
-                <div style={{ fontSize: 13, opacity: 0.78, marginTop: 4 }}>
+                <div className="font-extrabold">Policy simulator</div>
+                <div className="mt-1 text-xs opacity-80">
                   A lightweight browser-side preview showing which rules would currently trigger under representative regimes.
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gap: 10 }}>
+              <div className="grid gap-2.5">
                 {scenarioEvaluations.map(({ scenario, triggered }) => (
-                  <div key={scenario.id} style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 700 }}>{scenario.label}</div>
-                      <span style={chipStyle}>{triggered.length} rules trigger</span>
+                  <div key={scenario.id} className="grid gap-1.5 rounded-lg border border-card-border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold">{scenario.label}</div>
+                      <Chip>{triggered.length} rules trigger</Chip>
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.74 }}>
+                    <div className="text-xs opacity-75">
                       Failure risk {scenario.values.failureRiskPct}% • Funded ratio {scenario.values.fundedRatio} • Percentile {scenario.values.portfolioPercentile} • Drawdown {scenario.values.drawdownPct}%
                     </div>
-                    <div style={{ fontSize: 13 }}>
+                    <div className="text-sm">
                       {triggered.length > 0
                         ? triggered.map((rule) => `${rule.name}: ${actionSummary(rule)}`).join(' | ')
                         : 'No rules trigger.'}
@@ -687,38 +668,38 @@ const PolicyBuilderPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
 
-          <div style={{ ...cardStyle, display: 'grid', gap: 12, position: 'sticky', top: 16 }}>
+          <Card className="sticky top-4 grid gap-3">
             <div>
-              <div style={{ fontWeight: 800 }}>Inherited defaults from assumptions</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
+              <div className="font-extrabold">Inherited defaults from assumptions</div>
+              <div className="text-xs opacity-75">
                 The policy editor inherits cadence, conflict handling, and risk limits from the authority layer. Profiles capture strategy-specific rules, not baseline assumptions.
               </div>
             </div>
-            <div style={{ display: 'grid', gap: 10 }}>
+            <div className="grid gap-2.5">
               {registryItems.map((item) => {
                 const usedBy = filterUsedByForAssumptionsHub(item.usedBy);
                 return (
-                  <div key={item.keyPath} style={{ border: '1px solid var(--fc-card-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 700 }}>{item.label}</div>
-                      <span style={chipStyle}>{formatValue(getByPath(currentAssumptions, item.keyPath))}</span>
+                  <div key={item.keyPath} className="grid gap-1.5 rounded-lg border border-card-border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold">{item.label}</div>
+                      <Chip>{formatValue(getByPath(currentAssumptions, item.keyPath))}</Chip>
                     </div>
                     {usedBy.length > 0 && (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div className="flex flex-wrap gap-1.5">
                         {usedBy.map((label) => (
-                          <span key={label} style={chipStyle}>Used by: {label}</span>
+                          <Chip key={label}>Used by: {label}</Chip>
                         ))}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, opacity: 0.72 }}>{item.keyPath}</div>
+                    <div className="text-xs opacity-70">{item.keyPath}</div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     </PageLayout>

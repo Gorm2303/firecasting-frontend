@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageLayout from '../components/PageLayout';
 import { getOrCreateLocalUserId } from '../state/localUserId';
+import { Button, Card, PageHeader } from '../components/ui';
 
 type PaymentModelId = 'subscription' | 'freemium' | 'usage' | 'lifetime';
 
@@ -11,14 +12,6 @@ type PaymentModel = {
   personalTiers?: { name: string; bullets: string[] }[];
   businessTiers?: { name: string; bullets: string[] }[];
   notes?: string[];
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 14,
-  padding: 14,
 };
 
 const models: PaymentModel[] = [
@@ -76,6 +69,8 @@ const models: PaymentModel[] = [
   },
 ];
 
+const tierCardClass = 'rounded-xl border border-card-border p-3';
+
 const FeedbackPage: React.FC = () => {
   const userId = useMemo(() => getOrCreateLocalUserId(), []);
   const voteKey = useMemo(() => `firecasting:feedback:paymentVote:v1:${userId}`, [userId]);
@@ -107,17 +102,12 @@ const FeedbackPage: React.FC = () => {
 
   return (
     <PageLayout variant="constrained">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Feedback</h1>
-          <div style={{ opacity: 0.78, marginTop: 6 }}>
-            Vote on the future payment model for Firecasting.
-          </div>
-        </div>
+      <div className="flex flex-col gap-3">
+        <PageHeader title="Feedback" subtitle="Vote on the future payment model for Firecasting." />
 
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 850, fontSize: 18, marginBottom: 6 }}>Payment model vote</div>
-          <div style={{ opacity: 0.85 }}>
+        <Card>
+          <div className="mb-1.5 text-lg font-extrabold">Payment model vote</div>
+          <div className="opacity-85">
             {vote ? (
               <>Your vote is recorded. You can switch to a different option at any time.</>
             ) : (
@@ -126,42 +116,36 @@ const FeedbackPage: React.FC = () => {
           </div>
 
           {vote && (
-            <div style={{ marginTop: 10, fontWeight: 800 }}>
+            <div className="mt-2.5 font-extrabold">
               You voted for: {models.find((m) => m.id === vote)?.title ?? vote}
             </div>
           )}
-        </div>
+        </Card>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           {models.map((m) => (
-            <details key={m.id} style={cardStyle}>
-              <summary style={{ cursor: 'pointer', fontWeight: 900, fontSize: 16 }}>
+            <details key={m.id} className="rounded-xl border border-card-border bg-card p-3.5 text-card-fg">
+              <summary className="cursor-pointer text-base font-black">
                 <span>{m.title}</span>
-                <span style={{ display: 'block', opacity: 0.78, fontWeight: 600, marginTop: 4 }}>{m.tagline}</span>
+                <span className="mt-1 block font-semibold opacity-80">{m.tagline}</span>
               </summary>
 
-              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ fontWeight: 800 }}>How it would work</div>
-                  <button
-                    type="button"
-                    onClick={() => onVote(m.id)}
-                    disabled={vote === m.id}
-                    style={{ padding: '8px 10px' }}
-                    aria-disabled={vote === m.id}
-                  >
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="font-extrabold">How it would work</div>
+                  <Button variant="secondary" onClick={() => onVote(m.id)} disabled={vote === m.id} aria-disabled={vote === m.id}>
                     {vote === m.id ? 'Voted' : vote ? 'Switch vote' : 'Vote'}
-                  </button>
+                  </Button>
                 </div>
 
                 {(m.personalTiers?.length ?? 0) > 0 && (
                   <div>
-                    <div style={{ fontWeight: 850, marginBottom: 6 }}>Personal tiers</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="mb-1.5 font-extrabold">Personal tiers</div>
+                    <div className="flex flex-col gap-2.5">
                       {m.personalTiers!.map((t) => (
-                        <div key={t.name} style={{ padding: 12, borderRadius: 12, border: '1px solid var(--fc-card-border)' }}>
-                          <div style={{ fontWeight: 850 }}>{t.name}</div>
-                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, opacity: 0.92 }}>
+                        <div key={t.name} className={tierCardClass}>
+                          <div className="font-extrabold">{t.name}</div>
+                          <ul className="m-0 mt-1.5 list-disc pl-4.5 opacity-90">
                             {t.bullets.map((b, idx) => (
                               <li key={idx}>{b}</li>
                             ))}
@@ -174,12 +158,12 @@ const FeedbackPage: React.FC = () => {
 
                 {(m.businessTiers?.length ?? 0) > 0 && (
                   <div>
-                    <div style={{ fontWeight: 850, marginBottom: 6 }}>Business tiers</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="mb-1.5 font-extrabold">Business tiers</div>
+                    <div className="flex flex-col gap-2.5">
                       {m.businessTiers!.map((t) => (
-                        <div key={t.name} style={{ padding: 12, borderRadius: 12, border: '1px solid var(--fc-card-border)' }}>
-                          <div style={{ fontWeight: 850 }}>{t.name}</div>
-                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, opacity: 0.92 }}>
+                        <div key={t.name} className={tierCardClass}>
+                          <div className="font-extrabold">{t.name}</div>
+                          <ul className="m-0 mt-1.5 list-disc pl-4.5 opacity-90">
                             {t.bullets.map((b, idx) => (
                               <li key={idx}>{b}</li>
                             ))}
@@ -192,8 +176,8 @@ const FeedbackPage: React.FC = () => {
 
                 {(m.notes?.length ?? 0) > 0 && (
                   <div>
-                    <div style={{ fontWeight: 850, marginBottom: 6 }}>Notes</div>
-                    <ul style={{ margin: 0, paddingLeft: 18, opacity: 0.92 }}>
+                    <div className="mb-1.5 font-extrabold">Notes</div>
+                    <ul className="m-0 list-disc pl-4.5 opacity-90">
                       {m.notes!.map((n, idx) => (
                         <li key={idx}>{n}</li>
                       ))}

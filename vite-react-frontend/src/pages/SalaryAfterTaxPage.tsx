@@ -30,55 +30,11 @@ const ANNUAL_BREAKDOWN_MILESTONE_LABELS = new Set<string>([
   'Net salary (year)',
 ]);
 
-const controlStyle: React.CSSProperties = {
-  height: 44,
-  padding: '0 10px',
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 4,
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  fontSize: 20,
-};
-
-const inputGroupStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'stretch',
-  height: 44,
-  border: '1px solid var(--fc-card-border)',
-  borderRadius: 4,
-  overflow: 'hidden',
-  background: 'var(--fc-card-bg)',
-  color: 'var(--fc-card-text)',
-  fontSize: 20,
-};
-
-const inputGroupInputStyle: React.CSSProperties = {
-  flex: '1 1 auto',
-  width: '100%',
-  padding: '0 10px',
-  border: 'none',
-  outline: 'none',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-};
-
-const inputGroupUnitStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  padding: '0 10px',
-  borderLeft: '1px solid var(--fc-subtle-border)',
-  background: 'var(--fc-subtle-bg)',
-  color: 'var(--fc-card-muted)',
-  fontSize: 20,
-  fontWeight: 600,
-  whiteSpace: 'nowrap',
-};
-
-const formLabelTextStyle: React.CSSProperties = {
-  fontWeight: 600,
-  fontSize: 20,
-};
+const controlClass = 'h-11 rounded border border-card-border bg-card px-2.5 text-xl text-card-fg';
+const inputGroupClass = 'flex h-11 items-stretch overflow-hidden rounded border border-card-border bg-card text-xl text-card-fg';
+const inputGroupInputClass = 'w-full flex-1 border-none bg-transparent px-2.5 font-inherit text-inherit outline-none';
+const inputGroupUnitClass = 'flex items-center whitespace-nowrap border-l border-subtle-border bg-subtle px-2.5 text-xl font-semibold text-card-muted';
+const formLabelTextClass = 'text-xl font-semibold';
 
 const toDisplayPeriod = (annualDkk: number, grossPeriod: GrossPeriod): number => {
   const safe = Number.isFinite(annualDkk) ? annualDkk : 0;
@@ -302,38 +258,31 @@ const SalaryAfterTaxPage: React.FC = () => {
 
   return (
     <PageLayout variant="constrained" maxWidthPx={980}>
-      <h1 style={{ textAlign: 'center' }}>Salary Taxator (after tax)</h1>
+      <h1 className="text-center text-3xl font-extrabold">Salary Taxator (after tax)</h1>
 
-      <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <div
-          style={{
-            display: 'grid',
-            gap: 14,
-            gridTemplateColumns: '1fr',
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={{ display: 'grid', gap: 4, flex: '1 1 160px' }}>
-              <span style={formLabelTextStyle}>Year</span>
-              <select aria-label="tax year" value={taxYear} disabled style={controlStyle}>
+      <div className="mx-auto max-w-150">
+        <div className="mb-4 grid grid-cols-1 gap-3.5">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid flex-[1_1_160px] gap-1">
+              <span className={formLabelTextClass}>Year</span>
+              <select aria-label="tax year" value={taxYear} disabled className={controlClass}>
                 <option value={2026}>2026</option>
               </select>
             </label>
 
-            <label style={{ display: 'grid', gap: 4, flex: '1 1 160px' }}>
-              <span style={formLabelTextStyle}>Country</span>
-              <select aria-label="country" value={country} disabled style={controlStyle}>
+            <label className="grid flex-[1_1_160px] gap-1">
+              <span className={formLabelTextClass}>Country</span>
+              <select aria-label="country" value={country} disabled className={controlClass}>
                 <option value="DK">Denmark</option>
               </select>
             </label>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={{ display: 'grid', gap: 4, flex: '1 1 160px' }}>
-              <span style={formLabelTextStyle}>Gross salary</span>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <div style={inputGroupStyle}>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid flex-[1_1_160px] gap-1">
+              <span className={formLabelTextClass}>Gross salary</span>
+              <div className="flex flex-wrap gap-2">
+                <div className={inputGroupClass}>
                   <input
                     aria-label="gross amount"
                     type="number"
@@ -341,9 +290,9 @@ const SalaryAfterTaxPage: React.FC = () => {
                     min={0}
                     value={grossAmount}
                     onChange={(e) => setGrossAmount(Number(e.target.value))}
-                    style={inputGroupInputStyle}
+                    className={inputGroupInputClass}
                   />
-                  <span aria-hidden style={inputGroupUnitStyle}>
+                  <span aria-hidden className={inputGroupUnitClass}>
                     DKK
                   </span>
                 </div>
@@ -351,7 +300,7 @@ const SalaryAfterTaxPage: React.FC = () => {
                   aria-label="gross period"
                   value={grossPeriod}
                   onChange={(e) => onChangeGrossPeriod(e.target.value as GrossPeriod)}
-                  style={controlStyle}
+                  className={controlClass}
                 >
                   <option value="monthly">Monthly</option>
                   <option value="annual">Annual</option>
@@ -371,23 +320,17 @@ const SalaryAfterTaxPage: React.FC = () => {
               }
               setOptionalsOpen(nextOpen);
             }}
-            style={{
-              border: '1px solid var(--fc-subtle-border)',
-              borderRadius: 6,
-              padding: 10,
-              background: 'var(--fc-card-bg)',
-              color: 'var(--fc-card-text)',
-            }}
+            className="rounded-md border border-subtle-border bg-card p-2.5 text-card-fg"
           >
-            <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>
+            <summary className="cursor-pointer text-base font-bold">
               Optionals
             </summary>
 
-            <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <label style={{ display: 'grid', gap: 4, flex: '1 1 240px' }}>
-                  <span style={formLabelTextStyle}>Employee pension</span>
-                  <div style={inputGroupStyle}>
+            <div className="mt-3 grid gap-3.5">
+              <div className="flex flex-wrap gap-2">
+                <label className="grid flex-[1_1_240px] gap-1">
+                  <span className={formLabelTextClass}>Employee pension</span>
+                  <div className={inputGroupClass}>
                     <input
                       aria-label="employee pension percent"
                       type="number"
@@ -397,17 +340,17 @@ const SalaryAfterTaxPage: React.FC = () => {
                       step={0.1}
                       value={employeePensionRatePct}
                       onChange={(e) => setEmployeePensionRatePct(Number(e.target.value))}
-                      style={inputGroupInputStyle}
+                      className={inputGroupInputClass}
                     />
-                    <span aria-hidden style={inputGroupUnitStyle}>
+                    <span aria-hidden className={inputGroupUnitClass}>
                       % of gross
                     </span>
                   </div>
                 </label>
 
-                <label style={{ display: 'grid', gap: 4, flex: '1 1 240px' }}>
-                  <span style={formLabelTextStyle}>Other deductions</span>
-                  <div style={inputGroupStyle}>
+                <label className="grid flex-[1_1_240px] gap-1">
+                  <span className={formLabelTextClass}>Other deductions</span>
+                  <div className={inputGroupClass}>
                     <input
                       aria-label="other deductions"
                       type="number"
@@ -418,23 +361,23 @@ const SalaryAfterTaxPage: React.FC = () => {
                         const raw = Number(e.target.value);
                         setOtherDeductionsAnnualDkk(grossPeriod === 'monthly' ? raw * 12 : raw);
                       }}
-                      style={inputGroupInputStyle}
+                      className={inputGroupInputClass}
                     />
-                    <span aria-hidden style={inputGroupUnitStyle}>
+                    <span aria-hidden className={inputGroupUnitClass}>
                       {otherDeductionsUnit}
                     </span>
                   </div>
                 </label>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <label style={{ display: 'grid', gap: 4, flex: '1 1 240px' }}>
-                  <span style={formLabelTextStyle}>Municipality</span>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="grid flex-[1_1_240px] gap-1">
+                  <span className={formLabelTextClass}>Municipality</span>
                   <select
                     aria-label="municipality"
                     value={municipalityId}
                     onChange={(e) => setMunicipalityId(e.target.value)}
-                    style={controlStyle}
+                    className={controlClass}
                   >
                     <option value="average">Average (25.0%)</option>
                     {municipalDataset.municipalities
@@ -448,68 +391,58 @@ const SalaryAfterTaxPage: React.FC = () => {
                   </select>
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, flex: '0 0 auto' }}>
+                <label className="flex flex-[0_0_auto] items-center gap-2.5 pb-2.5">
                   <input
                     aria-label="church member"
                     type="checkbox"
                     checked={churchMember}
                     onChange={(e) => setChurchMember(e.target.checked)}
-                    style={{ width: 18, height: 18 }}
+                    className="h-4.5 w-4.5"
                   />
-                  <span style={formLabelTextStyle}>Church tax</span>
+                  <span className={formLabelTextClass}>Church tax</span>
                 </label>
               </div>
             </div>
           </details>
-          <div
-            style={{
-              border: '1px solid var(--fc-card-border)',
-              background: 'var(--fc-card-bg)',
-              color: 'var(--fc-card-text)',
-              padding: 14,
-              borderRadius: 4,
-              display: 'grid',
-              gap: 10,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
-              <div style={{ fontWeight: 700, fontSize: 26 }}>Net salary</div>
-              <div style={{ fontWeight: 800, fontSize: 32, fontVariantNumeric: 'tabular-nums' }}>
+          <div className="grid gap-2.5 rounded border border-card-border bg-card p-3.5 text-card-fg">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="text-2xl font-bold">Net salary</div>
+              <div className="text-3xl font-extrabold tabular-nums">
                 {formatDkk(netDisplay)}
               </div>
             </div>
-            <div style={{ opacity: 0.75, textAlign: 'right' }}>
+            <div className="text-right opacity-75">
               per {grossPeriod === 'monthly' ? 'month' : 'year'}
             </div>
 
-            <div style={{ display: 'grid', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ opacity: 0.9 }}>Total tax</div>
-                <div style={{ opacity: 0.9, fontVariantNumeric: 'tabular-nums' }}>{formatDkk(totalTaxDisplay)}</div>
+            <div className="grid gap-1.5">
+              <div className="flex justify-between gap-3">
+                <div className="opacity-90">Total tax</div>
+                <div className="tabular-nums opacity-90">{formatDkk(totalTaxDisplay)}</div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ opacity: 0.75 }}>Effective tax rate (avg)</div>
-                <div style={{ opacity: 0.75 }}>{formatPct(breakdown.effectiveTaxRate, 2)}</div>
+              <div className="flex justify-between gap-3">
+                <div className="opacity-75">Effective tax rate (avg)</div>
+                <div className="opacity-75">{formatPct(breakdown.effectiveTaxRate, 2)}</div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ opacity: 0.7 }}>Marginal rate (approx)</div>
-                <div style={{ opacity: 0.7 }}>{formatPct(breakdown.marginalTaxRate, 2)}</div>
+              <div className="flex justify-between gap-3">
+                <div className="opacity-70">Marginal rate (approx)</div>
+                <div className="opacity-70">{formatPct(breakdown.marginalTaxRate, 2)}</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 700, margin: '24px auto 0' }}>
+      <div className="mx-auto mt-6 max-w-175">
         <details>
-          <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>
+          <summary className="cursor-pointer text-base font-bold">
             Breakdown + calculation (annual DKK)
           </summary>
-          <div style={{ opacity: 0.75, margin: '10px 0' }}>
+          <div className="my-2.5 opacity-75">
             This is the full yearly path from gross salary → deductions/taxes → net salary.
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="w-full border-collapse">
             <colgroup>
               <col style={{ width: '38%' }} />
               <col style={{ width: '18%' }} />
@@ -520,41 +453,19 @@ const SalaryAfterTaxPage: React.FC = () => {
                 const isMilestone = ANNUAL_BREAKDOWN_MILESTONE_LABELS.has(label);
                 const isNet = label === 'Net salary (year)';
                 const showTopSeparator = isMilestone && idx !== 0;
-                const paddingTop = showTopSeparator ? 14 : 7;
+                const cellPadding = showTopSeparator ? 'pt-3.5 pb-1.5' : 'pt-1.5 pb-1.5';
+                const cellBorder = ['border-b border-subtle-border', showTopSeparator ? 'border-t-2 border-t-card-border' : ''].join(' ');
 
                 return (
                   <tr key={label}>
-                    <td
-                      style={{
-                        padding: `${paddingTop}px 0 7px 0`,
-                        borderTop: showTopSeparator ? '2px solid var(--fc-card-border)' : undefined,
-                        borderBottom: '1px solid var(--fc-subtle-border)',
-                        fontWeight: isMilestone ? 700 : 400,
-                      }}
-                    >
+                    <td className={[cellPadding, cellBorder, isMilestone ? 'font-bold' : 'font-normal'].join(' ')}>
                       {label}
                     </td>
-                    <td
-                      style={{
-                        padding: `${paddingTop}px 0 7px 0`,
-                        borderTop: showTopSeparator ? '2px solid var(--fc-card-border)' : undefined,
-                        borderBottom: '1px solid var(--fc-subtle-border)',
-                        textAlign: 'right',
-                        fontVariantNumeric: 'tabular-nums',
-                        fontWeight: isNet ? 900 : isMilestone ? 700 : 400,
-                      }}
-                    >
+                    <td className={[cellPadding, cellBorder, 'text-right tabular-nums', isNet ? 'font-black' : isMilestone ? 'font-bold' : 'font-normal'].join(' ')}>
                       {value < 0 ? '-' : ''}
                       {formatDkk(Math.abs(value))}
                     </td>
-                    <td
-                      style={{
-                        padding: `${paddingTop}px 0 7px 26px`,
-                        borderTop: showTopSeparator ? '2px solid var(--fc-card-border)' : undefined,
-                        borderBottom: '1px solid var(--fc-subtle-border)',
-                        opacity: 0.75,
-                      }}
-                    >
+                    <td className={[cellPadding, cellBorder, 'pl-6.5 opacity-75'].join(' ')}>
                       {note}
                     </td>
                   </tr>
@@ -563,28 +474,19 @@ const SalaryAfterTaxPage: React.FC = () => {
             </tbody>
           </table>
 
-          <details
-            style={{
-              marginTop: 14,
-              border: '1px solid var(--fc-subtle-border)',
-              borderRadius: 6,
-              padding: 10,
-              background: 'var(--fc-card-bg)',
-              color: 'var(--fc-card-text)',
-            }}
-          >
-            <summary style={{ cursor: 'pointer', fontWeight: 800, fontSize: 14 }}>Assumptions</summary>
+          <details className="mt-3.5 rounded-md border border-subtle-border bg-card p-2.5 text-card-fg">
+            <summary className="cursor-pointer text-sm font-extrabold">Assumptions</summary>
 
-            <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13, lineHeight: 1.35, display: 'grid', gap: 14 }}>
+            <div className="mt-3 grid gap-3.5 text-xs leading-snug opacity-75">
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Period/annualization assumption</div>
+                <div className="mb-1.5 font-extrabold">Period/annualization assumption</div>
                 <div>
-                  Monthly inputs are annualized as <strong>gross × 12</strong>. “Net (monthly)” is shown as <strong>net (annual) ÷ 12</strong>.
+                  Monthly inputs are annualized as <strong>gross × 12</strong>. "Net (monthly)" is shown as <strong>net (annual) ÷ 12</strong>.
                 </div>
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Non-negative base assumption</div>
+                <div className="mb-1.5 font-extrabold">Non-negative base assumption</div>
                 <div>
                   Negative inputs and intermediate bases are clamped to <strong>0</strong> (no negative income base, no negative deductions, no
                   negative taxes).
@@ -592,22 +494,22 @@ const SalaryAfterTaxPage: React.FC = () => {
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Ordering assumption (what is deducted where)</div>
+                <div className="mb-1.5 font-extrabold">Ordering assumption (what is deducted where)</div>
                 <div>
                   Employee pension and ATP are deducted <strong>before</strong> AM-bidrag. Personfradrag, beskæftigelsesfradrag, jobfradrag, and
-                  “other deductions” are deducted <strong>after</strong> AM-bidrag to compute taxable income.
+                  "other deductions" are deducted <strong>after</strong> AM-bidrag to compute taxable income.
                 </div>
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Threshold base assumption</div>
+                <div className="mb-1.5 font-extrabold">Threshold base assumption</div>
                 <div>
                   Bracket thresholds (mellemskat/topskat/toptopskat) are based on <strong>personal income after AM-bidrag</strong> (not taxable income).
                 </div>
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Bracket stacking (cumulative) assumption</div>
+                <div className="mb-1.5 font-extrabold">Bracket stacking (cumulative) assumption</div>
                 <div>
                   Bracket taxes are modeled as <strong>cumulative</strong> taxes above each threshold, so they can stack when income exceeds multiple
                   thresholds.
@@ -615,14 +517,14 @@ const SalaryAfterTaxPage: React.FC = () => {
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Rounding assumption</div>
+                <div className="mb-1.5 font-extrabold">Rounding assumption</div>
                 <div>
-                  Each line item is rounded to the <strong>nearest DKK</strong> before totals are summed (including “Total tax” and net salary).
+                  Each line item is rounded to the <strong>nearest DKK</strong> before totals are summed (including "Total tax" and net salary).
                 </div>
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Municipality/church assumption</div>
+                <div className="mb-1.5 font-extrabold">Municipality/church assumption</div>
                 <div>
                   If no municipality is selected, the municipal tax rate defaults to{' '}
                   <strong>{(Number(currentAssumptions.salaryTaxatorDefaults.defaultMunicipalTaxRatePct) || 0).toFixed(1)}%</strong>. Church tax is only
@@ -631,50 +533,50 @@ const SalaryAfterTaxPage: React.FC = () => {
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>ATP assumption</div>
+                <div className="mb-1.5 font-extrabold">ATP assumption</div>
                 <div>
                   ATP is only deducted when an employee works more than <strong>39 hours/month</strong>. Since this tool does not ask for hours, it
                   uses a simple proxy: <strong>no ATP deduction</strong> when gross monthly salary is under{' '}
                   <strong>{(Number(currentAssumptions.salaryTaxatorDefaults.atpEligibilityGrossMonthlyThresholdDkk) || 0).toLocaleString('da-DK')} DKK</strong>.
                 </div>
 
-                <div style={{ marginTop: 10, fontWeight: 800 }}>ATP contribution rates (employee share)</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, fontSize: 13 }}>
+                <div className="mt-2.5 font-extrabold">ATP contribution rates (employee share)</div>
+                <table className="mt-1.5 w-full border-collapse text-xs">
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>
+                      <th className="border-b border-subtle-border py-1.5 text-left">
                         Hours/month
                       </th>
-                      <th style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>
+                      <th className="border-b border-subtle-border py-1.5 text-right">
                         Employee share
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>Min. 117</td>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>94.65 DKK</td>
+                      <td className="border-b border-subtle-border py-1.5">Min. 117</td>
+                      <td className="border-b border-subtle-border py-1.5 text-right">94.65 DKK</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>78 – 116</td>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>63.10 DKK</td>
+                      <td className="border-b border-subtle-border py-1.5">78 – 116</td>
+                      <td className="border-b border-subtle-border py-1.5 text-right">63.10 DKK</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)' }}>39 – 77</td>
-                      <td style={{ padding: '6px 0', borderBottom: '1px solid var(--fc-subtle-border)', textAlign: 'right' }}>31.55 DKK</td>
+                      <td className="border-b border-subtle-border py-1.5">39 – 77</td>
+                      <td className="border-b border-subtle-border py-1.5 text-right">31.55 DKK</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '6px 0' }}>Under 39</td>
-                      <td style={{ padding: '6px 0', textAlign: 'right' }}>0.00 DKK</td>
+                      <td className="py-1.5">Under 39</td>
+                      <td className="py-1.5 text-right">0.00 DKK</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
               <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Tax rate output assumption</div>
+                <div className="mb-1.5 font-extrabold">Tax rate output assumption</div>
                 <div>
-                  “Effective tax rate” and “Marginal rate” are calculated using <strong>taxes only</strong> (AM-bidrag + municipal/church + state
+                  "Effective tax rate" and "Marginal rate" are calculated using <strong>taxes only</strong> (AM-bidrag + municipal/church + state
                   taxes) and exclude pension/ATP.
                 </div>
               </div>
